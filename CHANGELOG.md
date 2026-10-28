@@ -30,15 +30,25 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ### Added
 - `adare db compact [--dry-run] [--all] [-p PROJECT]` shrinks project databases
   that grew from the base64 screenshot copies older action results kept in
-  `action_execution.result_data` (47 GB of a 50 GB database in one project). A
-  copy is dropped only when the PNG its `screenshot_path` names is on disk with
-  the image's size; rows whose screenshot file is missing stay unchanged and are
-  reported as kept. The database is then vacuumed when there is free space of at
-  least its size. Refuses to run while another process writes to the database;
-  `--dry-run` opens it read-only and reports the reclaimable bytes.
+  `action_execution.result_data` (47 GB of a 50 GB database in one project). Only
+  image payloads are removed, and only when the decoded image is byte-for-byte
+  identical to the PNG its `screenshot_path` names; rows whose screenshot file is
+  missing or differs stay unchanged and are reported as kept. Nothing else is
+  removed: oversized non-image text (command output) is kept and only counted
+  (`rows.non_image_kept`). The database is then vacuumed when there is free space
+  of twice the remaining data plus 10 % next to it (and in `TMPDIR` on another
+  volume). Refuses to run, naming the blocker, while another process holds the
+  write lock, an unfinished run of the project showed activity in the last 30
+  minutes (start time or run folder / `logs/` mtime; older ones count as crashed
+  and are reported as `stale_runs_ignored`), or a dev session is live.
+  `--dry-run` opens the database read-only and reports the reclaimable bytes.
 - `adare db check [--all] [-p PROJECT]`: read-only `quick_check`,
-  `foreign_key_check` summary and orphaned-row counts per database; exits 1 when
-  a database is corrupt. Both commands take `--json`.
+  `foreign_key_check` summary and orphaned-row counts per database (counted only:
+  action executions with no run row come from dev-session consoles or runs older
+  versions deleted, and are kept); exits 1 when a database is corrupt. Both
+  commands take `--json`; with `--all` a registered project whose directory or
+  database is gone is reported as `missing` (nothing is created on disk) and the
+  rest are still processed.
 - `adare runs prune [--fake] [--older-than DAYS] [--yes] [--json]`: frees disk space
   in the current project's `run/` directory. A dry run by default: lists run folders
   no database run (and no dev session) refers to, with sizes and a total. `--fake`
@@ -191,8 +201,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `synchronous=NORMAL` and a 30 s busy timeout (was 5 s), set on every connection:
   readers no longer block a writer, so the CLI, web UI and a running experiment can
   share a database without `database is locked`. WAL is recorded in the database
-  file, which gains `-wal`/`-shm` sidecar files next to it. Foreign-key enforcement
-  stays off. See *Connection settings* in the database migrations docs.
+  file, which gains `-wal`/`-shm` sidecar files next to it. A read-only database
+  file or directory, where the switch to WAL cannot be written, keeps its journal
+  mode and stays readable. Foreign-key enforcement stays off. See *Connection
+  settings* in the database migrations docs.
 - Development tasks have one definition: CI runs the Makefile targets (`make lint`,
   `make test`, `make test-agent`, …) instead of its own copies of the commands.
   Every target syncs what it needs first (`--inexact`, so it never strips the
@@ -356,9 +368,11 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   result blobs), its run-files row and its two log-file rows, because foreign keys
   are off in SQLite and the ORM cascade does not reach them. All of them now go
   through one `delete_runs` helper that removes these rows too. A project
-  migration (`delete_orphan_run_rows`) deletes what earlier deletions left; dev
-  session action executions (no run) are kept. The freed space is reused by the
-  database but the file only shrinks after a vacuum.
+  migration (`delete_orphan_run_rows`) deletes the run-files and log-file rows
+  earlier deletions left. Their action executions are kept: dev sessions record
+  theirs under a console ULID no run row has, so the two cannot be told apart
+  (`adare db check` counts them). The freed space is reused by the database but
+  the file only shrinks after a vacuum.
 - Replacing an in-use testfunction with `--force` said it deleted the runs that
   used it but deleted none: it searched the global database, while runs live in
   each project's database. It now deletes them in every registered project.

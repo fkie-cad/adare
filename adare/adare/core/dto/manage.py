@@ -80,7 +80,15 @@ class DbCompactEntry:
     """What ``adare db compact`` did (or would do) to one database file.
 
     ``status`` is ``compacted``, ``dry-run``, ``in-use`` (another process held the
-    write lock; nothing changed), ``missing`` (no database file) or ``error``.
+    write lock, or a recently active run or a live dev session may write; nothing
+    changed), ``missing`` (no project directory or database file) or ``error``.
+
+    Row counts: ``stripped`` rows had their images replaced by a marker; rows with
+    images are kept unchanged when no referenced screenshot file is on disk
+    (``kept_missing_file``) or a file is there but differs from the image
+    (``kept_mismatch``). ``non_image_kept`` counts rows holding oversized text that
+    is not an image (command output, ...): that text is never removed.
+    ``stale_runs_ignored`` counts unfinished runs without recent activity (crashed).
     """
 
     label: str
@@ -90,7 +98,9 @@ class DbCompactEntry:
     rows_examined: int = 0
     rows_stripped: int = 0
     rows_kept_missing_file: int = 0
-    rows_non_image_stripped: int = 0
+    rows_kept_mismatch: int = 0
+    rows_non_image_kept: int = 0
+    stale_runs_ignored: int = 0
     reclaimable_bytes: int = 0
     free_pages_bytes: int = 0
     vacuumed: bool = False
@@ -117,8 +127,10 @@ class DbCompactEntry:
                 'examined': self.rows_examined,
                 'stripped': self.rows_stripped,
                 'kept_missing_file': self.rows_kept_missing_file,
-                'non_image_stripped': self.rows_non_image_stripped,
+                'kept_mismatch': self.rows_kept_mismatch,
+                'non_image_kept': self.rows_non_image_kept,
             },
+            'stale_runs_ignored': self.stale_runs_ignored,
             'reclaimable_bytes': self.reclaimable_bytes,
             'free_pages_bytes': self.free_pages_bytes,
             'vacuum': {'done': self.vacuumed, 'message': self.vacuum_message},
@@ -168,6 +180,8 @@ class DbCheckEntry:
 
     ``integrity_ok`` is False when ``PRAGMA quick_check`` found problems or the
     file could not be read as a database at all; orphans never make it False.
+    ``status`` is ``checked``, or ``missing`` when the project directory or the
+    database file does not exist (``message`` says which).
     """
 
     label: str
@@ -177,6 +191,7 @@ class DbCheckEntry:
     foreign_key_violations: list[ForeignKeyViolationCount] = field(default_factory=list)
     orphans: dict[str, int] = field(default_factory=dict)
     message: str | None = None
+    status: str = 'checked'
 
     @property
     def orphan_total(self) -> int:
@@ -188,6 +203,7 @@ class DbCheckEntry:
         return {
             'label': self.label,
             'path': str(self.path),
+            'status': self.status,
             'integrity_ok': self.integrity_ok,
             'problems': list(self.problems),
             'foreign_key_violations': [violation.to_dict() for violation in self.foreign_key_violations],

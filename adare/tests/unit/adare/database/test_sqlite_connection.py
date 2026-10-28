@@ -1,5 +1,6 @@
 """SQLite connection settings (WAL, synchronous, busy_timeout) and database file removal."""
 
+import os
 import sqlite3
 import subprocess
 import sys
@@ -94,6 +95,73 @@ def test_wal_mode_is_persistent_in_the_file(tmp_path):
         assert plain.execute('PRAGMA journal_mode').fetchone()[0] == 'wal'
     finally:
         plain.close()
+
+
+# --- read-only databases ------------------------------------------------------
+
+needs_permissions = pytest.mark.skipif(
+    sys.platform == 'win32' or os.geteuid() == 0, reason='POSIX permissions not enforced (Windows or root)'
+)
+
+
+def _rollback_journal_db(db_path):
+    """A database in the default (delete) journal mode, as an older adare wrote it."""
+    plain = sqlite3.connect(db_path)
+    try:
+        plain.execute('CREATE TABLE t (x INTEGER)')
+        plain.execute('INSERT INTO t VALUES (7)')
+        plain.commit()
+    finally:
+        plain.close()
+    return db_path
+
+
+def _read_through_engine(db_path) -> tuple[list[int], str, int, int]:
+    engine = create_sqlite_engine(db_path)
+    try:
+        with engine.connect() as conn:
+            rows = [row[0] for row in conn.exec_driver_sql('SELECT x FROM t')]
+            return (
+                rows,
+                conn.exec_driver_sql('PRAGMA journal_mode').scalar_one(),
+                conn.exec_driver_sql('PRAGMA busy_timeout').scalar_one(),
+                conn.exec_driver_sql('PRAGMA synchronous').scalar_one(),
+            )
+    finally:
+        engine.dispose()
+
+
+@needs_permissions
+def test_read_only_database_file_stays_readable(tmp_path):
+    db_path = _rollback_journal_db(tmp_path / 'ro.sqlite3')
+    db_path.chmod(0o444)
+    try:
+        assert _read_through_engine(db_path) == ([7], 'delete', 30000, 1)
+    finally:
+        db_path.chmod(0o644)
+
+
+@needs_permissions
+def test_database_in_a_read_only_directory_stays_readable(tmp_path):
+    directory = tmp_path / 'ro-dir'
+    directory.mkdir()
+    db_path = _rollback_journal_db(directory / 'db.sqlite3')
+    directory.chmod(0o555)
+    try:
+        assert _read_through_engine(db_path) == ([7], 'delete', 30000, 1)
+    finally:
+        directory.chmod(0o755)
+
+
+def test_only_an_operational_error_of_the_wal_switch_is_swallowed(tmp_path):
+    """Any other pragma failure still surfaces."""
+    engine = create_sqlite_engine(tmp_path / 'e.sqlite3')
+    with patch.object(base, 'SQLITE_CONNECT_PRAGMAS', ('PRAGMA busy_timeout=30000', 'PRAGMA no_such_syntax(')):
+        try:
+            with pytest.raises(sqlalchemy.exc.OperationalError), engine.connect():
+                pass
+        finally:
+            engine.dispose()
 
 
 # --- removing database files -------------------------------------------------
