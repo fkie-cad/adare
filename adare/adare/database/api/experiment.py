@@ -12,6 +12,7 @@ from adare.backend.experiment.directory import ExperimentDirectory
 from adare.config.configdirectory import PROG_PARSEANDTEST_DIR
 from adare.database.api.base import ProjectDatabaseApi
 from adare.database.api.project import ProjectDbApi
+from adare.database.api.run_cleanup import delete_runs
 from adare.database.exceptions import EnvironmentMissingError
 from adare.database.fixtures import fixture_stages, fixture_status
 from adare.database.models.global_models import Tag, TestFunction, TestFunctionFile
@@ -61,11 +62,14 @@ class ExperimentApi(ProjectDatabaseApi):
         with ProjectDbApi() as project_api:
             return project_api.get_project_by_path(project_path)
 
-    def delete_experiment_run(self, experiment_run: ExperimentRun):
+    def delete_experiment_run(self, experiment_run: ExperimentRun) -> list[str]:
         """
-        Deletes the experiment run from the database.
+        Deletes the experiment run and every row it owns (see :func:`delete_runs`).
+
+        Returns:
+            The run's directory path (empty if it never got one), for removing it from disk.
         """
-        self._session.delete(experiment_run)
+        return delete_runs(self._session, [experiment_run])
 
     def get_experiment_by_project_and_name(self, project_path: Path, experiment_name: str) -> Experiment:
         # In the new architecture, experiments are stored per-project
@@ -429,19 +433,23 @@ class ExperimentApi(ProjectDatabaseApi):
             experiment_run.end_time = timestamp
             self._session.commit()
 
-    def remove_experiment_by_ulid(self, experiment_ulid: str):
+    def remove_experiment_by_ulid(self, experiment_ulid: str) -> list[str]:
+        """Remove the experiment and its runs; return the deleted runs' directory paths."""
         if experiment := self._session.query(Experiment).filter(Experiment.id == experiment_ulid).first():
-            self.remove_experiment(experiment)
-        else:
-            raise ValueError(f'experiment with ulid {experiment_ulid} not found')
+            return self.remove_experiment(experiment)
+        raise ValueError(f'experiment with ulid {experiment_ulid} not found')
 
-    def remove_experiment(self, experiment: Experiment):
-        # delete all experiment runs
-        for run in experiment.runs:
-            self._session.delete(run)
+    def remove_experiment(self, experiment: Experiment) -> list[str]:
+        """Remove the experiment and all its runs; return the deleted runs' directory paths."""
+        paths = delete_runs(self._session, list(experiment.runs))
+        # The runs are gone; reload the collection so the experiment's delete cascade
+        # does not visit them a second time.
+        self._session.expire(experiment, ['runs'])
         self._session.delete(experiment)
+        return paths
 
-    def remove_fake_experiment_run(self, experiment_run_ulid: str):
+    def remove_fake_experiment_run(self, experiment_run_ulid: str) -> list[str]:
+        """Remove a fake run; return its directory path (empty if not found or it has none)."""
         experiment_run = (
             self._session.query(ExperimentRun)
             .filter(ExperimentRun.id == experiment_run_ulid, ExperimentRun.fake)
@@ -449,10 +457,10 @@ class ExperimentApi(ProjectDatabaseApi):
         )
         if experiment_run:
             # Query already filtered for fake == True, so if it exists, it's guaranteed to be fake
-            self._session.delete(experiment_run)
-        else:
-            # Experiment run not found or not fake - log and continue (may have been already deleted)
-            log.debug(f'Fake experiment run with ulid {experiment_run_ulid} not found (may have been already deleted)')
+            return delete_runs(self._session, [experiment_run])
+        # Experiment run not found or not fake - log and continue (may have been already deleted)
+        log.debug(f'Fake experiment run with ulid {experiment_run_ulid} not found (may have been already deleted)')
+        return []
 
     def experiment_sha256_equals(self, experiment_ulid: str, sha256: str) -> bool:
         experiment = self._session.query(Experiment).filter(Experiment.id == experiment_ulid).first()
@@ -641,6 +649,16 @@ class ExperimentApi(ProjectDatabaseApi):
         Returns:
             Number of fake runs removed
         """
+        count, _paths = self.remove_fake_runs_of_experiment(project_path, experiment_name)
+        return count
+
+    def remove_fake_runs_of_experiment(self, project_path: Path, experiment_name: str) -> tuple[int, list[str]]:
+        """
+        Remove all fake runs of the experiment ``experiment_name`` and commit.
+
+        Returns:
+            (number of fake runs removed, their directory paths -- runs without one are not listed)
+        """
         # Get the experiment
         experiment = self.get_experiment_by_project_and_name(project_path, experiment_name)
         if not experiment:
@@ -653,13 +671,9 @@ class ExperimentApi(ProjectDatabaseApi):
             .all()
         )
 
-        # Count and delete them
-        count = len(fake_runs)
-        for fake_run in fake_runs:
-            self._session.delete(fake_run)
-
+        paths = delete_runs(self._session, fake_runs)
         self._session.commit()
-        return count
+        return len(fake_runs), paths
 
     def mark_run_as_published(self, run_ulid: str):
         """

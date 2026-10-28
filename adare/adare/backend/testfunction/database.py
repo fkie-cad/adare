@@ -3,6 +3,8 @@
 import logging
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.backend.testfunction.exceptions import TestfunctionUpdatedError
 
 # internal imports
@@ -237,7 +239,12 @@ def get_testfunction_usage(testfunction_name: str) -> dict:
 
                             for run in experiment_runs:
                                 all_runs.append(
-                                    {'id': run.id, 'experiment_name': experiment.name, 'project': project.name}
+                                    {
+                                        'id': run.id,
+                                        'experiment_name': experiment.name,
+                                        'project': project.name,
+                                        'project_path': project.path,
+                                    }
                                 )
 
             except (OSError, DatabaseError) as e:
@@ -264,25 +271,47 @@ def delete_experiment_runs_for_testfunction(testfunction_name: str) -> int:
     Returns:
         int: Number of runs deleted
     """
+    deleted_count, _paths = delete_runs_for_testfunction(testfunction_name)
+    return deleted_count
+
+
+def delete_runs_for_testfunction(testfunction_name: str) -> tuple[int, list[str]]:
+    """
+    Delete, in every registered project's database, the runs of experiments using the testfunction.
+
+    Runs live in the per-project databases, so each affected project database is
+    opened and its runs are removed with everything they own (:func:`delete_runs`).
+    A project that cannot be opened is skipped with a warning.
+
+    Returns:
+        (number of runs deleted, the deleted runs' directory paths)
+    """
+    from adare.database.api.base import ProjectDatabaseApi
+    from adare.database.api.run_cleanup import delete_runs
+    from adare.database.models.project_models import ExperimentRun
+
     usage = get_testfunction_usage(testfunction_name)
-
     if not usage['exists'] or not usage['runs']:
-        return 0
+        return 0, []
 
-    with TestfunctionDbApi() as api:
-        from adare.database.models.project_models import ExperimentRun
+    run_ids_by_project: dict[str, list[str]] = {}
+    for run_info in usage['runs']:
+        run_ids_by_project.setdefault(run_info['project_path'], []).append(run_info['id'])
 
-        deleted_count = 0
-        for run_info in usage['runs']:
-            run = api._session.query(ExperimentRun).filter(ExperimentRun.id == run_info['id']).first()
-            if run:
-                api._session.delete(run)
-                deleted_count += 1
+    deleted_count = 0
+    deleted_paths: list[str] = []
+    for project_path, run_ids in run_ids_by_project.items():
+        try:
+            with ProjectDatabaseApi(Path(project_path)) as project_api:
+                runs = project_api._session.query(ExperimentRun).filter(ExperimentRun.id.in_(set(run_ids))).all()
+                deleted_paths.extend(delete_runs(project_api._session, runs))
+                project_api._session.commit()
+                deleted_count += len(runs)
+        except (OSError, DatabaseError, SQLAlchemyError) as e:
+            log.warning(f'Could not delete runs of testfunction {testfunction_name} in project {project_path}: {e}')
 
-        api._session.commit()
-        log.info(f'Deleted {deleted_count} experiment runs for testfunction {testfunction_name}')
-
-        return deleted_count
+    log.info(f'Deleted {deleted_count} experiment runs for testfunction {testfunction_name}')
+    return deleted_count, deleted_paths
 
 
 def can_safely_update_testfunction(testfunction_name: str) -> bool:
