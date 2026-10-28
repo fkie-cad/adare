@@ -182,6 +182,11 @@ listener sets these pragmas on every new connection:
    do. A power loss can lose the most recent commits but never corrupts the
    database.
 
+``PRAGMA journal_size_limit=67108864``
+   A checkpoint truncates a ``-wal`` file larger than 64 MiB back to that size.
+   Without it the WAL stays at its largest size ever (a burst of writes during a
+   long run, or ``adare db compact``, which also sets it). Per connection.
+
 ``foreign_keys`` stays **off** by decision: existing databases were written
 without enforcement, and turning it on could make previously accepted writes and
 deletes fail.
@@ -194,6 +199,18 @@ therefore call ``remove_database_files()``, which disposes the cached engines
 (``dispose_engines()``) and then removes the main file together with all
 sidecars. Removing a project closes the pooled connections before its directory
 -- and the project database in it -- is deleted.
+
+When a CLI command ends (a ``call_on_close`` of the root ``cli`` group) and when
+the web API shuts down (its lifespan), ``optimize_engines()`` runs
+``PRAGMA optimize`` on the database of every cached engine and disposes the
+engine -- SQLite's recommendation for short-lived connections. It refreshes the
+query planner statistics (``ANALYZE``) of tables whose statistics are missing or
+stale, bounded by ``analysis_limit=400``; it uses ``optimize=0x10002`` because a
+fresh connection has queried no table, which plain ``optimize`` limits itself to.
+It waits at most one second for another writer (``busy_timeout=1000``) and skips
+a database that is read-only, locked or deleted (``sqlite3.OperationalError`` /
+``SQLAlchemyError`` are logged at debug level), so it never fails a command. A
+command that never imported a database API skips it.
 
 Why this is not a migration
 ---------------------------
@@ -229,3 +246,25 @@ dev session is live. ``adare db check`` reports ``quick_check``,
 the SQL of ``delete_orphan_run_rows``, so the two cannot drift apart. The pages
 a data-repair migration frees stay in the file until ``adare db compact`` (or any
 ``VACUUM``) runs. See :doc:`../reference/cli` for both commands.
+
+Users with an old database do not know ``compact`` exists, so ADARE tells them
+(:mod:`adare.database.compact_hint`). The first time a process opens a project
+database (right after its migrations), ``needs_compact()`` checks, cheaply:
+
+* the file is larger than 512 MiB (a ``stat``; nothing else happens below it);
+* ``.adare/compact-hint.json`` next to the database is absent, or the file has
+  grown to 1.5 times the size it records;
+* ``SELECT 1 FROM action_execution WHERE octet_length(result_data) > 262144
+  LIMIT 1`` finds a row. ``octet_length`` (SQLite 3.43+, bundled with the
+  Python ADARE runs on) reads the size from the record header without loading
+  the value or its overflow pages; on an older SQLite the query falls back to
+  ``length(CAST(result_data AS BLOB))``, which loads the values it measures.
+  When nothing is found, the marker is written with the current size so the
+  query does not run again until the file grows.
+
+When all hold, a hint naming the project and ``adare db compact -p <path>`` is
+queued. The CLI prints the queued hints once on stderr when the command ends and
+writes the marker with the size it hinted at; with ``--json`` / ``--format
+json|yaml`` the hints are held back (and the marker left alone) for the next
+interactive command. A successful ``adare db compact`` writes the marker too, and
+drops a hint queued in its own process.

@@ -42,6 +42,8 @@ from typing import Any
 from adare.core.dto.manage import DbCheckEntry, DbCompactEntry, ForeignKeyViolationCount
 from adare.database.api.base import dispose_engines
 from adare.database.api.playbook import MAX_RESULT_STRING, is_image_payload, omitted_image_marker
+from adare.database.compact_hint import needs_compact as needs_compact  # re-exported
+from adare.database.compact_hint import record_compacted
 from adare.database.migrations.delete_orphan_run_rows import (
     _DELETE_ORPHAN_EXECUTIONS,
     _DELETE_ORPHAN_FILES,
@@ -64,6 +66,8 @@ ACTIVITY_WINDOW_SECONDS = 30 * 60
 NON_TERMINAL_RUN_STATUSES = ('RUNNING', 'PENDING', 'PAUSE')
 #: VACUUM needs free space of this many times the live data (temporary copy + WAL, 10 % margin).
 VACUUM_SPACE_FACTOR = 2.2
+#: The ``-wal`` a checkpoint leaves behind is truncated to this size (as on every adare connection).
+JOURNAL_SIZE_LIMIT_BYTES = 64 * 1024 * 1024
 #: Prefix of the marker an image's base64 data is replaced with (already stripped = not an image).
 _OMITTED_PREFIX = '<omitted: '
 _COMPARE_CHUNK = 1024 * 1024
@@ -225,6 +229,7 @@ def _open_for_writing(db_path: Path) -> sqlite3.Connection:
         raise
     conn.execute(f'PRAGMA busy_timeout={WORK_BUSY_TIMEOUT_MS}')
     conn.execute('PRAGMA synchronous=NORMAL')
+    conn.execute(f'PRAGMA journal_size_limit={JOURNAL_SIZE_LIMIT_BYTES}')
     return conn
 
 
@@ -821,6 +826,8 @@ def compact_database(
     entry.rows_kept_mismatch = tally.kept_mismatch
     entry.rows_non_image_kept = tally.non_image_kept
     entry.reclaimable_bytes = tally.reclaimable_bytes
+    if not dry_run:
+        record_compacted(db_path)  # no `adare db compact` hint until the file has grown again
     return _finish(entry, started)
 
 
