@@ -713,7 +713,7 @@ async def experiment_run(
                 )
 
             if test:
-                # Test mode: fake runs are kept until manually cleaned with 'adare experiment clean <name>'
+                # Test mode: this run is kept; older test runs beyond ADARE_TEST_RUNS_KEEP are removed below
                 log.info(
                     f"Test mode run {experiment_run_context.experiment_run_ulid} completed and preserved for analysis"
                 )
@@ -840,16 +840,36 @@ async def experiment_run(
     except (OSError, ValueError, KeyError) as e:
         log.error(f"Error generating forensic report: {e}", exc_info=True)
 
+    # Test-run retention: keep the ADARE_TEST_RUNS_KEEP newest test runs of this
+    # experiment (this one included). Never fails the run: the helper logs and keeps
+    # everything on errors. Off the event loop: deleting run folders can take a while.
+    if test and not experiment_run_context.config.dev_mode:
+        from adare.backend.experiment.run_prune import apply_test_run_retention
+
+        retention_message = await asyncio.to_thread(
+            apply_test_run_retention,
+            Path(project_path),
+            experiment_name,
+            experiment_run_context.experiment_run_ulid,
+        )
+        if retention_message and not disable_printing:
+            from adare.console import console_print
+
+            console_print(retention_message)
+
     # Return both interruption status and actual success status
     return user_interrupt_event.is_set(), experiment_success
 
 
 def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
-    """Test an experiment in development mode - creates fake run that gets cleaned up.
+    """Test an experiment: a fake (test-mode) run without integrity checks.
 
-    This function provides a development-friendly way to test experiments without
-    creating persistent runs or requiring integrity checks. Perfect for iterative
-    development and testing of experiment playbooks.
+    For iterative playbook development. The run is recorded as a fake run and its
+    folder kept for analysis. Afterwards the experiment's older test runs are pruned
+    so that only the ``ADARE_TEST_RUNS_KEEP`` (default 10) newest remain, this run
+    included (see :func:`~adare.backend.experiment.run_prune.retain_test_runs`); runs
+    still in progress, dev sessions' runs and runs started less than an hour ago are
+    never removed. ``adare runs prune --fake`` removes the rest by hand.
 
     Args:
         project_path: Path to the project directory
@@ -859,14 +879,14 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
 
     log.info(f'Starting experiment test: {experiment_name} in environment {environment_name}')
 
-    # Run experiment in test mode (creates fake run that gets cleaned up)
+    # Run experiment in test mode (a fake run; older ones beyond ADARE_TEST_RUNS_KEEP are pruned)
     asyncio.run(
         experiment_run(
             project_path=project_path,
             experiment_name=experiment_name,
             environment_name=environment_name,
             disable_printing=False,  # Show output for development feedback
-            test=True,  # This creates fake runs that are cleaned up automatically
+            test=True,  # A fake run; triggers test-run retention at the end
             debug_screenshots=True,  # Enable debug screenshots for development
             preserve_snapshot=False,  # Don't preserve snapshots in test mode
             runlog=True,  # Save logs for test runs to aid debugging

@@ -20,6 +20,10 @@ Targets:
   dev session's run and started at least
   :data:`~adare.backend.experiment.run_folders.MIN_AGE_SECONDS` ago: its rows, and its
   folder when that passes the run-folder test.
+
+:func:`retain_test_runs` (run after every test-mode experiment run) uses the same
+``fake`` selection to keep only the newest ``ADARE_TEST_RUNS_KEEP`` test runs of an
+experiment.
 """
 
 import logging
@@ -375,3 +379,101 @@ def execute_prune(project_root: Path, entries: list[RunPruneEntry], *, now: floa
             entry.note = f'folder kept: {removal.reason}'
     log.info('pruned %d run row(s) and %d folder(s)', len(deleted_ids), sum(1 for e in entries if e.folder_removed))
     return len(deleted_ids)
+
+
+#: The setting (``adare system settings``) for how many test runs per experiment are kept.
+TEST_RUNS_KEEP_SETTING = 'ADARE_TEST_RUNS_KEEP'
+
+
+@dataclass(frozen=True)
+class RetentionResult:
+    """Outcome of :func:`retain_test_runs`."""
+
+    #: Fake run rows deleted.
+    removed: int = 0
+    #: Bytes of the run folders deleted with them.
+    bytes_freed: int = 0
+    folders_removed: int = 0
+
+
+def _newest_first(run: _DbRun) -> tuple[float, str]:
+    # A run without any timestamp ranks as the oldest; the ULID breaks ties in start order.
+    return (run.started if run.started is not None else float('-inf'), run.id)
+
+
+def retain_test_runs(
+    project_root: Path, experiment_name: str, keep: int, current_run_id: str | None, *, now: float | None = None
+) -> RetentionResult:
+    """Keep the ``keep`` newest test (fake) runs of ``experiment_name``; delete the older ones.
+
+    The candidates are the experiment's fake runs that ``adare runs prune --fake`` would
+    target: in a terminal status and not a dev session's run. They are ranked by
+    ``start_time`` (``created_at`` when it is missing), newest first. The current run
+    (``current_run_id``) takes one of the ``keep`` places and is never deleted, so
+    ``keep`` 0 and 1 both leave only the current run; without a current run, ``keep``
+    0 targets every candidate. Beyond the kept places, a run is still kept when it
+    started less than :data:`~adare.backend.experiment.run_folders.MIN_AGE_SECONDS`
+    ago, or when its folder exists but fails
+    :func:`~adare.backend.experiment.run_folders.check_run_folder` (then its row stays
+    too). Non-terminal runs, dev sessions' runs, real runs and other experiments' runs
+    are never touched and take no place.
+
+    The rows go first, in one transaction (:func:`execute_prune`), then the folders.
+
+    Raises:
+        SQLAlchemyError: The project database could not be read or written (nothing was deleted).
+        RunReferencesUnavailableError: The dev sessions could not be read (nothing was deleted).
+    """
+    current = time.time() if now is None else now
+    runs, _names = _load_runs(project_root)
+    dev = load_dev_session_refs()
+    candidates = sorted(
+        (
+            run
+            for run in runs
+            if run.experiment == experiment_name
+            and run.id != current_run_id
+            and _prunable_fake(run.id, run.tail, run.fake, run.status, dev)
+        ),
+        key=_newest_first,
+        reverse=True,
+    )
+    older_places = max(keep - (1 if current_run_id else 0), 0)
+    # older_than_days=None: _fake_entries applies the MIN_AGE_SECONDS floor itself. An entry
+    # with a note has a folder that failed check_run_folder: that run is kept whole.
+    entries = [
+        entry for entry in _fake_entries(project_root, candidates[older_places:], current, None, dev) if not entry.note
+    ]
+    if not entries:
+        return RetentionResult()
+    removed = execute_prune(project_root, entries, now=current)
+    folders = [entry for entry in entries if entry.folder_removed]
+    return RetentionResult(
+        removed=removed, bytes_freed=sum(entry.size_bytes for entry in folders), folders_removed=len(folders)
+    )
+
+
+def apply_test_run_retention(project_root: Path, experiment_name: str, current_run_id: str | None) -> str | None:
+    """After a test run: :func:`retain_test_runs` with the ``ADARE_TEST_RUNS_KEEP`` setting.
+
+    Never fails the run: when the runs cannot be read or deleted, a warning is logged and
+    everything is kept. Returns a line to print when something was removed, else None.
+    """
+    from adare.config import settings
+    from adare.database.exceptions import DatabaseError
+
+    configured = settings.get(TEST_RUNS_KEEP_SETTING)
+    keep = int(configured) if configured is not None else 0
+    try:
+        result = retain_test_runs(project_root, experiment_name, keep, current_run_id)
+    except (RunReferencesUnavailableError, SQLAlchemyError, DatabaseError, OSError) as e:
+        log.warning('older test runs of %s kept: %s', experiment_name, e)
+        return None
+    if not result.removed:
+        return None
+    from adare.cli.system import _size
+
+    noun = 'test run' if result.removed == 1 else 'test runs'
+    message = f'removed {result.removed} older {noun} ({_size(result.bytes_freed)}; {TEST_RUNS_KEEP_SETTING}={keep})'
+    log.info('%s of experiment %s', message, experiment_name)
+    return message
