@@ -25,7 +25,11 @@ from adare.core.dto.experiment import (
     ExperimentRunResult,
 )
 from adare.core.dto.manage import (
+    DbCheckEntry,
+    DbCheckResult,
     DbCleanInstallResult,
+    DbCompactEntry,
+    DbCompactResult,
     DbInitResult,
     DbRepairResult,
     DbResetResult,
@@ -178,6 +182,10 @@ __all__ = [
     'DbRepairResult',
     'DbCleanInstallResult',
     'DbResetResult',
+    'DbCompactEntry',
+    'DbCompactResult',
+    'DbCheckEntry',
+    'DbCheckResult',
     'VmResetResult',
     'VmRuntimeRefreshResult',
     # Web
