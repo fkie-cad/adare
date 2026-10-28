@@ -122,7 +122,7 @@ The Experiment Lifecycle
 
 Running an experiment follows a defined sequence from start to finish:
 
-1. **Load**: The playbook YAML is parsed and its actions are serialized into the database as ``PlaybookItem`` records. The original YAML content is stored for variable and test resolution. A hash is computed for integrity validation. Loading a changed playbook again replaces the items; items that earlier runs executed are kept, marked superseded, so every run's action records keep pointing at the action they ran.
+1. **Load**: The playbook YAML is parsed and its actions are serialized into the database as ``PlaybookItem`` records. The original YAML content is stored for variable and test resolution. A hash is computed for integrity validation. Loading a changed playbook again (before every ``experiment run``, too) refreshes the experiment in place and replaces the items; items that runs executed are kept, marked superseded, so every run's action records keep pointing at the action they ran. The finished fake runs of the old version are deleted. An experiment with production runs is never reloaded with a changed playbook: a run does not record which version it ran, so the reload is refused (see :ref:`reloading <cli-experiment-reload>`).
 2. **Prepare VM**: ADARE imports the VM image (if not already imported), creates a snapshot for safe rollback, and boots the virtual machine.
 3. **Install Agent**: The ADARE guest agent is transferred into the VM and started. It establishes a WebSocket connection back to the host, creating a command channel.
 4. **Execute Actions**: Actions are loaded from the database (not re-parsed from YAML), reconstructed into action objects, and sent one by one to the guest agent for execution. GUI interactions, system commands, and tests all flow through this channel.
@@ -138,7 +138,8 @@ ADARE supports two execution modes that serve different stages of the workflow.
 
 **Test mode** (the default) is designed for iterative development:
 
-- Allows playbook modifications between runs without re-loading
+- Allows playbook modifications between runs without re-loading by hand (until the
+  experiment has production runs)
 - Creates "fake runs"; after each one, older fake runs of the same experiment and
   environment beyond the newest 10 (``ADARE_TEST_RUNS_KEEP``) are removed, never
   the newest successful one (:ref:`test-run retention <cli-test-run-retention>`).
