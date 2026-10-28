@@ -155,7 +155,8 @@ Managing Experiments
    # Copy experiment for modification
    adare experiment clone my-experiment my-experiment-v2
 
-   # Delete the fake (test-mode) runs of an experiment, with their run folders
+   # Delete the finished fake (test-mode) runs of an experiment, with their run folders
+   # (pending/running fake runs and dev sessions' runs are kept)
    adare experiment clean my-experiment
 
    # Remove experiment (with its runs and their run folders; --keep-files keeps the files)
