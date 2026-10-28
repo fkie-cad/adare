@@ -174,6 +174,15 @@ In test mode:
 - The playbook can be modified between runs.
 - Runs are marked as test runs in the database.
 - No integrity checks are enforced.
+- Only the 10 newest test runs per experiment are kept: after each test run,
+  older finished ones are removed with their run folders, and a line such as
+  ``removed 3 older test runs (1.2 GiB; ADARE_TEST_RUNS_KEEP=10)`` says so.
+  The run that just finished counts toward the 10 and is never removed; runs
+  started less than an hour ago, runs still in progress and dev sessions' runs
+  are never removed either. Change the number with
+  ``adare system settings set ADARE_TEST_RUNS_KEEP 25`` (``0`` keeps only the
+  run that just finished). Production runs are never touched. Details:
+  :ref:`test-run retention <cli-test-run-retention>`.
 - Use this phase to refine actions, fix timing issues, and tune test
   parameters until all assertions pass reliably.
 
