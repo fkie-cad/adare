@@ -58,6 +58,19 @@ def determine_projectdirectory(project: str, silent: bool = False) -> Path | Non
     return None
 
 
+def registered_project_name(project_path: Path) -> str:
+    """Registered name of the project at ``project_path``; its directory name if it is not registered.
+
+    The two differ when a project is registered under its own name (``T2F`` at ``.../adare``),
+    and runs, experiments and dotnotations are keyed by the registered name.
+    """
+    from adare.database.api.project import ProjectDbApi
+
+    with ProjectDbApi() as db:
+        project = db.get_project_by_path(project_path, silent=True)
+        return project.name if project else project_path.name
+
+
 def _looks_like_path(value: str) -> bool:
     """True when *value* is meant as a filesystem path rather than a project name.
 

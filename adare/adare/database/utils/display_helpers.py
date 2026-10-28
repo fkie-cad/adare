@@ -8,23 +8,28 @@ These functions help reduce code duplication across database API classes.
 import logging
 from functools import lru_cache
 
+from adare.database.utils.error_handling import DB_ACCESS_ERRORS, QUERY_ERRORS
+
 log = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
 def get_current_project_name() -> str | None:
     """
-    Get current project name with caching to avoid repeated filesystem access.
+    Registered name of the project in the current directory, cached to avoid repeated lookups.
+
+    The registered name can differ from the directory's (``T2F`` at ``.../adare``), and
+    everything stored per project is keyed by the registered one.
 
     Returns:
         Project name if found, None otherwise
     """
-    try:
-        from adare.backend.basics import determine_projectdirectory
+    from adare.backend.basics import determine_projectdirectory, registered_project_name
 
+    try:
         project_path = determine_projectdirectory(None, silent=True)
-        return project_path.name if project_path else None
-    except Exception as e:
+        return registered_project_name(project_path) if project_path else None
+    except DB_ACCESS_ERRORS as e:
         log.debug(f"Could not determine current project: {e}")
         return None
 
@@ -92,7 +97,7 @@ def safe_get_sync_status(obj) -> tuple[bool, bool]:
             published = bool(obj.sync_metadata.is_synced)
             in_request = bool(obj.sync_metadata.needs_sync)
             return published, in_request
-    except Exception as e:
+    except QUERY_ERRORS as e:
         log.debug(f"Could not get sync status: {e}")
 
     return False, False
@@ -121,7 +126,7 @@ def safe_get_os_info(vm) -> tuple[str, str, str, str, str]:
                 osinfo.version or "",
                 osinfo.language or "",
             )
-    except Exception as e:
+    except QUERY_ERRORS as e:
         log.debug(f"Could not get OS info: {e}")
 
     return "Unknown", "", "", "", ""
@@ -141,7 +146,7 @@ def safe_get_vm_info(env) -> tuple[str, str]:
         vm = env.vm if hasattr(env, 'vm') else None
         if vm:
             return vm.name, vm.id
-    except Exception as e:
+    except QUERY_ERRORS as e:
         log.debug(f"Could not get VM info: {e}")
 
     return "No VM", ""
@@ -160,7 +165,7 @@ def safe_get_tags(obj) -> list:
     try:
         if hasattr(obj, 'tags') and obj.tags:
             return [tag.name for tag in obj.tags]
-    except Exception as e:
+    except QUERY_ERRORS as e:
         log.debug(f"Could not get tags: {e}")
 
     return []
