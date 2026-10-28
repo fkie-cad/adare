@@ -10,10 +10,11 @@ from adare.backend.experiment.directory import ExperimentDirectory
 from adare.backend.experiment.exceptions import (
     ExperimentAlreadyExistsError,
     ExperimentDirectoryDoesNotExistError,
+    ExperimentIntegrityError,
     ExperimentNotChanged,
 )
 from adare.backend.project.directory import ProjectDirectory
-from adare.exceptions import LoggedException, NotLoggedInError
+from adare.exceptions import NotLoggedInError
 from adare.webappaccess.download import download_experiment, sync
 from adare.webappaccess.login import is_logged_in
 
@@ -39,6 +40,27 @@ def experiment_sync(project_path: Path, experiment_ulid: str):
         project_path, experiment_ulid, remote_ulid, abstract_tests_ulids, remote_url, is_published
     )
     log.info(f'experiment {experiment_ulid} synced')
+
+
+class ExperimentHasProductionRunsError(ExperimentIntegrityError):
+    """A changed experiment cannot be reloaded: it has production runs made with the loaded version."""
+
+
+def production_runs_conflict(experiment_name: str, production_runs: int) -> ExperimentHasProductionRunsError:
+    """The error for reloading (or re-ingesting) a changed experiment that has production runs."""
+    return ExperimentHasProductionRunsError(
+        log,
+        f'experiment [i]{experiment_name}[/i] has changed since it was loaded, and its '
+        f'{production_runs} production run(s) were made with the loaded version. Reloading it '
+        f'would put them under a playbook they did not run, so nothing was changed.',
+        possible_solutions=[
+            f'Run the changed playbook as a new experiment: adare experiment clone {experiment_name} '
+            f'<new-name>, then restore experiments/{experiment_name}/playbook.yml to the loaded version',
+            f'Restore experiments/{experiment_name}/playbook.yml to the loaded version to keep running it',
+            f'Replace the experiment and delete all {production_runs} production run(s): '
+            f'adare experiment load {experiment_name} --force',
+        ],
+    )
 
 
 def __experiment_update(project_path: Path, experiment_ulid, experiment_name, experiment_directory, force):
@@ -79,7 +101,7 @@ def __experiment_update(project_path: Path, experiment_ulid, experiment_name, ex
     # below); it was never meant to bypass "did anything change at all". Previously
     # `not force and ...` short-circuited this whole check whenever --force was given,
     # so a byte-identical reload (e.g. re-running `load -f` after a run, with no edits
-    # in between) fell straight through to the unconditional remove_experiment() below
+    # in between) fell straight through to the then-unconditional remove_experiment() below
     # -- which cascades and deletes every run of that experiment -- followed by
     # create_experiment(), minting a brand-new ULID for identical content and orphaning
     # the prior run(s). Redundant reloads must stay a no-op (ExperimentNotChanged),
@@ -88,16 +110,23 @@ def __experiment_update(project_path: Path, experiment_ulid, experiment_name, ex
         raise ExperimentNotChanged(log, f'experiment [i]{experiment_ulid}[/i] has not changed')
     log.info(f'experiment {experiment_ulid} has changed')
     num_runs = experiment_database.get_experiment_run_count(project_path, experiment_ulid, exclude_fake=True)
-    if not force and num_runs > 0:
-        raise LoggedException(
-            log,
-            f'experiment [i]{experiment_ulid}[/i] has changed, use --force to overwrite and delete all related experiment runs',
-        )
-    # delete the experiment and all related experiment runs
-    experiment_database.remove_experiment(project_path, experiment_ulid)
-    log.info(f'experiment {experiment_ulid} removed')
-    ulid = experiment_database.create_experiment(name=experiment_name, experiment_directory=experiment_directory)
-    log.info(f'experiment {experiment_ulid} created')
+    if num_runs == 0:
+        # Nothing to lose: refresh the row in place (same id); only finished fake runs go.
+        experiment_database.reload_experiment_in_place(project_path, experiment_ulid, experiment_directory)
+        ulid = experiment_ulid
+        log.info(f'experiment {experiment_ulid} reloaded in place')
+    elif not force:
+        # Production runs record neither the playbook hash nor the YAML they ran, so an
+        # in-place reload would put them under a playbook they never executed (and make
+        # the next `run --production` see no change). Refuse, never delete them.
+        raise production_runs_conflict(experiment_name, num_runs)
+    else:
+        # Only the explicit `adare experiment load --force`: replace the experiment,
+        # deleting all of its runs, production runs included (documented behaviour).
+        experiment_database.remove_experiment(project_path, experiment_ulid)
+        log.info(f'experiment {experiment_ulid} removed with its {num_runs} production run(s) (--force)')
+        ulid = experiment_database.create_experiment(name=experiment_name, experiment_directory=experiment_directory)
+        log.info(f'experiment {experiment_name} created as {ulid}')
 
     # Log user-friendly message about environment changes
     if env_changes_detected:
@@ -115,6 +144,14 @@ def __experiment_update(project_path: Path, experiment_ulid, experiment_name, ex
 
 
 def experiment_load(project_path: Path, experiment_name: str, force: bool = False, silent: bool = False):
+    """Load an experiment's files into the project database, or reload a loaded one.
+
+    A reload whose playbook hash is unchanged is a no-op. A changed experiment
+    without production runs is refreshed in place (same row and id) after its
+    finished fake runs are deleted. A changed experiment with production runs is refused
+    (:class:`ExperimentHasProductionRunsError`); only ``force`` -- reserved for the
+    explicit ``adare experiment load --force`` -- replaces it, deleting all its runs.
+    """
     from adare.console import print_success_message
 
     # todo: fix bug that we can have two identical experiments
