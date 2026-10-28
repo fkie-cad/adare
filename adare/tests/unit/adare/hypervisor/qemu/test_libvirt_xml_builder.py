@@ -700,9 +700,14 @@ class TestDomainXMLBuilderVirtioFS:
         assert 'run' in tags
         assert 'vm' in tags
 
+    @patch('adare.hypervisor.qemu.libvirt_xml_builder.create_nvram_for_vm', return_value='/tmp/nvram.fd')
+    @patch(
+        'adare.hypervisor.qemu.libvirt_xml_builder.find_ovmf_firmware',
+        return_value=('/usr/share/OVMF/OVMF_CODE.fd', '/usr/share/OVMF/OVMF_VARS.fd'),
+    )
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/usr/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Linux')
-    def test_virtiofs_has_no_idmap(self, mock_platform, mock_which):
+    def test_virtiofs_has_no_idmap(self, mock_platform, mock_which, mock_firmware, mock_nvram):
         """libvirt >= 10.0 rejects our former <idmap> ("invalid idmap start/target/count settings")."""
         config = make_linux_q35_config()
         builder = DomainXMLBuilder(config, virtiofs_shares=[{'tag': 'run', 'host_path': '/tmp/run'}])

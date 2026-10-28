@@ -1,3 +1,4 @@
+import io
 import logging
 import sys
 import time
@@ -908,7 +909,19 @@ for _old, _new in (('start', 'start'), ('services', 'status'), ('build', 'build'
     web.add_command(deprecated_alias(ui.commands[_new], _old, f'adare ui {_new}'))
 
 
+def _replace_unencodable_output() -> None:
+    """Print ``?`` for characters the console cannot encode instead of crashing.
+
+    Windows consoles default to cp1252, which has no ``✓`` and friends; a single such
+    character in a status line (e.g. from a migration) aborted the whole command.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(errors='replace')
+
+
 def main():
+    _replace_unencodable_output()
     cli()
     runtime = (time.time() - START_TIME) / 60
     logging.getLogger(__name__).debug(f"--- Runtime {runtime} minutes ---")

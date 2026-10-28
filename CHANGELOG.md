@@ -394,6 +394,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- On Windows, any adare command that printed a character the console encoding
+  (cp1252) cannot represent crashed with `UnicodeEncodeError`; e.g. `adare db
+  migrate` (run by `make install`) aborted on a migration's `✓`. The CLI now
+  prints `?` for such characters instead.
 - Editing a playbook and starting a default (test-mode) `adare experiment run` or
   `replicate` deleted the experiment and every run of it, production runs
   included, and recreated it under a new id: the load before a test run used
