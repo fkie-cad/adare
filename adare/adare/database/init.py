@@ -14,12 +14,24 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from adare.config.configdirectory import ENVIRONMENTS_DIR, VMS_DIR
 from adare.config.database import get_global_database_location, get_project_database_location
-from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi, dispose_engines
+from adare.config.exceptions import ConfigDirectoryError
+from adare.database.api.base import (
+    GlobalDatabaseApi,
+    ProjectDatabaseApi,
+    create_sqlite_engine,
+    remove_database_files,
+)
 from adare.database.exceptions import DatabaseError
 from adare.database.fixtures import fixture_stages, fixture_status
 from adare.database.migrations.runner import Scope, apply_pending, invalidate_cache, pending
 
 log = logging.getLogger(__name__)
+
+# What opening, querying or migrating a database can raise: our wrapped errors,
+# SQLAlchemy's, and file-system errors on the database file or its directory.
+_DB_ERRORS = (DatabaseError, SQLAlchemyError, OSError)
+# ... plus an unusable ADARE config directory when the global database location is resolved.
+_SETUP_ERRORS = (*_DB_ERRORS, ConfigDirectoryError)
 
 
 class DatabaseInitializationError(DatabaseError):
@@ -48,7 +60,7 @@ def ensure_global_directories_exist() -> bool:
         log.debug(f"Global environments directory ensured: {ENVIRONMENTS_DIR}")
 
         return True
-    except Exception as e:
+    except OSError as e:
         log.error(f"Failed to create global directories: {e}")
         raise DatabaseInitializationError(log, f"Cannot create global directories: {e}") from e
 
@@ -68,7 +80,7 @@ def ensure_global_database_exists() -> bool:
         with GlobalDatabaseApi():
             log.info("Global database initialized successfully")
             return True
-    except Exception as e:
+    except _SETUP_ERRORS as e:
         log.error(f"Failed to initialize global database: {e}")
         raise DatabaseInitializationError(log, f"Cannot initialize global database: {e}") from e
 
@@ -97,7 +109,7 @@ def ensure_project_database_exists(project_path: Path) -> bool:
             fixture_stages(api._session)
             log.info(f"Project database initialized successfully for {project_path}")
             return True
-    except Exception as e:
+    except _DB_ERRORS as e:
         log.error(f"Failed to initialize project database for {project_path}: {e}")
         raise DatabaseInitializationError(log, f"Cannot initialize project database: {e}") from e
 
@@ -126,7 +138,7 @@ def initialize_database_system() -> dict[str, Any]:
         else:
             results['errors'].append("Failed to initialize global database")
 
-    except Exception as e:
+    except _SETUP_ERRORS as e:
         error_msg = f"Database system initialization failed: {e}"
         log.error(error_msg)
         results['errors'].append(error_msg)
@@ -135,8 +147,8 @@ def initialize_database_system() -> dict[str, Any]:
 
 
 def _engine_for(db_path: Path) -> sqlalchemy.Engine:
-    """Create a throwaway engine for a database file (schema work only)."""
-    return sqlalchemy.create_engine(f'sqlite:///{db_path.as_posix()}')
+    """Create a throwaway engine for a database file (schema work only), with the usual connection pragmas."""
+    return create_sqlite_engine(db_path)
 
 
 def _registered_project_paths() -> list[Path]:
@@ -293,14 +305,14 @@ def validate_database_integrity() -> dict[str, Any]:
                     api._session.execute(text("SELECT 1"))
                     results['global_db_accessible'] = True
                     log.debug("Global database is accessible")
-            except Exception as e:
+            except _SETUP_ERRORS as e:
                 results['valid'] = False
                 results['errors'].append(f"Global database not accessible: {e}")
         else:
             results['valid'] = False
             results['errors'].append("Global database does not exist")
 
-    except Exception as e:
+    except _SETUP_ERRORS as e:
         results['valid'] = False
         results['errors'].append(f"Database validation failed: {e}")
         log.error(f"Database validation error: {e}")
@@ -344,7 +356,7 @@ def validate_project_database(project_path: Path) -> dict[str, Any]:
                     api._session.execute(text("SELECT 1"))
                     results['db_accessible'] = True
                     log.debug(f"Project database accessible for {project_path}")
-            except Exception as e:
+            except _DB_ERRORS as e:
                 results['valid'] = False
                 results['errors'].append(f"Project database not accessible: {e}")
         else:
@@ -352,7 +364,7 @@ def validate_project_database(project_path: Path) -> dict[str, Any]:
             # It will be created when first needed
             log.debug(f"Project database does not exist for {project_path} (will be created when needed)")
 
-    except Exception as e:
+    except _DB_ERRORS as e:
         results['valid'] = False
         results['errors'].append(f"Project database validation failed: {e}")
         log.error(f"Project database validation error for {project_path}: {e}")
@@ -388,7 +400,7 @@ def get_database_status() -> dict[str, Any]:
 
         log.debug(f"Database system status: {'OK' if status['system_initialized'] else 'NOT INITIALIZED'}")
 
-    except Exception as e:
+    except _SETUP_ERRORS as e:
         log.error(f"Error getting database status: {e}")
         status['global_database']['errors'] = [f"Status check failed: {e}"]
 
@@ -412,7 +424,7 @@ def repair_database_system() -> dict[str, Any]:
             if ensure_global_database_exists():
                 results['actions_taken'].append("Reinitialized global database")
                 log.info("Global database repaired successfully")
-        except Exception as e:
+        except _SETUP_ERRORS as e:
             results['errors'].append(f"Failed to repair global database: {e}")
 
         # Bring every database up to the current schema shape
@@ -431,7 +443,7 @@ def repair_database_system() -> dict[str, Any]:
             log.error("Database system repair failed")
             results['errors'].extend(validation.get('errors', []))
 
-    except Exception as e:
+    except _SETUP_ERRORS as e:
         error_msg = f"Database repair process failed: {e}"
         log.error(error_msg)
         results['errors'].append(error_msg)
@@ -453,12 +465,11 @@ def clean_install_database_system() -> dict[str, Any]:
     try:
         log.warning("Starting clean database system installation...")
 
-        # Remove existing global database if it exists
+        # Remove the existing global database (with its -wal/-shm/-journal
+        # sidecars); pooled connections are closed first, Windows cannot
+        # delete an open file.
         global_db_location = get_global_database_location()
-        if global_db_location.exists():
-            # Close pooled connections first: Windows cannot delete an open file.
-            dispose_engines()
-            global_db_location.unlink()
+        if remove_database_files(global_db_location):
             # The ledger went with the file — drop the cached applied-state so
             # the fresh database is stamped again.
             invalidate_cache()
@@ -474,7 +485,7 @@ def clean_install_database_system() -> dict[str, Any]:
         else:
             results['errors'].extend(init_results.get('errors', []))
 
-    except Exception as e:
+    except _SETUP_ERRORS as e:
         error_msg = f"Clean database installation failed: {e}"
         log.error(error_msg)
         results['errors'].append(error_msg)
