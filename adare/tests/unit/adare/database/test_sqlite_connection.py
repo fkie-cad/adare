@@ -1,4 +1,4 @@
-"""SQLite connection settings (WAL, synchronous, busy_timeout) and database file removal."""
+"""SQLite connection settings (WAL, synchronous, busy_timeout, journal_size_limit) and database file removal."""
 
 import os
 import sqlite3
@@ -24,18 +24,19 @@ pytestmark = pytest.mark.unit
 SIDECARS = ('-wal', '-shm', '-journal')
 
 
-def _pragmas(engine: sqlalchemy.Engine) -> tuple[str, int, int, int]:
+def _pragmas(engine: sqlalchemy.Engine) -> tuple[str, int, int, int, int]:
     with engine.connect() as conn:
         return (
             conn.exec_driver_sql('PRAGMA journal_mode').scalar_one(),
             conn.exec_driver_sql('PRAGMA synchronous').scalar_one(),
             conn.exec_driver_sql('PRAGMA busy_timeout').scalar_one(),
             conn.exec_driver_sql('PRAGMA foreign_keys').scalar_one(),
+            conn.exec_driver_sql('PRAGMA journal_size_limit').scalar_one(),
         )
 
 
-# synchronous=NORMAL reads back as 1; foreign keys stay off by decision.
-EXPECTED = ('wal', 1, 30000, 0)
+# synchronous=NORMAL reads back as 1; foreign keys stay off by decision; the WAL is capped at 64 MiB.
+EXPECTED = ('wal', 1, 30000, 0, 67108864)
 
 
 def test_new_engine_gets_the_connection_pragmas(tmp_path):
@@ -75,7 +76,7 @@ def test_every_pooled_connection_is_configured(tmp_path):
 def test_in_memory_engine_keeps_memory_journal():
     engine = configure_sqlite(sqlalchemy.create_engine('sqlite:///:memory:'))
     try:
-        journal_mode, synchronous, busy_timeout, _fk = _pragmas(engine)
+        journal_mode, synchronous, busy_timeout, _fk, _limit = _pragmas(engine)
     finally:
         engine.dispose()
 

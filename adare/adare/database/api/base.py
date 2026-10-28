@@ -43,6 +43,7 @@ SQLITE_CONNECT_PRAGMAS = (
     'PRAGMA busy_timeout=30000',
     'PRAGMA journal_mode=WAL',
     'PRAGMA synchronous=NORMAL',
+    'PRAGMA journal_size_limit=67108864',
 )
 # The one pragma that writes to the database file; it may fail on a read-only one.
 SQLITE_JOURNAL_MODE_PRAGMA = 'PRAGMA journal_mode=WAL'
@@ -63,6 +64,9 @@ def configure_sqlite(engine: sqlalchemy.Engine) -> sqlalchemy.Engine:
       journal mode (logged at debug level) so the database can still be read.
     - ``synchronous=NORMAL``: safe with WAL (a power loss can drop the last
       commits but never corrupts the file) and far fewer fsyncs than ``FULL``.
+    - ``journal_size_limit=67108864``: a checkpoint truncates a ``-wal`` that
+      grew past 64 MiB (a long write burst) back to that size instead of
+      leaving it at its peak.
 
     ``foreign_keys`` stays off by decision. Non-SQLite engines are returned unchanged.
     """
@@ -120,6 +124,41 @@ def dispose_engines() -> None:
             engine.dispose()
         _ENGINES.clear()
         _SCHEMA_READY.clear()
+
+
+#: ``PRAGMA optimize`` settings: wait at most 1 s for a writer, sample at most ~400 rows per index.
+OPTIMIZE_BUSY_TIMEOUT_MS = 1000
+OPTIMIZE_ANALYSIS_LIMIT = 400
+# 0x10002: ANALYZE every table whose statistics are missing or stale, not only the
+# tables this (fresh) connection has queried, which plain ``PRAGMA optimize`` limits itself to.
+_OPTIMIZE_PRAGMA = 'PRAGMA optimize=0x10002'
+
+
+def optimize_engines() -> None:
+    """Run ``PRAGMA optimize`` on the database of every cached engine, then dispose the engine.
+
+    Called when a CLI command or the web API ends, as SQLite recommends for
+    short-lived connections: it refreshes the query planner statistics of tables
+    that changed enough (bounded by ``analysis_limit``, usually milliseconds). A
+    database that is read-only, locked by another writer for more than
+    :data:`OPTIMIZE_BUSY_TIMEOUT_MS`, or gone is skipped -- this never raises.
+    The engines stay cached and reconnect on their next use.
+    """
+    with _ENGINES_LOCK:
+        cached = [(key, engine) for key, (engine, _factory) in _ENGINES.items()]
+    for key, engine in cached:
+        if engine.dialect.name != 'sqlite' or not Path(key).is_file():
+            continue  # connecting would create an empty file in place of a deleted one
+        try:
+            with engine.connect() as conn:
+                conn.exec_driver_sql(f'PRAGMA busy_timeout={OPTIMIZE_BUSY_TIMEOUT_MS}')
+                conn.exec_driver_sql(f'PRAGMA analysis_limit={OPTIMIZE_ANALYSIS_LIMIT}')
+                conn.exec_driver_sql(_OPTIMIZE_PRAGMA)
+                conn.commit()
+        except (sqlite3.OperationalError, SQLAlchemyError) as e:
+            log.debug('PRAGMA optimize skipped for %s: %s', key, e)
+        finally:
+            engine.dispose()
 
 
 def remove_database_files(db_path: Path) -> bool:
@@ -748,6 +787,11 @@ class ProjectDatabaseApi(EnhancedDatabaseApi):
         except (SQLAlchemyError, ImportError) as e:
             log.error(f"Failed to create project database schema: {e}")
             raise DatabaseError(log, f"Cannot initialize project database: {e}") from e
+        # Once per file and process, like the schema: is an old, bulky database worth
+        # an `adare db compact` hint? (A stat for every database below 512 MiB.)
+        from adare.database.compact_hint import check_project_database
+
+        check_project_database(self.project_path, self.db_path)
 
 
 # Legacy alias for backward compatibility
