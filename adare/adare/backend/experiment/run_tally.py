@@ -289,7 +289,7 @@ def load_event_rows(session, experiment_run_ulid: str) -> list[EventRow]:
                 group_id=event.event_group_id or event.action_id or event.id,
                 category='action',
                 event_type_specific=event.event_type_specific or '',
-                parent_group_id=event.parent_event_id,
+                parent_group_id=event.parent_group_id,
                 success=event.success,
                 sequence_order=_coerce_int(data.get('sequence_order')),
                 loop_iterations_planned=_coerce_int(data.get('iteration_count')),
@@ -311,7 +311,7 @@ def load_event_rows(session, experiment_run_ulid: str) -> list[EventRow]:
                 group_id=event.event_group_id or event.id,
                 category='test',
                 event_type_specific=event.event_type_specific or '',
-                parent_group_id=event.parent_event_id,
+                parent_group_id=event.parent_group_id,
                 success=event.success,
                 test_status=status,
             )
