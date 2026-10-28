@@ -251,7 +251,8 @@ Now run your forensic experiment:
    **Test vs Production Modes**
 
    - **Default behavior** is test mode - ideal for development and iteration
-   - Test mode creates "fake runs" that can be cleaned up with ``adare experiment clean``
+   - Test mode creates "fake runs"; only the newest 10 per experiment and environment
+     are kept, never the last successful one (:ref:`test-run retention <cli-test-run-retention>`)
    - Use ``--production`` flag only when ready for real data collection
    - Production runs enforce strict integrity checks to ensure reproducibility
 
