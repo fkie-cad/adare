@@ -10,7 +10,7 @@ from adare.cli.errors import report_exception
 from adare.cli.groups.db_commands import register as register_db_commands
 from adare.cli.groups.runs_commands import register as register_runs_commands
 from adare.cli.groups.system_commands import register as register_system_commands
-from adare.cli.output import FORMAT_CHOICES, FORMAT_ENV_VAR, output_options
+from adare.cli.output import FORMAT_CHOICES, FORMAT_ENV_VAR, is_machine_output, output_options
 from adare.cli.output import get_formatter_from_context as _get_formatter_from_context
 from adare.cli.tui import tui
 from adare.config.configdirectory import ensure_directories
@@ -101,6 +101,23 @@ def exec_with_error_printing(func, args):
 START_TIME = time.time()
 
 
+def _close_databases(ctx: click.Context) -> None:
+    """When a command ends: ``PRAGMA optimize`` the databases it used and print queued compact hints.
+
+    Both modules are only consulted when the command imported them: a command that
+    never opened a database pays nothing. Hints go to stderr and are held back for
+    json/yaml output (the next interactive command shows them).
+    """
+    if 'adare.database.compact_hint' in sys.modules:
+        from adare.database.compact_hint import emit_hints
+
+        emit_hints(sys.stderr, quiet=is_machine_output(ctx))
+    if 'adare.database.api.base' in sys.modules:
+        from adare.database.api.base import optimize_engines
+
+        optimize_engines()
+
+
 # Global CLI group with logging and version options
 @tui()
 @click.group(
@@ -143,6 +160,7 @@ def cli(ctx, logfile, verbose, very_verbose, log_level, output_format, output_fi
     ctx.obj.command_output_format = None  # set by a subcommand's --json/--format
     ensure_directories()
     setup_logging(ctx.obj, sys.argv)
+    ctx.call_on_close(lambda: _close_databases(ctx))
 
 
 # Add aliases after CLI group is defined

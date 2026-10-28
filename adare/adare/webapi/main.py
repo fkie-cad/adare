@@ -48,7 +48,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Create the appdata directory tree, sample host usage while serving, hang up terminals on exit."""
+    """Create the appdata directory tree, sample host usage while serving; on exit hang up terminals
+    and ``PRAGMA optimize`` the databases the server used."""
     from adare.backend.system.history import sample_forever
 
     ensure_directories()
@@ -58,6 +59,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     finally:
         sampler.cancel()
         await terminal_manager.shutdown()
+        from adare.database.api.base import optimize_engines
+
+        await asyncio.to_thread(optimize_engines)
 
 
 # Initialize FastAPI app
