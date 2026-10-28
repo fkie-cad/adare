@@ -79,6 +79,7 @@ class ShowService:
     def _query_across_projects(self, query_fn: Callable, project_name: str | None = None) -> list:
         """Run a StructuredDataApi query across all project databases (or only ``project_name``'s)."""
         from adare.database.api.structured_data import StructuredDataApi
+        from adare.database.compact_hint import check_project_database
 
         all_results = []
         with StructuredDataApi() as global_api:
@@ -96,6 +97,8 @@ class ShowService:
             try:
                 with StructuredDataApi(db_path=db_path) as project_api:
                     all_results.extend(query_fn(project_api, project.name))
+                # This path skips ProjectDatabaseApi, so queue the compact hint here.
+                check_project_database(project_path, db_path)
             except FileNotFoundError:
                 log.warning(f"Project database not found for {project.name}")
             except OSError as e:
