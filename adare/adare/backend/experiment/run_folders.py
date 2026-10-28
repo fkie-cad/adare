@@ -17,6 +17,12 @@ if ALL of these hold:
 * nothing in it changed for :data:`MIN_AGE_SECONDS` (the folder, its ``logs/`` and
   ``reporting/`` directories and the files directly in ``logs/``).
 
+:func:`remove_run_folder` (every delete path goes through it) additionally keeps a
+folder that a dev session refers to (``DevSession.run_directory_path``, any status,
+any project): a dev session's run is a fake run whose folder must survive while the
+session can still be resumed. When the dev sessions cannot be read, it keeps the
+folder too.
+
 Database run paths are absolute paths from the machine the run happened on. They
 are mapped by their ``run/<experiment>/<timestamp>`` tail onto the current project
 root (:func:`map_db_run_path`), so a moved or renamed project still matches.
@@ -32,6 +38,8 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 
+from adarelib.constants import StatusEnum
+
 log = logging.getLogger(__name__)
 
 #: Name of a run folder: ``ExperimentRunDirectory`` (UTC ``%Y-%m-%d_%H-%M-%S``) + ``_<n>`` suffix.
@@ -43,6 +51,44 @@ MARKER_DIRS = ('logs', 'reporting')
 RUN_DIR_NAME = 'run'
 FOLDER_NOT_FOUND = 'does not exist'
 _NO_RUN_DIR = 'the project has no run/ directory'
+DEV_SESSION_FOLDER = 'belongs to a dev session'
+#: Run statuses after which nothing writes to a run any more. Anything else (PENDING,
+#: RUNNING, PAUSE, NONE, no status) may still be in progress: such runs are never cleaned up.
+TERMINAL_RUN_STATUSES = frozenset(
+    {
+        StatusEnum.SUCCESS,
+        StatusEnum.FAILED,
+        StatusEnum.WARNING,
+        StatusEnum.ERROR,
+        StatusEnum.INTERRUPTED,
+        StatusEnum.FINISHED,
+        StatusEnum.TEST_MISSING,
+        StatusEnum.TEST_FAILED,
+    }
+)
+
+
+class RunReferencesUnavailableError(Exception):
+    """The rows that may refer to run folders could not be read, so no folder may be deleted."""
+
+
+@dataclass(frozen=True)
+class DevSessionRefs:
+    """Every dev session's run id (its ``session_id``) and run-folder tail, any project, any status."""
+
+    ids: frozenset[str] = frozenset()
+    tails: frozenset[tuple[str, str]] = frozenset()
+
+    def with_run_paths(self, paths: Iterable[str | None]) -> 'DevSessionRefs':
+        """These refs plus the tails of ``paths`` (the run rows of dev-session runs)."""
+        extra = {tail for path in paths if path and (tail := run_tail(path)) is not None}
+        return DevSessionRefs(ids=self.ids, tails=self.tails | extra)
+
+    def refers_to(self, *, run_id: str | None = None, path: str | PurePath | None = None) -> bool:
+        """True when the run ``run_id`` or the run folder ``path`` belongs to a dev session."""
+        if run_id is not None and run_id in self.ids:
+            return True
+        return path is not None and run_tail(path) in self.tails
 
 
 @dataclass(frozen=True)
@@ -67,6 +113,39 @@ class FolderRemoval:
     removed: bool
     reason: str | None = None
     missing: bool = False
+
+
+def load_dev_session_refs() -> DevSessionRefs:
+    """The :class:`DevSessionRefs` of every dev session in the global database.
+
+    Raises:
+        RunReferencesUnavailableError: The dev sessions could not be read.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from adare.database.api.devmode import DevModeApi
+    from adare.database.exceptions import DatabaseError
+    from adare.database.models.devsession import DevSession
+
+    try:
+        with DevModeApi() as api:
+            rows = api._session.execute(select(DevSession.session_id, DevSession.run_directory_path)).all()
+    except (SQLAlchemyError, DatabaseError, OSError) as e:
+        raise RunReferencesUnavailableError(f'the dev sessions could not be read: {e}') from e
+    return DevSessionRefs(
+        ids=frozenset(str(session_id) for session_id, _path in rows if session_id),
+        tails=frozenset(tail for _id, path in rows if path and (tail := run_tail(path)) is not None),
+    )
+
+
+def try_load_dev_session_refs() -> DevSessionRefs | str:
+    """:func:`load_dev_session_refs`, or why they could not be read (then no folder may be deleted)."""
+    try:
+        return load_dev_session_refs()
+    except RunReferencesUnavailableError as e:
+        log.warning('run folders kept: %s', e)
+        return f'kept to be safe: {e}'
 
 
 def known_experiments(project_root: Path) -> set[str]:
@@ -209,11 +288,19 @@ def is_run_folder(project_root: Path, path: Path, *, experiments: Collection[str
 
 
 def remove_run_folder(
-    project_root: Path, path: Path, *, experiments: Collection[str] | None = None, now: float | None = None
+    project_root: Path,
+    path: Path,
+    *,
+    experiments: Collection[str] | None = None,
+    now: float | None = None,
+    dev_sessions: DevSessionRefs | str | None = None,
 ) -> FolderRemoval:
-    """Delete ``path`` if it passes :func:`check_run_folder`; otherwise keep it and say why.
+    """Delete ``path`` if it passes :func:`check_run_folder` and no dev session refers to it.
 
-    Never raises for a refused or failed removal; the reason is logged and returned.
+    Otherwise keep it and say why. ``dev_sessions`` are the preloaded
+    :func:`try_load_dev_session_refs` (loaded here when None; a string, i.e. they
+    could not be read, keeps the folder). Never raises for a refused or failed
+    removal; the reason is logged and returned.
     """
     path = Path(path)
     check = check_run_folder(project_root, path, experiments=experiments, now=now)
@@ -222,6 +309,13 @@ def remove_run_folder(
         if not missing:
             log.warning('run folder %s kept: %s', path, check.reason)
         return FolderRemoval(path=path, removed=False, reason=check.reason, missing=missing)
+    refs = try_load_dev_session_refs() if dev_sessions is None else dev_sessions
+    reason = refs if isinstance(refs, str) else None
+    if isinstance(refs, DevSessionRefs) and (refs.refers_to(path=path) or refs.refers_to(path=check.resolved)):
+        reason = DEV_SESSION_FOLDER
+    if reason is not None:
+        log.warning('run folder %s kept: %s', path, reason)
+        return FolderRemoval(path=path, removed=False, reason=reason)
     try:
         # The validated, resolved folder; rmtree never follows symlinks inside it.
         shutil.rmtree(check.resolved)
@@ -232,12 +326,19 @@ def remove_run_folder(
     return FolderRemoval(path=path, removed=True)
 
 
-def remove_db_run_folders(project_root: Path, db_paths: Iterable[str]) -> list[FolderRemoval]:
+def remove_db_run_folders(
+    project_root: Path, db_paths: Iterable[str], *, dev_sessions: DevSessionRefs | str | None = None
+) -> list[FolderRemoval]:
     """Delete the folders of runs whose database rows were just deleted.
 
     Each ``run.path`` is mapped with :func:`map_db_run_path`; the run's database row
-    vouches for its experiment name. Unmappable paths are refused.
+    vouches for its experiment name. Unmappable paths are refused, and so is every
+    folder a dev session refers to (``dev_sessions`` as in :func:`remove_run_folder`,
+    loaded once here when None).
     """
+    db_paths = list(db_paths)
+    if dev_sessions is None and db_paths:
+        dev_sessions = try_load_dev_session_refs()
     removals = []
     for db_path in db_paths:
         mapped = map_db_run_path(project_root, db_path)
@@ -247,7 +348,9 @@ def remove_db_run_folders(project_root: Path, db_paths: Iterable[str]) -> list[F
                 FolderRemoval(path=Path(db_path), removed=False, reason='not a run/<experiment>/<timestamp> path')
             )
             continue
-        removals.append(remove_run_folder(project_root, mapped, experiments={mapped.parent.name}))
+        removals.append(
+            remove_run_folder(project_root, mapped, experiments={mapped.parent.name}, dev_sessions=dev_sessions)
+        )
     return removals
 
 

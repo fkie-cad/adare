@@ -3,10 +3,14 @@
 import os
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from adare.backend.experiment.run_folders import (
+    DEV_SESSION_FOLDER,
+    DevSessionRefs,
+    RunReferencesUnavailableError,
     check_run_folder,
     folder_size,
     is_run_folder,
@@ -173,6 +177,39 @@ def test_rmtree_does_not_follow_symlinks_inside_a_run_folder(project, tmp_path):
 
     assert remove_run_folder(project, folder).removed
     assert (keep / 'precious').read_text() == 'data'
+
+
+def test_remove_run_folder_keeps_a_dev_session_folder(project):
+    folder = make_run(project, 'exp', '2025-01-01_00-00-00')
+    # A dev session of the project when it lived elsewhere: matched by its run/ tail.
+    refs = DevSessionRefs(ids=frozenset({'S'}), tails=frozenset({('exp', folder.name)}))
+
+    removal = remove_run_folder(project, folder, dev_sessions=refs)
+    assert not removal.removed
+    assert removal.reason == DEV_SESSION_FOLDER
+    (removal,) = remove_db_run_folders(project, ['/old/project/run/exp/2025-01-01_00-00-00'], dev_sessions=refs)
+    assert not removal.removed
+    assert folder.exists()
+
+    assert refs.refers_to(run_id='S')
+    assert refs.refers_to(path='/x/run/exp/2025-01-01_00-00-00')
+    assert not refs.refers_to(run_id='T', path=None)
+    assert DevSessionRefs().with_run_paths(['/x/run/exp/a', None]).tails == {('exp', 'a')}
+
+
+def test_remove_run_folder_keeps_the_folder_when_dev_sessions_cannot_be_read(project):
+    folder = make_run(project, 'exp', '2025-01-01_00-00-00')
+    with patch(
+        'adare.backend.experiment.run_folders.load_dev_session_refs',
+        side_effect=RunReferencesUnavailableError('database is locked'),
+    ):
+        removal = remove_run_folder(project, folder)
+        (db_removal,) = remove_db_run_folders(project, [str(folder)])
+
+    assert not removal.removed
+    assert 'database is locked' in removal.reason
+    assert not db_removal.removed
+    assert folder.exists()
 
 
 def test_scan_selects_only_run_folders_and_folder_size_counts_files(project):
