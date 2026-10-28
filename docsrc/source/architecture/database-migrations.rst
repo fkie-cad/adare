@@ -59,6 +59,19 @@ project database when it is first opened. Run deletion itself goes through
 :func:`adare.database.api.run_cleanup.delete_runs`, which removes a run's rows
 along with the run.
 
+``move_parent_event_keys`` (project scope) repairs a column that held the wrong
+kind of value. ``event.parent_event_id`` is declared as a foreign key to
+``event.id``, but the event writers stored the enclosing action's *key* there
+(its ``event_group_id``), never an event id, so every nested event was a
+foreign-key violation (``PRAGMA foreign_key_check``; 44k of them in one project).
+The migration adds ``event.parent_group_id`` with the index
+``ix_event_parent_group_id`` -- the name SQLAlchemy gives ``index=True``, so fresh
+and migrated databases agree -- and moves every ``parent_event_id`` that names no
+event into it, clearing ``parent_event_id``. A value that does name an event is a
+real parent and is kept. Writers now set ``parent_group_id`` only; the old column
+stays because SQLite cannot drop a foreign-key column without rebuilding the
+table.
+
 Each migration runs in its own transaction together with its ledger row, so a
 failure leaves the database at the last fully applied migration. A failure is
 raised as a ``DatabaseError`` suggesting ``adare --verbose db migrate``.
