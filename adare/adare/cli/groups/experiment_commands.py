@@ -227,10 +227,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.argument('experiment')
     @click.option('--project', '-p', help='Name of the project')
     def clean(experiment, project):
-        """Remove all fake experiment runs for the specified experiment.
+        """Remove the finished fake experiment runs for the specified experiment.
 
         Fake runs are created during testing and development. This command
-        permanently deletes all fake runs associated with the experiment.
+        permanently deletes the finished fake runs of the experiment, and
+        their run folders (only folders that are clearly ADARE run folders).
+        Fake runs still pending or running, and dev sessions' runs, are kept.
         """
         from adare.cli.experiment import exec_experiment_clean
 
@@ -242,7 +244,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--project', '-p', help='Name of the project')
     @click.option('--force', '-f', is_flag=True, help='Force removal even if experiment has productive runs')
     @click.option(
-        '--keep-files', is_flag=True, help='Keep experiment directory on filesystem (only remove from database)'
+        '--keep-files',
+        is_flag=True,
+        help='Keep the experiment directory and the run folders on filesystem (only remove from database)',
     )
     def remove(experiment, project, force, keep_files):
         """Remove an experiment from the database and optionally from filesystem.
@@ -253,7 +257,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         \b
         By default, the command will:
         - Fail if the experiment has productive runs (use --force to override)
-        - Delete the experiment directory from filesystem (use --keep-files to preserve)
+        - Delete the experiment directory and the runs' folders (use --keep-files to preserve)
 
         \b
         EXPERIMENT can be:
