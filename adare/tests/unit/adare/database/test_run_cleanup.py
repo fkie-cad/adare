@@ -34,6 +34,7 @@ from adare.database.models.project_models import (
     Status,
 )
 from adare.database.reference_manager import reference_manager
+from adarelib.constants import StatusEnum
 
 pytestmark = pytest.mark.unit
 
@@ -162,6 +163,11 @@ def two_runs(project):
     return experiment_id, doomed, kept
 
 
+def _finish(project: Path, run_id: str) -> None:
+    with ExperimentApi(project) as api:
+        api._session.get(ExperimentRun, run_id).status = StatusEnum.FAILED
+
+
 def _assert_only_kept_run_left(project: Path, kept: str) -> None:
     _assert_no_orphans(project)
     counts = _counts(project)
@@ -253,16 +259,18 @@ class TestExperimentApiDeletePaths:
 
         _assert_only_kept_run_left(project, kept)
 
-    def test_remove_fake_runs_by_experiment_name(self, project, two_runs):
+    def test_remove_fake_runs_by_experiment_name(self, project, two_runs, global_db):
         _, doomed, kept = two_runs
+        _finish(project, doomed)  # experiment clean keeps PENDING/RUNNING fake runs
 
         with ExperimentApi(project) as api:
             assert api.remove_fake_experiment_runs_by_experiment_name(project, 'exp') == 1
 
         _assert_only_kept_run_left(project, kept)
 
-    def test_remove_fake_runs_of_experiment_returns_paths(self, project, two_runs):
+    def test_remove_fake_runs_of_experiment_returns_paths(self, project, two_runs, global_db):
         _, doomed, kept = two_runs
+        _finish(project, doomed)
 
         with ExperimentApi(project) as api:
             assert api.remove_fake_runs_of_experiment(project, 'exp') == (1, [f'/runs/{doomed}'])

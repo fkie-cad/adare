@@ -115,9 +115,10 @@ def _folder_summary(removals) -> str:
 def experiment_clean(project_path: Path, experiment_name: str) -> int:
     """Clean fake experiment runs for the specified experiment.
 
-    Removes all fake runs of the experiment: their database rows and their run
-    folders (each only if it passes the run-folder safety test, see
-    ``backend/experiment/run_folders.py``).
+    Removes the finished fake runs of the experiment: their database rows and their
+    run folders (each only if it passes the run-folder safety test, see
+    ``backend/experiment/run_folders.py``). Fake runs that are still pending or
+    running and dev sessions' runs are kept.
 
     Args:
         project_path: Path to the project directory
@@ -126,7 +127,7 @@ def experiment_clean(project_path: Path, experiment_name: str) -> int:
     Returns:
         Number of fake runs removed.
     """
-    from adare.backend.experiment.run_folders import remove_db_run_folders
+    from adare.backend.experiment.run_folders import RunReferencesUnavailableError, remove_db_run_folders
     from adare.console import print_success_message
     from adare.database.api.experiment import ExperimentApi
 
@@ -136,7 +137,7 @@ def experiment_clean(project_path: Path, experiment_name: str) -> int:
         with ExperimentApi(project_path) as api:
             removed: tuple[int, list[str]] = api.remove_fake_runs_of_experiment(project_path, experiment_name)
         removed_count, paths = removed
-    except ValueError as e:
+    except (ValueError, RunReferencesUnavailableError) as e:
         from adare.exceptions import LoggedException
 
         raise LoggedException(log, str(e)) from e
@@ -279,6 +280,17 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
                     ],
                 )
 
+            # Read the dev sessions before the runs are gone: a dev session's run (id =
+            # session id) keeps its folder even when the session has no folder recorded.
+            dev_sessions = None
+            if not keep_files:
+                from adare.backend.experiment.run_folders import DevSessionRefs, try_load_dev_session_refs
+
+                refs = try_load_dev_session_refs()
+                if isinstance(refs, DevSessionRefs):
+                    refs = refs.with_run_paths([run.path for run in experiment.runs if refs.refers_to(run_id=run.id)])
+                dev_sessions = refs
+
             # Remove experiment from database (and all its runs with every row they own)
             experiment_ulid = experiment.id
             run_paths = api.remove_experiment(experiment)
@@ -289,7 +301,7 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
             if not keep_files:
                 from adare.backend.experiment.run_folders import remove_db_run_folders
 
-                runs_status = _folder_summary(remove_db_run_folders(project_path, run_paths))
+                runs_status = _folder_summary(remove_db_run_folders(project_path, run_paths, dev_sessions=dev_sessions))
                 _remove_empty_run_parent(project_path, experiment_name)
                 try:
                     shutil.rmtree(experiment_directory.path)
