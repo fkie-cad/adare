@@ -11,6 +11,7 @@ This module provides a robust foundation for database operations with:
 
 import functools
 import logging
+import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -43,6 +44,8 @@ SQLITE_CONNECT_PRAGMAS = (
     'PRAGMA journal_mode=WAL',
     'PRAGMA synchronous=NORMAL',
 )
+# The one pragma that writes to the database file; it may fail on a read-only one.
+SQLITE_JOURNAL_MODE_PRAGMA = 'PRAGMA journal_mode=WAL'
 # Files SQLite keeps next to a database: the write-ahead log, its shared-memory
 # index, and the rollback journal of the pre-WAL journal mode.
 SQLITE_SIDECAR_SUFFIXES = ('-wal', '-shm', '-journal')
@@ -55,6 +58,9 @@ def configure_sqlite(engine: sqlalchemy.Engine) -> sqlalchemy.Engine:
       failing with "database is locked".
     - ``journal_mode=WAL``: readers no longer block the writer and vice versa.
       Persistent in the database file; an in-memory database stays ``memory``.
+      Switching a file to WAL writes to it: on a read-only database file or
+      directory the switch fails, and the connection keeps the file's current
+      journal mode (logged at debug level) so the database can still be read.
     - ``synchronous=NORMAL``: safe with WAL (a power loss can drop the last
       commits but never corrupts the file) and far fewer fsyncs than ``FULL``.
 
@@ -68,7 +74,13 @@ def configure_sqlite(engine: sqlalchemy.Engine) -> sqlalchemy.Engine:
         cursor = dbapi_connection.cursor()
         try:
             for pragma in SQLITE_CONNECT_PRAGMAS:
-                cursor.execute(pragma)
+                if pragma != SQLITE_JOURNAL_MODE_PRAGMA:
+                    cursor.execute(pragma)
+                    continue
+                try:
+                    cursor.execute(pragma)
+                except sqlite3.OperationalError as e:
+                    log.debug('%s failed (%s); keeping the current journal mode', pragma, e)
         finally:
             cursor.close()
 

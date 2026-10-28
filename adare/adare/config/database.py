@@ -25,13 +25,18 @@ def get_global_database_location():
     return STATE_DIR / 'global.db.sqlite3'
 
 
-def get_project_database_location(project_path: Path):
-    """Get the location of the project database for a specific project."""
+def get_project_database_location(project_path: Path, create: bool = True):
+    """Get the location of the project database for a specific project.
+
+    With ``create`` (the default) the project's ``.adare`` directory is created;
+    without it the path is only computed and nothing on disk is touched.
+    """
     if not isinstance(project_path, Path):
         project_path = Path(project_path)
 
     project_db_dir = project_path / '.adare'
-    project_db_dir.mkdir(exist_ok=True, parents=True)
+    if create:
+        project_db_dir.mkdir(exist_ok=True, parents=True)
 
     return project_db_dir / 'project.db.sqlite3'
 

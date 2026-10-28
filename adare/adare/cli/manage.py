@@ -261,8 +261,15 @@ def exec_manage_vm_runtime_build(arguments):
 # adare db compact / adare db check
 # ---------------------------------------------------------------------------
 
-# Orphan kinds `adare db migrate` removes (the delete_orphan_run_rows migration).
-_RUN_ORPHANS = ('action_execution_without_run', 'experiment_run_files_unreferenced', 'log_file_unreferenced')
+# Labels of the orphan counts `adare db check` reports (keys: maintenance.ORPHAN_QUERIES).
+_ORPHAN_LABELS = {
+    'action_execution_without_run': (
+        'action executions with no run row (dev-session consoles or runs deleted by older versions; kept)'
+    ),
+    'experiment_run_files_unreferenced': 'run-files rows no run references',
+    'log_file_unreferenced': 'log-file rows only unreferenced run-files rows point at',
+    'action_execution_dangling_playbook_item': 'action executions whose playbook item is gone',
+}
 
 
 def _size(num_bytes: float) -> str:
@@ -320,9 +327,10 @@ def _compact_renderable(result):
         table.add_row('status', entry.status + (f' - {entry.message}' if entry.message else ''))
         if entry.status in ('compacted', 'dry-run'):
             table.add_row('rows examined', str(entry.rows_examined))
-            table.add_row(f'rows {verb} (screenshot on disk)', str(entry.rows_stripped))
+            table.add_row(f'rows {verb} (identical screenshot on disk)', str(entry.rows_stripped))
             table.add_row('rows kept (screenshot file missing)', str(entry.rows_kept_missing_file))
-            table.add_row(f'rows {verb} (oversized non-image text)', str(entry.rows_non_image_stripped))
+            table.add_row('rows kept (screenshot file differs)', str(entry.rows_kept_mismatch))
+            table.add_row('rows with oversized non-image text (kept)', str(entry.rows_non_image_kept))
             table.add_row('reclaimable by the row rewrite', _size(entry.reclaimable_bytes))
             table.add_row('free pages (reclaimed by VACUUM)', _size(entry.free_pages_bytes))
             if not result.dry_run:
@@ -368,6 +376,10 @@ def _check_renderable(result):
     parts = []
     for entry in result.databases:
         table = _details_table(entry)
+        if entry.status == 'missing':
+            table.add_row('status', f'missing - {entry.message}')
+            parts.append(table)
+            continue
         if entry.message:
             table.add_row('note', entry.message)
         table.add_row('quick_check', 'ok' if entry.integrity_ok else 'FAILED')
@@ -380,10 +392,8 @@ def _check_renderable(result):
         if not entry.foreign_key_violations:
             table.add_row('foreign keys', 'no violations')
         for name, count in entry.orphans.items():
-            table.add_row(name.replace('_', ' '), str(count))
+            table.add_row(_ORPHAN_LABELS.get(name, name.replace('_', ' ')), str(count))
         parts.append(table)
-    if any(entry.orphans.get(name) for entry in result.databases for name in _RUN_ORPHANS):
-        parts.append("Orphaned run rows are removed by 'adare db migrate'.")
     if not result.ok:
         parts.append('Database corruption found: restore the database from a backup.')
     return Group(*parts)
