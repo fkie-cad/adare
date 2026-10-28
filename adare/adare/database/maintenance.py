@@ -7,37 +7,42 @@ never open a database API (which would create schema and run migrations), and
 ``compact`` removes the base64 screenshot copies that old ``action_execution``
 rows carry in ``result_data`` -- new rows are stored without them
 (:func:`adare.database.api.playbook.strip_bulky_values`), rows written before
-that never were. A row's image data is removed only when every image in it has
-a matching PNG on disk, referenced by the row's ``screenshot_path`` (see
-:class:`_ScreenshotResolver`); otherwise the row is left byte-for-byte as it
-is. The database is then vacuumed to give the space back to the file system.
+that never were. Only image payloads are removed, and only when every image of
+the row is byte-for-byte identical to a PNG on disk referenced by the row's
+``screenshot_path`` (see :class:`_ScreenshotResolver`); any other row -- and
+any other value, however large -- is left exactly as it is. The database is
+then vacuumed to give the space back to the file system.
+
+``compact`` refuses to touch a database another process may be writing to: a
+held write lock, a run of the project with recent activity, or a live dev
+session (see :func:`find_activity`).
 
 ``check`` runs ``PRAGMA quick_check`` and ``PRAGMA foreign_key_check`` and
-counts the orphaned rows earlier run deletions left behind.
+counts orphaned rows.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import logging
 import shutil
 import sqlite3
+import tempfile
 import time
 from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import closing
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from adare.core.dto.manage import DbCheckEntry, DbCompactEntry, ForeignKeyViolationCount
 from adare.database.api.base import dispose_engines
-from adare.database.api.playbook import MAX_RESULT_STRING, strip_bulky_values
-from adare.database.migrations.delete_orphan_run_rows import (
-    _DELETE_ORPHAN_ACTION_EXECUTIONS,
-    _DELETE_ORPHAN_FILES,
-    _DELETE_ORPHAN_LOG_FILES,
-)
+from adare.database.api.playbook import MAX_RESULT_STRING, is_image_payload, omitted_image_marker
+from adare.database.migrations.delete_orphan_run_rows import _DELETE_ORPHAN_FILES, _DELETE_ORPHAN_LOG_FILES
 
 log = logging.getLogger(__name__)
 
@@ -47,8 +52,17 @@ LOCK_TIMEOUT_SECONDS = 2.0
 WORK_BUSY_TIMEOUT_MS = 30_000
 #: Rows rewritten (and committed) per batch; bounds memory and the size of the WAL.
 BATCH_SIZE = 200
-#: Rows whose ``result_data`` is not longer than this cannot hold anything to strip.
+#: Rows whose ``result_data`` is not longer than this are not worth decoding.
 PREFILTER_MIN_LENGTH = MAX_RESULT_STRING
+#: A run or dev session that showed activity this recently may still write to the database.
+ACTIVITY_WINDOW_SECONDS = 30 * 60
+#: Run statuses (``StatusEnum`` names, as SQLAlchemy stores them) of runs that have not ended.
+NON_TERMINAL_RUN_STATUSES = ('RUNNING', 'PENDING', 'PAUSE')
+#: VACUUM needs free space of this many times the live data (temporary copy + WAL, 10 % margin).
+VACUUM_SPACE_FACTOR = 2.2
+#: Prefix of the marker an image's base64 data is replaced with (already stripped = not an image).
+_OMITTED_PREFIX = '<omitted: '
+_COMPARE_CHUNK = 1024 * 1024
 
 _RUN_ORPHAN_TABLES = frozenset({'experiment_run', 'action_execution', 'experiment_run_files', 'log_file'})
 
@@ -61,12 +75,21 @@ def _count_sql(delete_sql: str) -> str:
     return 'SELECT COUNT(*) FROM' + statement[len('DELETE FROM') :]
 
 
-#: Orphan counts reported by ``check``, as ``name -> (count SQL, tables it needs)``: the
-#: row sets the ``delete_orphan_run_rows`` migration deletes (its SQL, counted instead
-#: of deleted), plus executions whose playbook item is gone (``PlaybookApi`` replaces
-#: an experiment's items when the experiment is loaded again).
+#: Orphan counts reported by ``check``, as ``name -> (count SQL, tables it needs)``:
+#:
+#: - ``action_execution_without_run``: executions whose run id names no run. Dev-session
+#:   consoles write a console ULID there (no run row ever has it), and run deletions of
+#:   older versions left their executions behind; the two cannot be told apart, so these
+#:   rows are informational and kept.
+#: - the files/log rows the ``delete_orphan_run_rows`` migration deletes (its SQL, counted);
+#: - executions whose playbook item is gone (``PlaybookApi`` replaces an experiment's items
+#:   when the experiment is loaded again).
 ORPHAN_QUERIES: dict[str, tuple[str, frozenset[str]]] = {
-    'action_execution_without_run': (_count_sql(_DELETE_ORPHAN_ACTION_EXECUTIONS), _RUN_ORPHAN_TABLES),
+    'action_execution_without_run': (
+        'SELECT COUNT(*) FROM action_execution '
+        'WHERE experiment_run_id IS NOT NULL AND experiment_run_id NOT IN (SELECT id FROM experiment_run)',
+        _RUN_ORPHAN_TABLES,
+    ),
     'experiment_run_files_unreferenced': (_count_sql(_DELETE_ORPHAN_FILES), _RUN_ORPHAN_TABLES),
     'log_file_unreferenced': (_count_sql(_DELETE_ORPHAN_LOG_FILES), _RUN_ORPHAN_TABLES),
     'action_execution_dangling_playbook_item': (
@@ -105,16 +128,20 @@ def global_target() -> DatabaseTarget:
 
 
 def project_target(project_path: Path, label: str | None = None) -> DatabaseTarget:
-    """The database of the project at ``project_path``."""
+    """The database of the project at ``project_path``; nothing is created on disk."""
     from adare.config.database import get_project_database_location
 
-    return DatabaseTarget(label or project_path.name, get_project_database_location(project_path), project_path)
+    return DatabaseTarget(
+        label or project_path.name, get_project_database_location(project_path, create=False), project_path
+    )
 
 
 def all_targets() -> list[DatabaseTarget]:
-    """The global database and the database of every registered project that exists on disk.
+    """The global database and the database of every registered project.
 
     Same set ``adare db migrate`` walks (:func:`adare.database.init.migrate_database_system`).
+    A project whose directory or database file is gone is still listed; ``compact`` and
+    ``check`` report it as ``missing``.
     """
     from adare.database.api.base import GlobalDatabaseApi
     from adare.database.models.global_models import Project
@@ -122,8 +149,28 @@ def all_targets() -> list[DatabaseTarget]:
     with GlobalDatabaseApi() as api:
         projects = [(str(p.name or ''), Path(p.path)) for p in api._session.query(Project).all() if p.path]
     targets = [global_target()]
-    targets.extend(project_target(path, name or None) for name, path in projects if path.exists())
+    targets.extend(project_target(path, name or None) for name, path in projects)
     return targets
+
+
+def _default_global_db_path() -> Path | None:
+    """The global database file, or None when the config directory is not set up."""
+    from adare.config.database import get_global_database_location
+    from adare.config.exceptions import ConfigDirectoryError
+
+    try:
+        return Path(get_global_database_location())
+    except ConfigDirectoryError:
+        return None
+
+
+def _missing_reason(target: DatabaseTarget) -> str | None:
+    """Why the target's database cannot be found, or None when its file exists."""
+    if target.project_path is not None and not target.project_path.is_dir():
+        return f'project directory {target.project_path} not found'
+    if not target.db_path.is_file():
+        return 'no database file'
+    return None
 
 
 # =============================================================================
@@ -267,6 +314,148 @@ class _ScreenshotResolver:
 
 
 # =============================================================================
+# Is the database in use?
+# =============================================================================
+
+
+@dataclass
+class Activity:
+    """What may write to a database: ``active`` describes each blocker; ``stale_runs`` were ignored."""
+
+    active: list[str] = field(default_factory=list)
+    stale_runs: int = 0
+
+
+def _timestamp(value: Any) -> float | None:
+    """POSIX time of a stored DateTime (naive values are UTC, as adare writes them); None if unreadable."""
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.timestamp()
+
+
+def _ago(timestamp: float, now: float) -> str:
+    minutes = int((now - timestamp) // 60)
+    return 'just now' if minutes < 1 else f'{minutes} min ago'
+
+
+def _run_last_activity(path: str | None, times: tuple[Any, ...], project_root: Path) -> float | None:
+    """Newest of the run's stored times and its folder's activity (``logs/`` files, folder mtime)."""
+    from adare.backend.experiment.run_folders import last_activity
+
+    candidates = [t for t in (_timestamp(value) for value in times) if t is not None]
+    run_dir = _resolve_run_dir(path, project_root)
+    if run_dir is not None and run_dir.is_dir():
+        candidates.append(last_activity(run_dir))
+    return max(candidates, default=None)
+
+
+def _run_activity(conn: sqlite3.Connection, project_root: Path, now: float, activity: Activity) -> None:
+    """Non-terminal runs with activity within :data:`ACTIVITY_WINDOW_SECONDS` block; older ones are stale."""
+    tables = _tables(conn)
+    if 'experiment_run' not in tables:
+        return
+    experiment = 'e.name' if 'experiment' in tables else 'NULL'
+    join = 'LEFT JOIN experiment e ON e.id = r.experiment_id ' if 'experiment' in tables else ''
+    placeholders = ', '.join('?' * len(NON_TERMINAL_RUN_STATUSES))
+    query = (
+        f'SELECT r.id, r.path, r.status, r.start_time, r.created_at, {experiment} '
+        f'FROM experiment_run r {join}WHERE r.status IN ({placeholders})'
+    )
+    cutoff = now - ACTIVITY_WINDOW_SECONDS
+    for run_id, path, status, start_time, created_at, experiment_name in conn.execute(
+        query, NON_TERMINAL_RUN_STATUSES
+    ).fetchall():
+        last = _run_last_activity(path, (start_time, created_at), project_root)
+        if last is None or last < cutoff:
+            activity.stale_runs += 1
+            continue
+        activity.active.append(
+            f"run {run_id} of experiment '{experiment_name or '?'}' ({status}, last activity {_ago(last, now)})"
+        )
+
+
+def _dev_session_vm_alive(conn: sqlite3.Connection, environment_name: str, vm_name: str, tables: set[str]) -> bool:
+    """Is the dev session's VM running? Asks the hypervisor, like ``adare dev cleanup`` does.
+
+    The hypervisor is read from the global database's ``environment`` table (by
+    ULID or name) with plain SQL, so no database API is opened; dev mode runs on
+    QEMU, which is assumed when the environment is gone.
+    """
+    from adare.backend.devmode.vm_state_checker import is_vm_running
+
+    row = None
+    if 'environment' in tables:
+        row = conn.execute(
+            'SELECT hypervisor FROM environment WHERE id = ? OR name = ? LIMIT 1', (environment_name, environment_name)
+        ).fetchone()
+    return is_vm_running(vm_name, row[0] if row and row[0] else 'qemu')
+
+
+def _dev_session_activity(global_db_path: Path | None, now: float, activity: Activity) -> None:
+    """Dev sessions marked running whose VM is alive (or that changed state within the window) block."""
+    if global_db_path is None or not global_db_path.is_file():
+        return
+    cutoff = now - ACTIVITY_WINDOW_SECONDS
+    with closing(open_read_only(global_db_path)) as conn:
+        tables = _tables(conn)
+        if 'dev_sessions' not in tables:
+            return
+        rows = conn.execute(
+            'SELECT session_id, name, project_path, environment_name, vm_name, updated_at '
+            "FROM dev_sessions WHERE status = 'running'"
+        ).fetchall()
+        for session_id, name, project_path, environment_name, vm_name, updated_at in rows:
+            updated = _timestamp(updated_at)
+            recent = updated is not None and updated >= cutoff
+            if not recent and not _dev_session_vm_alive(conn, environment_name, vm_name, tables):
+                continue
+            label = f"'{name}' ({session_id})" if name else session_id
+            activity.active.append(f'dev session {label} of {project_path} (VM {vm_name})')
+
+
+def find_activity(target: DatabaseTarget, global_db_path: Path | None, now: float | None = None) -> Activity:
+    """What may write to ``target`` while ``compact`` runs.
+
+    - a run of the project whose status has not ended (``RUNNING``, ``PENDING``,
+      ``PAUSE``) and that shows activity within the last 30 minutes: its start or
+      creation time, or the mtime of its run folder and the files in ``logs/``. A
+      run without such activity was left behind by a crash and counts as stale;
+    - for every database: a dev session marked running whose VM is alive or whose
+      state changed within the last 30 minutes.
+    """
+    now = time.time() if now is None else now
+    activity = Activity()
+    if target.project_path is not None:
+        with closing(open_read_only(target.db_path)) as conn:
+            _run_activity(conn, target.project_path, now, activity)
+    _dev_session_activity(global_db_path, now, activity)
+    return activity
+
+
+def _stale_note(stale_runs: int) -> str:
+    return (
+        f'{stale_runs} unfinished run(s) without activity in the last {ACTIVITY_WINDOW_SECONDS // 60} min '
+        'were taken as stale (crashed) and ignored'
+    )
+
+
+def _in_use_message(activity: Activity) -> str:
+    message = (
+        'database is in use: ' + '; '.join(activity.active) + '. Nothing was changed. '
+        'Let the run finish (or stop the dev session with `adare dev stop`), then try again.'
+    )
+    if activity.stale_runs:
+        message += f' ({_stale_note(activity.stale_runs)})'
+    return message
+
+
+# =============================================================================
 # Row planning
 # =============================================================================
 
@@ -280,12 +469,18 @@ class _Bulk:
     screenshot_paths: list[str] = field(default_factory=list)
 
 
+def _is_image(container: dict, key: Any, item: Any) -> bool:
+    """An image payload that still holds its data (not yet replaced by the omitted marker)."""
+    return is_image_payload(container, key, item) and not item.startswith(_OMITTED_PREFIX)
+
+
 def _collect(value: Any, bulk: _Bulk) -> None:
-    """Walk ``value`` the way :func:`strip_bulky_values` does, recording what it would remove."""
+    """Record the images, screenshot paths and oversized non-image strings of ``value``."""
     if isinstance(value, dict):
         for key, item in value.items():
-            if key == 'data' and isinstance(item, str) and 'format' in value:
-                bulk.images.append(item)
+            if is_image_payload(value, key, item):
+                if not item.startswith(_OMITTED_PREFIX):
+                    bulk.images.append(item)
                 continue
             if key == 'screenshot_path' and isinstance(item, str) and item:
                 bulk.screenshot_paths.append(item)
@@ -297,6 +492,22 @@ def _collect(value: Any, bulk: _Bulk) -> None:
         bulk.oversized_strings += 1
 
 
+def strip_images(value: Any) -> Any:
+    """Copy of an action result with only the image payloads replaced by the omitted marker.
+
+    The marker is the one :func:`~adare.database.api.playbook.strip_bulky_values`
+    writes for new rows; every other value, however large, is kept as it is.
+    """
+    if isinstance(value, dict):
+        return {
+            key: omitted_image_marker(item, value['format']) if _is_image(value, key, item) else strip_images(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list | tuple):
+        return [strip_images(item) for item in value]
+    return value
+
+
 def _base64_decoded_size(data: str) -> int | None:
     """Byte length ``data`` decodes to, or None when it is not plain padded base64."""
     if not data or len(data) % 4:
@@ -305,16 +516,56 @@ def _base64_decoded_size(data: str) -> int | None:
     return len(data) // 4 * 3 - padding
 
 
-def _images_on_disk(bulk: _Bulk, run_id: str | None, resolver: _ScreenshotResolver) -> bool:
-    """True when every image of the row has a referenced file on disk of exactly its decoded size."""
-    sizes = set()
+def _decode_image(data: str) -> bytes | None:
+    try:
+        return base64.b64decode(data, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _file_equals(path: Path, expected: bytes) -> bool:
+    """True when the file at ``path`` holds exactly ``expected``; compared in chunks.
+
+    Slices of ``bytes`` compare with memcmp; a ``memoryview`` compares element by element (~20x slower).
+    """
+    offset = 0
+    try:
+        with path.open('rb') as handle:
+            while chunk := handle.read(_COMPARE_CHUNK):
+                if expected[offset : offset + len(chunk)] != chunk:
+                    return False
+                offset += len(chunk)
+    except OSError:
+        return False
+    return offset == len(expected)
+
+
+def _verify_images(bulk: _Bulk, run_id: str | None, resolver: _ScreenshotResolver) -> str:
+    """``ok`` when every image equals a referenced file byte for byte; else ``missing`` or ``mismatch``.
+
+    The decoded size is compared first (cheap); only a file of the right size is
+    read and compared with the decoded image.
+    """
+    sizes: dict[Path, int] = {}
     for screenshot_path in bulk.screenshot_paths:
         resolved = resolver.resolve(screenshot_path, run_id)
-        if resolved is not None:
-            sizes.add(resolved.stat().st_size)
+        if resolved is None:
+            continue
+        try:
+            sizes[resolved] = resolved.stat().st_size
+        except OSError:
+            continue
     if not sizes:
-        return False
-    return all(_base64_decoded_size(image) in sizes for image in bulk.images)
+        return 'missing'
+    for image in bulk.images:
+        if _base64_decoded_size(image) not in sizes.values():
+            return 'mismatch'
+        decoded = _decode_image(image)
+        if decoded is None:
+            return 'mismatch'
+        if not any(size == len(decoded) and _file_equals(path, decoded) for path, size in sizes.items()):
+            return 'mismatch'
+    return 'ok'
 
 
 @dataclass
@@ -322,7 +573,8 @@ class _Tally:
     examined: int = 0
     stripped: int = 0
     kept_missing_file: int = 0
-    non_image_stripped: int = 0
+    kept_mismatch: int = 0
+    non_image_kept: int = 0
     reclaimable_bytes: int = 0
     undecodable: int = 0
 
@@ -339,22 +591,24 @@ def _plan_row(raw: str | bytes | None, run_id: str | None, resolver: _Screenshot
         return None
     bulk = _Bulk()
     _collect(value, bulk)
-    if bulk.images:
-        if not _images_on_disk(bulk, run_id, resolver):
-            tally.kept_missing_file += 1
-            return None
-    elif not bulk.oversized_strings:
+    if bulk.oversized_strings:
+        tally.non_image_kept += 1
+    if not bulk.images:
+        return None
+    verdict = _verify_images(bulk, run_id, resolver)
+    if verdict == 'missing':
+        tally.kept_missing_file += 1
+        return None
+    if verdict == 'mismatch':
+        tally.kept_mismatch += 1
         return None
     # Serialised like SQLAlchemy's JSON type writes it (json.dumps defaults).
-    new_text = json.dumps(strip_bulky_values(value))
+    new_text = json.dumps(strip_images(value))
     old_length = len(raw)
     if len(new_text) >= old_length:
         return None
     tally.reclaimable_bytes += old_length - len(new_text)
-    if bulk.images:
-        tally.stripped += 1
-    else:
-        tally.non_image_stripped += 1
+    tally.stripped += 1
     return new_text
 
 
@@ -436,19 +690,60 @@ def _free_pages_bytes(conn: sqlite3.Connection) -> int:
     return int(page_size) * int(free_pages)
 
 
-def _vacuum(conn: sqlite3.Connection, db_path: Path, entry: DbCompactEntry) -> None:
-    """Checkpoint, check free space, VACUUM, checkpoint again (so the ``-wal`` shrinks too).
+def _live_bytes(conn: sqlite3.Connection) -> int:
+    """Bytes of the pages in use: ``(page_count - freelist_count) * page_size``."""
+    page_size = conn.execute('PRAGMA page_size').fetchone()[0]
+    page_count = conn.execute('PRAGMA page_count').fetchone()[0]
+    free_pages = conn.execute('PRAGMA freelist_count').fetchone()[0]
+    return int(page_size) * (int(page_count) - int(free_pages))
 
-    In WAL mode VACUUM builds the new database in a temporary file and writes it
-    back through the WAL, so it needs about the database's size in free space.
+
+def _space_shortfall(db_path: Path, needed: int) -> str | None:
+    """Why VACUUM must not run for lack of space, or None when every volume it writes to has ``needed``.
+
+    VACUUM writes a temporary copy of the database (in the temporary directory)
+    and, in WAL mode, pushes the whole content through the ``-wal`` next to the file.
     """
+    directories = [db_path.parent]
+    temp_dir = Path(tempfile.gettempdir())
+    if not _same_volume(db_path.parent, temp_dir):
+        directories.append(temp_dir)
+    for directory in directories:
+        try:
+            free = shutil.disk_usage(directory).free
+        except OSError as e:
+            return f'unknown bytes free in {directory} ({e})'
+        if free < needed:
+            return f'{free} bytes free in {directory}'
+    return None
+
+
+def _same_volume(first: Path, second: Path) -> bool:
+    try:
+        return first.stat().st_dev == second.stat().st_dev
+    except OSError as e:
+        log.debug('cannot compare the volumes of %s and %s: %s', first, second, e)
+        return False
+
+
+def _checkpoint_quietly(conn: sqlite3.Connection) -> None:
+    """Truncate the ``-wal`` after a failed VACUUM so it does not stay large."""
+    try:
+        conn.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()
+    except sqlite3.OperationalError as e:
+        log.debug('WAL checkpoint after the failed VACUUM failed: %s', e)
+
+
+def _vacuum(conn: sqlite3.Connection, db_path: Path, entry: DbCompactEntry) -> None:
+    """Checkpoint, check free space, VACUUM, checkpoint again (so the ``-wal`` shrinks too)."""
     dispose_engines()  # this process's pooled connections must not pin the WAL
     conn.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()
-    db_size = database_sizes(db_path)[0]
-    free = shutil.disk_usage(db_path.parent).free
-    if free < db_size:
+    needed = int(_live_bytes(conn) * VACUUM_SPACE_FACTOR)
+    shortfall = _space_shortfall(db_path, needed)
+    if shortfall is not None:
         entry.vacuum_message = (
-            f'VACUUM skipped: it needs {db_size} bytes free next to the database, only {free} are available. '
+            f'VACUUM skipped: it needs {needed} bytes free (twice the live data plus 10 %) next to the '
+            f'database and in the temporary directory, but there are {shortfall}. '
             'The row rewrite is kept; free some space and run `adare db compact` again.'
         )
         return
@@ -456,6 +751,7 @@ def _vacuum(conn: sqlite3.Connection, db_path: Path, entry: DbCompactEntry) -> N
         conn.execute('VACUUM')
     except sqlite3.OperationalError as e:
         entry.vacuum_message = f'VACUUM failed: {e} (the row rewrite is kept)'
+        _checkpoint_quietly(conn)
         return
     busy, _log_pages, _checkpointed = conn.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()
     entry.vacuumed = True
@@ -464,23 +760,34 @@ def _vacuum(conn: sqlite3.Connection, db_path: Path, entry: DbCompactEntry) -> N
 
 
 def compact_database(
-    target: DatabaseTarget, *, dry_run: bool = False, progress: Progress | None = None
+    target: DatabaseTarget,
+    *,
+    dry_run: bool = False,
+    progress: Progress | None = None,
+    global_db_path: Path | None = None,
 ) -> DbCompactEntry:
     """Strip image copies from old ``action_execution`` rows and VACUUM one database.
 
     With ``dry_run`` the file is opened read-only and nothing is written; the entry
     reports what would be removed. Expected failures (database in use, unreadable
     file) are reported in the entry's ``status``/``message`` instead of raised.
+    ``global_db_path`` is where live dev sessions are looked up (default: the global database).
     """
     started = time.monotonic()
     db_path = target.db_path
     entry = DbCompactEntry(label=target.label, path=db_path, status='dry-run' if dry_run else 'compacted')
     entry.size_before, entry.wal_size_before = database_sizes(db_path)
-    if not db_path.is_file():
-        entry.status, entry.message = 'missing', 'no database file'
+    missing = _missing_reason(target)
+    if missing is not None:
+        entry.status, entry.message = 'missing', missing
         return entry
 
     try:
+        activity = find_activity(target, global_db_path or _default_global_db_path())
+        entry.stale_runs_ignored = activity.stale_runs
+        if activity.active and not dry_run:
+            entry.status, entry.message = 'in-use', _in_use_message(activity)
+            return _finish(entry, started)
         if dry_run:
             with closing(open_read_only(db_path)) as conn:
                 tally = _scan(conn, target.project_path, write=False, progress=progress)
@@ -505,10 +812,17 @@ def compact_database(
             entry.message += ' (batches committed before the error stay compacted; running again resumes)'
         return _finish(entry, started)
 
+    notes = []
+    if activity.active:
+        notes.append('compact would refuse now, the database is in use: ' + '; '.join(activity.active))
+    if activity.stale_runs:
+        notes.append(_stale_note(activity.stale_runs))
+    entry.message = '; '.join(notes) or None
     entry.rows_examined = tally.examined
     entry.rows_stripped = tally.stripped
     entry.rows_kept_missing_file = tally.kept_missing_file
-    entry.rows_non_image_stripped = tally.non_image_stripped
+    entry.rows_kept_mismatch = tally.kept_mismatch
+    entry.rows_non_image_kept = tally.non_image_kept
     entry.reclaimable_bytes = tally.reclaimable_bytes
     return _finish(entry, started)
 
@@ -545,8 +859,9 @@ def check_database(target: DatabaseTarget) -> DbCheckEntry:
     """Read-only health check of one database: quick_check, foreign keys, orphaned rows."""
     db_path = target.db_path
     entry = DbCheckEntry(label=target.label, path=db_path, integrity_ok=True)
-    if not db_path.is_file():
-        entry.message = 'no database file'
+    missing = _missing_reason(target)
+    if missing is not None:
+        entry.status, entry.message = 'missing', missing
         return entry
     try:
         with closing(open_read_only(db_path)) as conn:

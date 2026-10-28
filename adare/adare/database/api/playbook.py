@@ -23,14 +23,23 @@ log = logging.getLogger(__name__)
 MAX_RESULT_STRING = 16 * 1024
 
 
+def is_image_payload(container: dict, key: Any, item: Any) -> bool:
+    """True for the ``data`` of ``{'data': <base64>, 'format': 'png'}``, how images travel over the websocket."""
+    return key == 'data' and isinstance(item, str) and 'format' in container
+
+
+def omitted_image_marker(data: str, image_format: Any) -> str:
+    """The text an image's base64 ``data`` is replaced with in a stored action result."""
+    return f'<omitted: {len(data)} chars of {image_format} data>'
+
+
 def strip_bulky_values(value: Any) -> Any:
     """Copy of an action result with base64 images and oversized strings replaced by a marker."""
     if isinstance(value, dict):
         stripped = {}
         for key, item in value.items():
-            # {'data': <base64>, 'format': 'png'} is how images travel over the websocket
-            if key == 'data' and isinstance(item, str) and 'format' in value:
-                stripped[key] = f'<omitted: {len(item)} chars of {value["format"]} data>'
+            if is_image_payload(value, key, item):
+                stripped[key] = omitted_image_marker(item, value['format'])
             else:
                 stripped[key] = strip_bulky_values(item)
         return stripped
