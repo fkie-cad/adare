@@ -28,6 +28,37 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- `adare db compact [--dry-run] [--all] [-p PROJECT]` shrinks project databases
+  that grew from the base64 screenshot copies older action results kept in
+  `action_execution.result_data` (47 GB of a 50 GB database in one project). Only
+  image payloads are removed, and only when the decoded image is byte-for-byte
+  identical to the PNG its `screenshot_path` names; rows whose screenshot file is
+  missing or differs stay unchanged and are reported as kept. Nothing else is
+  removed: oversized non-image text (command output) is kept and only counted
+  (`rows.non_image_kept`). The database is then vacuumed when there is free space
+  of twice the remaining data plus 10 % next to it (and in `TMPDIR` on another
+  volume). Refuses to run, naming the blocker, while another process holds the
+  write lock, an unfinished run of the project showed activity in the last 30
+  minutes (start time or run folder / `logs/` mtime; older ones count as crashed
+  and are reported as `stale_runs_ignored`), or a dev session is live.
+  `--dry-run` opens the database read-only and reports the reclaimable bytes.
+- `adare db check [--all] [-p PROJECT]`: read-only `quick_check`,
+  `foreign_key_check` summary and orphaned-row counts per database; exits 1 when
+  a database is corrupt. Both commands take `--json`; with `--all` a registered project whose directory or
+  database is gone is reported as `missing` (nothing is created on disk) and the
+  rest are still processed.
+- `adare runs prune [--fake] [--older-than DAYS] [--yes] [--json]`: frees disk space
+  in the current project's `run/` directory. A dry run by default: lists run folders
+  no database run (and no dev session) refers to, with sizes and a total. A run that
+  failed before it recorded its folder (e.g. during VM preparation) keeps every
+  folder of its experiment within 16 h of its start, and the runs of every registered
+  project whose `run/` resolves to the same directory count too (when one of them
+  cannot be read, nothing is pruned). `--fake` also targets finished fake runs (not
+  pending/running, not a dev session's run; rows + folders), `--older-than` filters
+  by age, and only `--yes` deletes. A folder is only ever selected when it
+  is clearly an ADARE run folder: `run/<known experiment>/<run timestamp>` inside
+  `run/` with no symlinks, with a `logs/` or `reporting/` subdirectory, unchanged for
+  an hour; users' own files in `run/` are never listed.
 - Terminal and Claude in the web UI: a terminal panel on every page (sidebar or
   Ctrl+`) runs Claude Code or a shell in a chosen project, as tabs that survive
   page changes and reloads. *Build with Claude* (experiments), *Work on it with
@@ -160,6 +191,25 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   commands as suggestions, instead of filling the disk mid-run.
 
 ### Changed
+- `adare runs remove`, `DELETE /api/runs/{ulid}`, `adare experiment clean` and
+  `adare experiment remove` also delete the run folders of the runs they remove,
+  through the same run-folder safety test as `runs prune` (a refused folder is kept
+  and reported; the rows are deleted anyway). Database run paths are matched by
+  their `run/<experiment>/<timestamp>` tail, so moved projects still match.
+  `runs remove --keep-files` (web: `keep_files=true`) and `experiment remove
+  --keep-files` keep the files. A folder a dev session refers to (any status) is
+  never deleted, and neither is any folder when the dev sessions cannot be read.
+  `experiment clean` keeps fake runs that are still pending or running and dev
+  sessions' runs. The automatic fake-run cleanup after a test run
+  still removes only the rows; `runs prune` collects those folders.
+- SQLite databases now use write-ahead logging (`journal_mode=WAL`) with
+  `synchronous=NORMAL` and a 30 s busy timeout (was 5 s), set on every connection:
+  readers no longer block a writer, so the CLI, web UI and a running experiment can
+  share a database without `database is locked`. WAL is recorded in the database
+  file, which gains `-wal`/`-shm` sidecar files next to it. A read-only database
+  file or directory, where the switch to WAL cannot be written, keeps its journal
+  mode and stays readable. Foreign-key enforcement stays off. See *Connection
+  settings* in the database migrations docs.
 - Development tasks have one definition: CI runs the Makefile targets (`make lint`,
   `make test`, `make test-agent`, …) instead of its own copies of the commands.
   Every target syncs what it needs first (`--inexact`, so it never strips the
@@ -312,6 +362,23 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- `adare db reset` and `adare db clean-install` deleted only the main database
+  file and left its `-wal`/`-shm`/`-journal` files behind, which could corrupt the
+  next database created under that name; they now remove all of them. Removing a
+  project closes its pooled database connections before deleting the directory.
+- Deleting runs left rows behind in the project database: every run delete
+  (`adare runs remove`, `adare experiment clean`, `adare experiment remove`,
+  fake-run cleanup after a test run, `adare environment remove --force`, and
+  replacing an in-use testfunction) kept the run's action executions (with their
+  result blobs), its run-files row and its two log-file rows, because foreign keys
+  are off in SQLite and the ORM cascade does not reach them. All of them now go
+  through one `delete_runs` helper that removes these rows too. A project
+  migration (`delete_orphan_run_rows`) deletes the action executions, run-files
+  and log-file rows earlier deletions left. The freed space is reused by the
+  database but the file only shrinks after a vacuum.
+- Replacing an in-use testfunction with `--force` said it deleted the runs that
+  used it but deleted none: it searched the global database, while runs live in
+  each project's database. It now deletes them in every registered project.
 - `adare runs list` took ~150 s on a project with 4.5k runs and now takes under a
   second: every run's verdict lazy-loaded all of its events through an unindexed
   column. Verdicts are now read for all runs in two queries (also in the web UI's
@@ -321,6 +388,17 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - `adare runs list` inside a project registered under a name other than its
   directory's (e.g. `T2F` at `.../adare`) listed no runs; it filters by the
   registered name and no longer reads the other projects' databases.
+- The same directory-name-instead-of-registered-name mixup also affected
+  experiment/environment dotnotations resolved from the current directory and
+  the "current project" used to shorten names in experiment, environment and
+  testfunction listings. All of them now resolve the registered name through one
+  helper, `adare.backend.basics.registered_project_name` (falling back to the
+  directory name for an unregistered directory).
+- Database read helpers (`safe_query_*`, `safe_count`, `safe_get_*`), the global
+  reference manager and the current-project lookup caught every exception, so a
+  programming error looked like a missing row or an empty listing. They now turn
+  only the expected database errors (SQLAlchemy, sqlite3, the database API's own,
+  `OSError`) into their default and let anything else propagate.
 - Removing a dev session (or any old pooled QEMU instance) whose VM config was
   already gone deleted only its database rows and left its full disk copy
   (`<name>-base.qcow2`, ~4-50 GiB) behind; the copy is now removed by name. The

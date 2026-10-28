@@ -284,6 +284,16 @@ class ManageAPI:
         """Reset the database."""
         return self._service.reset_db()
 
+    def compact_db(self, project=None, all_databases=False, dry_run=False, progress=None):
+        """Strip screenshot copies from old action results and VACUUM the database(s)."""
+        return self._service.compact_db(
+            project=project, all_databases=all_databases, dry_run=dry_run, progress=progress
+        )
+
+    def check_db(self, project=None, all_databases=False):
+        """Read-only database health check (quick_check, foreign keys, orphaned rows)."""
+        return self._service.check_db(project=project, all_databases=all_databases)
+
     def reset_all_vms(self, force=False):
         """Reset all VMs."""
         return self._service.reset_all_vms(force=force)
@@ -417,6 +427,10 @@ class ShowAPI:
     def remove_run(self, request):
         """Remove a run."""
         return self._service.remove_run(request)
+
+    def prune_runs(self, request):
+        """List or remove run folders without a database row (and fake runs)."""
+        return self._service.prune_runs(request)
 
     def get_run_files(self, ulid):
         """Resolve a run's on-disk directory and known artifact file paths."""

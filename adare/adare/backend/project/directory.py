@@ -78,6 +78,13 @@ class ProjectDirectory(Directory):
             ) from e
 
     def remove(self):
+        # Imported here: adare.database.api imports the backend directories (cycle).
+        from adare.database.api.base import dispose_engines
+
+        # The project database lives inside the tree: close its pooled
+        # connections first (Windows cannot delete an open file, and a
+        # recreated project must not be served by connections to the old one).
+        dispose_engines()
         try:
             shutil.rmtree(self.path)
         except OSError as e:

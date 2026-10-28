@@ -1,7 +1,6 @@
 # internal imports
 # configure logging
 import logging
-from pathlib import Path
 
 from adare.api import AdareAPI
 from adare.cli.utils import handle_api_error
@@ -11,19 +10,6 @@ from adare.core.dto.show import RunListRequest, RunRemoveRequest
 log = logging.getLogger(__name__)
 
 
-def _project_name(project_path: Path) -> str:
-    """Registered name of the project at ``project_path``; its directory name if it is not registered.
-
-    The two differ when a project is registered under its own name (``T2F`` at ``.../adare``),
-    and runs are filtered by the registered name.
-    """
-    from adare.database.api.project import ProjectDbApi
-
-    with ProjectDbApi() as api:
-        project = api.get_project_by_path(project_path, silent=True)
-        return project.name if project else project_path.name
-
-
 def _parse_filter(arguments) -> tuple:
     """
     Parse dot notation filter from arguments.
@@ -31,7 +17,7 @@ def _parse_filter(arguments) -> tuple:
     Returns:
         tuple: (project, environment, experiment)
     """
-    from adare.backend.basics import determine_projectdirectory
+    from adare.backend.basics import determine_projectdirectory, registered_project_name
     from adare.exceptions import ArgumentsError
 
     project = None
@@ -44,7 +30,7 @@ def _parse_filter(arguments) -> tuple:
             # Could be project, environment, or experiment - determine from current context
             if project_path := determine_projectdirectory(None):
                 # We're in a project directory, so assume it's environment or experiment
-                project = _project_name(project_path)
+                project = registered_project_name(project_path)
                 # Check if it's an environment or experiment by context (for now assume environment)
                 environment = parts[0]
             else:
@@ -54,7 +40,7 @@ def _parse_filter(arguments) -> tuple:
             # Could be project.environment or environment.experiment
             if project_path := determine_projectdirectory(None):
                 # We're in a project directory, assume environment.experiment
-                project = _project_name(project_path)
+                project = registered_project_name(project_path)
                 environment, experiment = parts
             else:
                 # Not in project directory, assume project.environment
@@ -72,7 +58,9 @@ def _parse_filter(arguments) -> tuple:
     else:
         # No filter provided, use current project if available (None = show all projects)
         project = (
-            _project_name(project_path) if (project_path := determine_projectdirectory(None, silent=True)) else None
+            registered_project_name(project_path)
+            if (project_path := determine_projectdirectory(None, silent=True))
+            else None
         )
 
     return project, environment, experiment
@@ -155,7 +143,7 @@ def exec_show_experiment(arguments):
     """Get detailed information about a specific experiment."""
     from adare.backend.basics import determine_projectdirectory
     from adare.frontend.terminal.experiment import print_experiment
-    from adare.helperfunctions.path_resolution import resolve_experiment_path
+    from adare.helperfunctions.path_resolution import InvalidPathError, resolve_experiment_path
     from adare.run import get_formatter_from_context
 
     formatter, output_file, dual_output = get_formatter_from_context()
@@ -165,7 +153,7 @@ def exec_show_experiment(arguments):
     if experiment_name and (project_directory := determine_projectdirectory(None)):
         try:
             experiment_name = resolve_experiment_path(arguments.name, project_directory)
-        except Exception:
+        except InvalidPathError:
             # If path resolution fails, use the original name (might be a simple name or dotnotation)
             experiment_name = arguments.name
 
@@ -333,23 +321,92 @@ def exec_show_environments(arguments):
 
 
 def exec_remove_run(arguments):
-    """Remove a single experiment run by its ULID."""
+    """Remove a single experiment run by its ULID (rows, and the run folder unless --keep-files)."""
     from adare.console import console_print
 
     api = AdareAPI()
 
-    result = api.show.remove_run(RunRemoveRequest(ulid=arguments.ulid))
+    result = api.show.remove_run(
+        RunRemoveRequest(ulid=arguments.ulid, keep_files=getattr(arguments, 'keep_files', False))
+    )
 
     if result.success:
-        run_type = "fake" if result.data.was_fake else "real"
-        console_print(f"Removing {run_type} run {result.data.ulid}")
+        data = result.data
+        run_type = "fake" if data.was_fake else "real"
+        console_print(f"Removing {run_type} run {data.ulid}")
+        if data.folder_removed:
+            files = f"Run folder deleted: {data.folder}"
+        elif data.folder:
+            files = f"Run folder {data.folder}: {data.folder_note}"
+        else:
+            files = "The run had no run folder"
         print_success_message(
-            title=f"Successfully removed run {result.data.ulid}",
+            title=f"Successfully removed run {data.ulid}",
             location="Database",
-            next_steps=["Run 'adare runs list' to see remaining runs"],
+            next_steps=[files, "Run 'adare runs list' to see remaining runs"],
         )
     else:
         handle_api_error(result)
+
+
+def exec_prune_runs(arguments):
+    """List (dry run) or delete orphan run folders and, with --fake, fake runs of the current project."""
+    from rich.table import Table
+
+    from adare.cli.system import _size
+    from adare.console import console, console_print
+    from adare.core.dto.show import RunPruneRequest
+    from adare.run import get_formatter_from_context
+
+    api = AdareAPI()
+    formatter, output_file, dual_output = get_formatter_from_context()
+    result = api.show.prune_runs(
+        RunPruneRequest(fake=arguments.fake, older_than_days=arguments.older_than, execute=arguments.yes)
+    )
+    if not result.success:
+        handle_api_error(result)
+        return
+    data = result.data
+
+    if dual_output or formatter.format_type.value != 'rich':
+        formatter.print_or_save(data.to_dict(), output_file, dual_output)
+        if not dual_output:
+            return
+
+    if not data.entries:
+        console_print(f"Nothing to prune in {data.project_path}/run")
+        return
+
+    table = Table(title=f"{'Would remove' if data.dry_run else 'Pruned'} ({data.project_path})")
+    table.add_column("Kind")
+    table.add_column("Folder / run")
+    table.add_column("Size", justify="right")
+    if not data.dry_run:
+        table.add_column("Result")
+    for entry in data.entries:
+        target = entry.folder or f"run {entry.run_ulid} (no folder)"
+        if entry.kind == 'fake' and entry.folder:
+            target = f"{entry.folder} (run {entry.run_ulid})"
+        row = [entry.kind, target, _size(entry.size_bytes) if entry.folder else '-']
+        if not data.dry_run:
+            row.append(entry.note or ('removed' if entry.removed else 'kept'))
+        elif entry.note:
+            row[1] = f"{row[1]} - {entry.note}"
+        table.add_row(*row)
+    console.print(table)
+
+    if data.dry_run:
+        console_print(f"Total: {_size(data.total_bytes)} in {len(data.entries)} target(s). Nothing was deleted.")
+        console_print("Run again with --yes to delete them.")
+    else:
+        print_success_message(
+            title=f"Freed {_size(data.removed_bytes)}",
+            location=f"{data.project_path}/run",
+            next_steps=[
+                f"{sum(1 for e in data.entries if e.folder_removed)} run folder(s) deleted",
+                f"{data.rows_deleted} fake run(s) deleted from the database",
+            ],
+        )
 
 
 def exec_show_environment(arguments):

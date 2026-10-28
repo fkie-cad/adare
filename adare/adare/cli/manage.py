@@ -1,6 +1,8 @@
 # internal imports
 # configure logging
 import logging
+import sys
+from contextlib import contextmanager
 
 from adare.api import AdareAPI
 from adare.cli.utils import handle_api_error
@@ -253,3 +255,157 @@ def exec_manage_vm_runtime_build(arguments):
             print(f"  - {result.data.adarevm_wheel}")
     else:
         handle_api_error(result)
+
+
+# ---------------------------------------------------------------------------
+# adare db compact / adare db check
+# ---------------------------------------------------------------------------
+
+# Labels of the orphan counts `adare db check` reports (keys: maintenance.ORPHAN_QUERIES).
+_ORPHAN_LABELS = {
+    'action_execution_without_run': 'action executions whose run no longer exists',
+    'experiment_run_files_unreferenced': 'run-files rows no run references',
+    'log_file_unreferenced': 'log-file rows only unreferenced run-files rows point at',
+    'action_execution_dangling_playbook_item': 'action executions whose playbook item is gone',
+}
+
+
+def _size(num_bytes: float) -> str:
+    value = float(num_bytes)
+    for unit in ('B', 'KiB', 'MiB', 'GiB'):
+        if abs(value) < 1024:
+            return f'{value:.0f} {unit}' if unit in ('B', 'KiB') else f'{value:.1f} {unit}'
+        value /= 1024
+    return f'{value:.1f} TiB'
+
+
+@contextmanager
+def _compact_progress(enabled: bool):
+    """A transient progress bar on stderr, as a ``(label, rowid, max rowid)`` callback; None when disabled."""
+    if not enabled:
+        yield None
+        return
+    from rich.console import Console
+    from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeElapsedColumn
+
+    tasks = {}  # label -> rich TaskID
+    with Progress(
+        TextColumn('{task.description}'),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        console=Console(stderr=True),
+        transient=True,
+    ) as bar:
+
+        def update(label: str, reached: int, total: int) -> None:
+            if label not in tasks:
+                tasks[label] = bar.add_task(f'scanning {label}', total=max(total, 1))
+            bar.update(tasks[label], completed=reached)
+
+        yield update
+
+
+def _details_table(entry):
+    from rich.table import Table
+
+    table = Table(title=f'{entry.label}  ({entry.path})', title_justify='left', show_header=False, box=None)
+    table.add_column('field', style='bold')
+    table.add_column('value')
+    return table
+
+
+def _compact_renderable(result):
+    from rich.console import Group
+
+    parts = []
+    verb = 'would strip' if result.dry_run else 'stripped'
+    for entry in result.databases:
+        table = _details_table(entry)
+        table.add_row('status', entry.status + (f' - {entry.message}' if entry.message else ''))
+        if entry.status in ('compacted', 'dry-run'):
+            table.add_row('rows examined', str(entry.rows_examined))
+            table.add_row(f'rows {verb} (identical screenshot on disk)', str(entry.rows_stripped))
+            table.add_row('rows kept (screenshot file missing)', str(entry.rows_kept_missing_file))
+            table.add_row('rows kept (screenshot file differs)', str(entry.rows_kept_mismatch))
+            table.add_row('rows with oversized non-image text (kept)', str(entry.rows_non_image_kept))
+            table.add_row('reclaimable by the row rewrite', _size(entry.reclaimable_bytes))
+            table.add_row('free pages (reclaimed by VACUUM)', _size(entry.free_pages_bytes))
+            if not result.dry_run:
+                table.add_row('vacuum', 'done' if entry.vacuumed else 'not done')
+                if entry.vacuum_message:
+                    table.add_row('', entry.vacuum_message)
+        table.add_row('size before', f'{_size(entry.size_before)} (+ {_size(entry.wal_size_before)} WAL)')
+        if not result.dry_run:
+            table.add_row('size after', f'{_size(entry.size_after)} (+ {_size(entry.wal_size_after)} WAL)')
+        table.add_row('duration', f'{entry.duration_seconds:.1f} s')
+        parts.append(table)
+    if result.dry_run:
+        parts.append('Dry run: nothing was written. Run without --dry-run to compact.')
+    return Group(*parts)
+
+
+def exec_manage_compact_db(arguments):
+    """Strip screenshot copies from old action results and VACUUM (``adare db compact``).
+
+    Exits 1 when a database could not be compacted (in use, unreadable).
+    """
+    from adare.cli.output import emit, is_structured_output
+
+    api = AdareAPI()
+    with _compact_progress(not is_structured_output() and sys.stderr.isatty()) as progress:
+        result = api.manage.compact_db(
+            project=arguments.project,
+            all_databases=arguments.all,
+            dry_run=arguments.dry_run,
+            progress=progress,
+        )
+    if not result.success:
+        handle_api_error(result)
+        return
+    emit(result.data.to_dict(), rich=lambda: _compact_renderable(result.data))
+    if not result.data.ok:
+        sys.exit(1)
+
+
+def _check_renderable(result):
+    from rich.console import Group
+
+    parts = []
+    for entry in result.databases:
+        table = _details_table(entry)
+        if entry.status == 'missing':
+            table.add_row('status', f'missing - {entry.message}')
+            parts.append(table)
+            continue
+        if entry.message:
+            table.add_row('note', entry.message)
+        table.add_row('quick_check', 'ok' if entry.integrity_ok else 'FAILED')
+        for problem in entry.problems[:20]:
+            table.add_row('', problem)
+        if len(entry.problems) > 20:
+            table.add_row('', f'... {len(entry.problems) - 20} more (see --json)')
+        for violation in entry.foreign_key_violations:
+            table.add_row('foreign key', f'{violation.table} -> {violation.parent}: {violation.count} row(s)')
+        if not entry.foreign_key_violations:
+            table.add_row('foreign keys', 'no violations')
+        for name, count in entry.orphans.items():
+            table.add_row(_ORPHAN_LABELS.get(name, name.replace('_', ' ')), str(count))
+        parts.append(table)
+    if not result.ok:
+        parts.append('Database corruption found: restore the database from a backup.')
+    return Group(*parts)
+
+
+def exec_manage_check_db(arguments):
+    """Read-only database health check (``adare db check``); exits 1 when a database is corrupt."""
+    from adare.cli.output import emit
+
+    api = AdareAPI()
+    result = api.manage.check_db(project=arguments.project, all_databases=arguments.all)
+    if not result.success:
+        handle_api_error(result)
+        return
+    emit(result.data.to_dict(), rich=lambda: _check_renderable(result.data))
+    if not result.data.ok:
+        sys.exit(1)

@@ -21,6 +21,8 @@ from adare.core.dto.show import (
     RunDetail,
     RunListItem,
     RunListRequest,
+    RunPruneRequest,
+    RunPruneResult,
     RunRemoveRequest,
     RunRemoveResult,
     TestfunctionDetail,
@@ -271,10 +273,15 @@ class ShowService:
 
     def remove_run(self, request: RunRemoveRequest) -> Result[RunRemoveResult]:
         """
-        Remove a single experiment run.
+        Remove a single experiment run: its database rows and, unless
+        ``request.keep_files``, its run folder.
+
+        The folder is deleted only if it passes the run-folder safety test
+        (``backend/experiment/run_folders.py``); a refused or failed folder delete
+        never fails the row delete, it is reported in ``folder_note``.
 
         Args:
-            request: RunRemoveRequest with ULID and optional project path
+            request: RunRemoveRequest with ULID, optional project path and keep_files
 
         Returns:
             Result[RunRemoveResult] with removal status.
@@ -311,19 +318,20 @@ class ShowService:
                         solutions=['Use `adare runs list` to find valid run ULIDs'],
                     )
 
-                was_fake = run.fake
+                was_fake = bool(run.fake)
 
-                # Delete the run
-                api.delete_experiment_run(run)
+                # Delete the run and every row it owns
+                paths = api.delete_experiment_run(run)
                 api._session.commit()
 
-                return Result.ok(
-                    RunRemoveResult(
-                        removed=True,
-                        ulid=request.ulid,
-                        was_fake=was_fake,
-                    )
-                )
+            result = RunRemoveResult(removed=True, ulid=request.ulid, was_fake=was_fake)
+            if paths:
+                result.folder = paths[0]
+                if request.keep_files:
+                    result.folder_note = 'kept (--keep-files)'
+                else:
+                    self._remove_run_folder(Path(project_path), request.ulid, paths[0], result)
+            return Result.ok(result)
 
         except NoProjectFoundError as e:
             return Result.from_exception(e)
@@ -335,6 +343,68 @@ class ShowService:
                 code="RunRemovalError",
                 message=f"Failed to remove run: {e}",
                 solutions=['Check database permissions', 'Ensure the run exists'],
+            )
+
+    @staticmethod
+    def _remove_run_folder(project_path: Path, run_id: str, db_path: str, result: RunRemoveResult) -> None:
+        """Delete a removed run's folder through the safe helper; a refusal only goes into ``result``.
+
+        A dev session's run (its id is the session id) keeps its folder.
+        """
+        from adare.backend.experiment.run_folders import (
+            DevSessionRefs,
+            remove_db_run_folders,
+            try_load_dev_session_refs,
+        )
+
+        dev_sessions = try_load_dev_session_refs()
+        if isinstance(dev_sessions, DevSessionRefs) and dev_sessions.refers_to(run_id=run_id):
+            dev_sessions = dev_sessions.with_run_paths([db_path])
+        (removal,) = remove_db_run_folders(project_path, [db_path], dev_sessions=dev_sessions)
+        result.folder = str(removal.path)
+        result.folder_removed = removal.removed
+        if removal.missing:
+            result.folder_note = 'no folder on disk'
+        elif not removal.removed:
+            result.folder_note = f'folder kept: {removal.reason}'
+
+    def prune_runs(self, request: RunPruneRequest) -> Result[RunPruneResult]:
+        """List (dry run) or remove run folders without a database row and, with ``fake``, fake runs.
+
+        Only the current project (``request.project_path``) is pruned. Nothing is
+        deleted unless ``request.execute`` is set.
+        """
+        from adare.backend.basics import determine_projectdirectory
+        from adare.backend.experiment.run_folders import RunReferencesUnavailableError
+        from adare.backend.experiment.run_prune import execute_prune, plan_prune
+
+        project_path = request.project_path or determine_projectdirectory(None)
+        if not project_path:
+            return Result.fail(
+                code="NoProjectFoundError",
+                message="No project found in current directory or parent directories",
+                solutions=['Run this command from within a project directory'],
+            )
+        project_path = Path(project_path)
+        try:
+            entries = plan_prune(project_path, fake=request.fake, older_than_days=request.older_than_days)
+            result = RunPruneResult(project_path=str(project_path), dry_run=not request.execute, entries=entries)
+            if request.execute and entries:
+                result.rows_deleted = execute_prune(project_path, entries)
+            return Result.ok(result)
+        except RunReferencesUnavailableError as e:
+            log.warning(f"Not pruning runs of {project_path}: {e}")
+            return Result.fail(
+                code="RunPruneRefused",
+                message=f"Nothing was pruned: {e}",
+                solutions=['Fix the database or project named above, then run the prune again'],
+            )
+        except SQLAlchemyError as e:
+            log.error(f"Failed to prune runs of {project_path}: {e}")
+            return Result.fail(
+                code="RunPruneError",
+                message=f"Failed to prune runs: {e}",
+                solutions=['Check the project database', 'Run `adare db status`'],
             )
 
     # =========================================================================

@@ -22,7 +22,7 @@ def __check_project_directory(project_directory: Path) -> bool:
     return True
 
 
-def determine_projectdirectory(project: str, silent: bool = False) -> Path | None:
+def determine_projectdirectory(project: str | None, silent: bool = False) -> Path | None:
     """Resolve ``-p/--project`` to a project directory, or fall back to the cwd.
 
     Accepts a project **name or path**, which is what ``--project``'s help text
@@ -56,6 +56,19 @@ def determine_projectdirectory(project: str, silent: bool = False) -> Path | Non
         if db.get_project_by_path(project_directory, silent=silent):
             return project_directory
     return None
+
+
+def registered_project_name(project_path: Path) -> str:
+    """Registered name of the project at ``project_path``; its directory name if it is not registered.
+
+    The two differ when a project is registered under its own name (``T2F`` at ``.../adare``),
+    and runs, experiments and dotnotations are keyed by the registered name.
+    """
+    from adare.database.api.project import ProjectDbApi
+
+    with ProjectDbApi() as db:
+        project = db.get_project_by_path(project_path, silent=True)
+        return project.name if project else project_path.name
 
 
 def _looks_like_path(value: str) -> bool:

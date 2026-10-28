@@ -136,28 +136,25 @@ class TestManageServiceResetDb:
     """Tests for ManageService.reset_db()."""
 
     @patch("adare.services.manage_service.get_global_database_location")
-    def test_reset_db_exists(self, mock_get_loc, service):
-        mock_path = MagicMock(spec=Path)
-        mock_path.exists.return_value = True
-        mock_get_loc.return_value = mock_path
+    def test_reset_db_exists(self, mock_get_loc, service, tmp_path):
+        db_path = tmp_path / 'global.db.sqlite3'
+        db_path.write_bytes(b'')
+        mock_get_loc.return_value = db_path
 
         result = service.reset_db()
 
         assert result.success is True
         assert result.data.was_reset is True
-        mock_path.unlink.assert_called_once()
+        assert not db_path.exists()
 
     @patch("adare.services.manage_service.get_global_database_location")
-    def test_reset_db_not_exists(self, mock_get_loc, service):
-        mock_path = MagicMock(spec=Path)
-        mock_path.exists.return_value = False
-        mock_get_loc.return_value = mock_path
+    def test_reset_db_not_exists(self, mock_get_loc, service, tmp_path):
+        mock_get_loc.return_value = tmp_path / 'global.db.sqlite3'
 
         result = service.reset_db()
 
         assert result.success is True
         assert result.data.was_reset is False
-        mock_path.unlink.assert_not_called()
 
     @patch("adare.services.manage_service.get_global_database_location")
     def test_reset_db_exception(self, mock_get_loc, service):
@@ -218,3 +215,58 @@ class TestManageServiceRefreshVmRuntime:
 
         assert result.success is False
         assert result.error.code == "NoProjectFoundError"
+
+
+class TestManageServiceMaintenance:
+    """compact_db / check_db resolve their databases, then defer to adare.database.maintenance."""
+
+    @patch("adare.backend.basics.registered_project_name", return_value="T2F")
+    @patch("adare.backend.basics.determine_projectdirectory")
+    def test_current_project_by_default(self, mock_determine, _mock_name, service, tmp_path):
+        mock_determine.return_value = tmp_path
+        entry = MagicMock(failed=False)
+
+        with patch("adare.database.maintenance.compact_database", return_value=entry) as compact:
+            result = service.compact_db(dry_run=True)
+
+        assert result.success is True
+        assert result.data.dry_run is True
+        assert result.data.databases == [entry]
+        target = compact.call_args.args[0]
+        assert target.label == "T2F"
+        assert target.project_path == tmp_path
+        assert compact.call_args.kwargs == {"dry_run": True, "progress": None}
+
+    def test_all_includes_every_target_and_passes_labelled_progress(self, service, tmp_path):
+        from adare.database.maintenance import DatabaseTarget
+
+        targets = [DatabaseTarget("global", tmp_path / "g.db"), DatabaseTarget("p", tmp_path / "p.db", tmp_path)]
+        seen = []
+
+        def fake_compact(target, dry_run, progress):
+            progress(5, 10)
+            return MagicMock(failed=False)
+
+        with (
+            patch("adare.database.maintenance.all_targets", return_value=targets),
+            patch("adare.database.maintenance.compact_database", side_effect=fake_compact),
+        ):
+            result = service.compact_db(all_databases=True, progress=lambda *args: seen.append(args))
+
+        assert result.success is True
+        assert seen == [("global", 5, 10), ("p", 5, 10)]
+
+    @patch("adare.backend.basics.determine_projectdirectory", return_value=None)
+    def test_no_project_fails_with_all_hint(self, _mock_determine, service):
+        result = service.check_db()
+
+        assert result.success is False
+        assert result.error.code == "NoProjectFoundError"
+        assert any("--all" in solution for solution in result.error.solutions)
+
+    def test_global_database_unreadable_is_a_failure(self, service):
+        with patch("adare.database.maintenance.all_targets", side_effect=OSError("gone")):
+            result = service.check_db(all_databases=True)
+
+        assert result.success is False
+        assert result.error.code == "DbMaintenanceError"
