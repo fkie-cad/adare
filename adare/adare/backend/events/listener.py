@@ -205,7 +205,7 @@ def _execute_db_batch(batch):
 
                 with EventDbApi(experiment_run_ulid=data['ulid']) as api:
                     api.add_action_event(
-                        data['action_data'], data['action_id'], data['ulid'], data.get('parent_event_id')
+                        data['action_data'], data['action_id'], data['ulid'], data.get('parent_group_id')
                     )
 
             elif operation_type == 'test_event':
@@ -213,7 +213,7 @@ def _execute_db_batch(batch):
 
                 with EventDbApi(experiment_run_ulid=data['ulid']) as api:
                     api.add_test_event(
-                        data['action_data'], data['action_id'], data['ulid'], data.get('parent_event_id')
+                        data['action_data'], data['action_id'], data['ulid'], data.get('parent_group_id')
                     )
 
             successful_operations += 1
@@ -613,8 +613,10 @@ def event_listener_db(ulid):
                 resolved_event_type = event_type_resolver.resolve_event_type(action_data)
                 action_type = event_type_resolver.get_action_type(resolved_event_type)
 
-                # Extract parent event ID from action data if present
-                parent_event_id = action_data.get('parent_event_id')
+                # The emitted event's ``parent_event_id`` is the enclosing action's
+                # key (an event_group_id), not an event id: it is stored as
+                # Event.parent_group_id.
+                parent_group_id = action_data.get('parent_event_id')
 
                 if action_type.value == 'test':
                     # Queue test event for async processing
@@ -623,7 +625,7 @@ def event_listener_db(ulid):
                         action_data=action_data,
                         action_id=action_id,
                         ulid=ulid,
-                        parent_event_id=parent_event_id,
+                        parent_group_id=parent_group_id,
                     )
                     log.debug(f"[EventListener DB] Queued test event in database: {action_id}")
                 else:
@@ -633,7 +635,7 @@ def event_listener_db(ulid):
                         action_data=action_data,
                         action_id=action_id,
                         ulid=ulid,
-                        parent_event_id=parent_event_id,
+                        parent_group_id=parent_group_id,
                     )
                     log.debug(f"[EventListener DB] Queued action event in database: {action_id}")
             except Exception as e:

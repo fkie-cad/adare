@@ -135,6 +135,11 @@ MIGRATIONS: list[Migration] = [
         scope='project',
         module=f'{_PACKAGE}.delete_orphan_run_rows',
     ),
+    Migration(
+        name='move_parent_event_keys',
+        scope='project',
+        module=f'{_PACKAGE}.move_parent_event_keys',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per
