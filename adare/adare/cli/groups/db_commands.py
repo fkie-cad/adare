@@ -74,10 +74,13 @@ def register(cli, AliasedGroup, exec_with_error_printing):
 
         Old action results keep a base64 copy of every screenshot, which the PNG in
         the run's reporting/screenshots folder already holds; new results are stored
-        without it. A copy is only removed when that PNG is on disk with the same
-        size -- rows whose screenshot file is missing are left unchanged. Needs free
-        disk space of at least the database's size for VACUUM, and refuses to run
-        while another process writes to the database.
+        without it. A copy is only removed when that PNG is on disk and byte-for-byte
+        identical -- rows whose screenshot file is missing or differs are left
+        unchanged, and nothing but image copies is ever removed. VACUUM needs free
+        space of about twice the remaining data (next to the database and in the
+        temporary directory). Refuses to run while another process holds the write
+        lock, a run of the project was active in the last 30 minutes, or a dev
+        session is live.
         """
         from adare.cli.manage import exec_manage_compact_db
 
@@ -91,8 +94,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     def db_check(project, all_databases):
         """Read-only health check: quick_check, foreign keys and orphaned rows.
 
-        Exits 1 when a database is corrupt. Orphaned rows are only reported;
-        'adare db migrate' removes the ones deleted runs left behind.
+        Exits 1 when a database is corrupt. Orphaned rows are only counted, never
+        changed: action executions without a run row come from dev-session consoles
+        or from runs older versions deleted, and are kept.
         """
         from adare.cli.manage import exec_manage_check_db
 
