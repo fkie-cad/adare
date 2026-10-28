@@ -28,6 +28,14 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- `adare runs prune [--fake] [--older-than DAYS] [--yes] [--json]`: frees disk space
+  in the current project's `run/` directory. A dry run by default: lists run folders
+  no database run (and no dev session) refers to, with sizes and a total. `--fake`
+  also targets fake runs that are not running (rows + folders), `--older-than`
+  filters by age, and only `--yes` deletes. A folder is only ever selected when it
+  is clearly an ADARE run folder: `run/<known experiment>/<run timestamp>` inside
+  `run/` with no symlinks, with a `logs/` or `reporting/` subdirectory, unchanged for
+  an hour; users' own files in `run/` are never listed.
 - Terminal and Claude in the web UI: a terminal panel on every page (sidebar or
   Ctrl+`) runs Claude Code or a shell in a chosen project, as tabs that survive
   page changes and reloads. *Build with Claude* (experiments), *Work on it with
@@ -160,6 +168,14 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   commands as suggestions, instead of filling the disk mid-run.
 
 ### Changed
+- `adare runs remove`, `DELETE /api/runs/{ulid}`, `adare experiment clean` and
+  `adare experiment remove` also delete the run folders of the runs they remove,
+  through the same run-folder safety test as `runs prune` (a refused folder is kept
+  and reported; the rows are deleted anyway). Database run paths are matched by
+  their `run/<experiment>/<timestamp>` tail, so moved projects still match.
+  `runs remove --keep-files` (web: `keep_files=true`) and `experiment remove
+  --keep-files` keep the files. The automatic fake-run cleanup after a test run
+  still removes only the rows; `runs prune` collects those folders.
 - SQLite databases now use write-ahead logging (`journal_mode=WAL`) with
   `synchronous=NORMAL` and a 30 s busy timeout (was 5 s), set on every connection:
   readers no longer block a writer, so the CLI, web UI and a running experiment can
