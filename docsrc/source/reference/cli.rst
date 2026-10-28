@@ -1109,28 +1109,50 @@ database is opened -- see :doc:`../architecture/database-migrations`.
   then runs ``VACUUM`` so the file actually gets smaller. Run it once on a
   project that predates the change, or whenever ``ls -l .adare/`` looks too big.
 
-  * A row's image data is removed only when the PNG its ``screenshot_path``
-    names is on disk and has the size of the decoded image. Relative paths are
+  * Only image payloads are removed, and a row's images only when every one of
+    them is byte-for-byte identical to the PNG its ``screenshot_path`` names
+    (the base64 data is decoded and compared with the file). Relative paths are
     resolved against the run folder under the project's *current* location (a
-    moved project works). Rows whose screenshot file is missing, or that have no
-    ``screenshot_path``, are left byte-for-byte unchanged and counted as kept.
-  * Strings over 16 KiB that are not images are shortened as they are for new
-    rows, and counted separately.
-  * Refuses to touch a database another process is writing to (it waits 2 s
-    for the write lock): stop running experiments, dev sessions and
-    ``adare ui`` first. Nothing is changed then, and the exit code is 1.
-  * ``VACUUM`` needs free space next to the database of at least the
-    database's size; with less it is skipped (the row rewrite still stands) and
-    the report says so. Rows are rewritten and committed in small batches, so
-    an interrupted run keeps its progress and can simply be started again.
+    moved project works). Rows whose screenshot file is missing, differs, or
+    that have no ``screenshot_path`` are left byte-for-byte unchanged and
+    counted as kept. A removed image is replaced by the same
+    ``<omitted: N chars of png data>`` marker new rows get.
+  * Nothing else is ever removed: long text that is not an image (command
+    output, ...) stays as it is; such rows are only counted.
+  * Refuses to touch a database that may be written to while it runs; nothing
+    is changed then, and the exit code is 1:
 
-  Reports per database: rows stripped, rows kept (screenshot file missing),
-  non-image rows stripped, bytes freed by the rewrite, size before and after
-  (database file + ``-wal``) and the duration.
+    - another process holds the write lock (it waits 2 s for it);
+    - a run of the project has not ended (``RUNNING``, ``PENDING``, ``PAUSE``)
+      and showed activity in the last 30 minutes: its start or creation time,
+      or the modification time of its run folder or of a file in its ``logs/``
+      folder. Unfinished runs without such activity were left behind by a crash;
+      they are ignored and their number is reported;
+    - for every database: a dev session marked running whose VM is alive (asked
+      from the hypervisor, as ``adare dev cleanup`` does) or whose state changed
+      in the last 30 minutes.
+
+    The message names the run or dev session. Stop ``adare ui`` as well.
+  * ``VACUUM`` writes a temporary copy of the database and, in WAL mode, passes
+    all of it through the ``-wal`` file: it needs free space of twice the
+    remaining data plus 10 % next to the database and in the temporary directory
+    (``TMPDIR``) when that is on another volume. With less it is skipped (the
+    row rewrite still stands) and the report says so. Rows are rewritten and
+    committed in small batches, so an interrupted run keeps its progress and can
+    simply be started again.
+  * A registered project whose directory or database file is gone is reported
+    as ``missing``; nothing is created on disk, and the other databases are
+    still processed.
+
+  Reports per database: rows stripped, rows kept (screenshot file missing /
+  differs), rows with oversized non-image text (kept), stale runs ignored,
+  bytes freed by the rewrite, size before and after (database file + ``-wal``)
+  and the duration.
 
   Options:
     * ``--dry-run`` - Open the database read-only and report what would be
-      reclaimed (row counts and bytes); write nothing
+      reclaimed (row counts and bytes); write nothing. A dry run is not refused
+      for activity; its message says when a real run would be.
     * ``--all`` - Every registered project database plus the global one
       (default: the project of the current directory)
     * ``-p``, ``--project`` - Project name or path
@@ -1139,8 +1161,10 @@ database is opened -- see :doc:`../architecture/database-migrations`.
         {"dry_run": false, "ok": true, "databases": [
           {"label": "T2F", "path": ".../.adare/project.db.sqlite3",
            "status": "compacted", "message": null,
-           "rows": {"examined": 2000, "stripped": 1990,
-                    "kept_missing_file": 10, "non_image_stripped": 0},
+           "rows": {"examined": 2000, "stripped": 1985,
+                    "kept_missing_file": 10, "kept_mismatch": 5,
+                    "non_image_kept": 3},
+           "stale_runs_ignored": 0,
            "reclaimable_bytes": 341266000, "free_pages_bytes": 341000000,
            "vacuum": {"done": true, "message": null},
            "size_before": {"db": 345964544, "wal": 0},
@@ -1157,18 +1181,30 @@ database is opened -- see :doc:`../architecture/database-migrations`.
     backup.
   * ``PRAGMA foreign_key_check``, counted per (table, parent table). It works
     although ADARE runs with foreign-key enforcement off.
-  * Orphaned rows: action results of runs that no longer exist, run-file and
-    log-file rows no run references, and action results whose playbook item is
-    gone (items are replaced when an experiment is loaded again). Orphans are
-    reported only (exit code 0); ``adare db migrate`` removes the ones deleted
-    runs left behind.
+  * Orphaned rows, counted only (exit code 0), never changed:
+
+    - action executions with no run row (``action_execution_without_run``).
+      Dev-session consoles record their actions under a console ULID that no
+      run row has, and run deletions of older versions left their runs'
+      executions behind; the two cannot be told apart, so these rows are kept;
+    - run-file and log-file rows no run references
+      (``experiment_run_files_unreferenced``, ``log_file_unreferenced``). The
+      ``delete_orphan_run_rows`` migration removed those older versions left
+      once; run deletion now removes them, so new ones are not expected;
+    - action executions whose playbook item is gone
+      (``action_execution_dangling_playbook_item``; items are replaced when an
+      experiment is loaded again).
+
+  A registered project whose directory or database file is gone is reported
+  with status ``missing``; nothing is created on disk.
 
   Options:
     * ``--all`` - Every registered project database plus the global one
     * ``-p``, ``--project`` - Project name or path
     * ``--json`` / ``--format`` - ``{"ok": ..., "databases": [{"label", "path",
-      "integrity_ok", "problems", "foreign_key_violations": [{"table", "parent",
-      "count"}], "orphans": {name: count}, "message"}]}``
+      "status", "integrity_ok", "problems", "foreign_key_violations": [{"table",
+      "parent", "count"}], "orphans": {name: count}, "message"}]}``;
+      ``status`` is ``checked`` or ``missing``
 
 VM runtime
 ----------
