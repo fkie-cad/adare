@@ -227,11 +227,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.argument('experiment')
     @click.option('--project', '-p', help='Name of the project')
     def clean(experiment, project):
-        """Remove all fake experiment runs for the specified experiment.
+        """Remove the finished fake experiment runs for the specified experiment.
 
         Fake runs are created during testing and development. This command
-        permanently deletes all fake runs associated with the experiment, and
+        permanently deletes the finished fake runs of the experiment, and
         their run folders (only folders that are clearly ADARE run folders).
+        Fake runs still pending or running, and dev sessions' runs, are kept.
         """
         from adare.cli.experiment import exec_experiment_clean
 

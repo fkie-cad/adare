@@ -319,8 +319,9 @@ For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>
     * ``-f, --force`` - Proceed even if an experiment would be left without environments
 
 ``adare experiment clean <experiment>``
-  Delete all fake (test-mode) runs of an experiment: their database rows and their
-  run folders (see :ref:`run folders <cli-run-folders>`).
+  Delete the finished fake (test-mode) runs of an experiment: their database rows and
+  their run folders (see :ref:`run folders <cli-run-folders>`). Fake runs that are
+  still pending or running, and dev sessions' runs, are kept.
 
 ``adare experiment remove <experiment>``
   Remove an experiment, all its runs and (unless ``--keep-files``) its directory and
@@ -373,12 +374,25 @@ Run Management
 
 ``adare runs prune``
   Free disk space in the current project's ``run/`` directory. By default a dry
-  run: lists the run folders that no run in the database (and no dev session)
-  refers to, with their sizes and a total, and deletes nothing.
+  run: lists the run folders that nothing refers to, with their sizes and a total,
+  and deletes nothing. A folder is kept when
+
+  * a run in the database or a dev session (any status) has it as its folder;
+  * a run without a recorded folder (one that failed or was interrupted before it
+    got one, e.g. during VM preparation) of the same experiment started within 16 h
+    of the folder's timestamp name (a run without an experiment counts for every
+    experiment). The window is wide on purpose: run folder names and start times are
+    UTC, but older ones were local time;
+  * the folder belongs to another registered project: the runs of every registered
+    project whose ``run/`` resolves to the same directory (e.g. through a symlink)
+    count as well. If one of those projects' databases cannot be read, nothing is
+    pruned.
 
   Options:
-    * ``--fake`` - Also target fake (test-mode) runs that are not ``RUNNING`` and
-      started more than an hour ago: their database rows and their folders
+    * ``--fake`` - Also target finished fake (test-mode) runs that started more than
+      an hour ago: their database rows and their folders. Fake runs that are not
+      finished (pending, running, paused, or without a status) and dev sessions'
+      runs are skipped
     * ``--older-than DAYS`` - Only targets last changed (fake runs: started) at least
       ``DAYS`` days ago
     * ``-y, --yes`` - Delete exactly the listed targets (fake run rows in one
@@ -407,8 +421,11 @@ all of these hold:
 * nothing in it (the folder, ``logs/``, ``reporting/``, the files in ``logs/``)
   changed in the last hour.
 
-Database run paths are matched by their ``run/<experiment>/<timestamp>`` tail, so a
-moved project still finds its run folders. Folders of fake runs that the automatic
+A folder a dev session refers to (its run folder, or the folder of the run whose id
+is the session id; any session status, any project) is never deleted, and when the
+dev sessions cannot be read no folder is deleted. Database run paths are matched by
+their ``run/<experiment>/<timestamp>`` tail, so a moved project still finds its run
+folders. Folders of fake runs that the automatic
 post-run cleanup removes from the database stay on disk (useful for debugging) until
 ``adare runs prune`` deletes them.
 
