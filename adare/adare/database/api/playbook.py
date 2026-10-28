@@ -8,6 +8,7 @@ from typing import Any
 
 import cattrs
 import yaml
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from adare.database.api.base import ProjectDatabaseApi
@@ -99,8 +100,8 @@ class PlaybookApi(ProjectDatabaseApi):
             # Flush to get the playbook ID assigned before creating items
             self._session.flush()
 
-            # Clear existing items (for updates)
-            self._session.query(PlaybookItem).filter(PlaybookItem.playbook_id == playbook.id).delete()
+            # Retire the previous version's items (for updates)
+            self._retire_playbook_items(playbook)
 
             # Convert actions to database items
             for order, action in enumerate(config.actions):
@@ -149,6 +150,29 @@ class PlaybookApi(ProjectDatabaseApi):
             self._session.add(playbook)
 
         return playbook
+
+    def _retire_playbook_items(self, playbook: Playbook) -> None:
+        """Take a playbook's items out of the current playbook before new ones are added.
+
+        Items an ``action_execution`` references are kept and marked superseded, so
+        earlier runs keep their audit trail (foreign keys are off in SQLite, nothing
+        else would stop the delete). Every other item is deleted -- also a superseded
+        one whose runs have been deleted since. Set-based: no per-row Python.
+        """
+        executed = select(ActionExecution.id).where(ActionExecution.playbook_item_id == PlaybookItem.id).exists()
+        # 'fetch' keeps item objects already in the session in step with the rows.
+        self._session.execute(
+            update(PlaybookItem)
+            .where(PlaybookItem.playbook_id == playbook.id, PlaybookItem.superseded.is_(False), executed)
+            .values(superseded=True)
+            .execution_options(synchronize_session='fetch')
+        )
+        self._session.execute(
+            delete(PlaybookItem)
+            .where(PlaybookItem.playbook_id == playbook.id, ~executed)
+            .execution_options(synchronize_session='fetch')
+        )
+        self._session.expire(playbook, ['items'])
 
     def _create_playbook_item(self, playbook: Playbook, action: ActionType, sequence_order: int) -> PlaybookItem:
         """Convert action to PlaybookItem."""
@@ -344,8 +368,14 @@ class PlaybookApi(ProjectDatabaseApi):
         return self._session.query(Playbook).filter(Playbook.experiment_id == experiment_id).first()
 
     def get_playbook_items(self, playbook_id: str, parent_id: str | None = None) -> list[PlaybookItem]:
-        """Get playbook items, optionally filtered by parent."""
-        query = self._session.query(PlaybookItem).filter(PlaybookItem.playbook_id == playbook_id)
+        """Get the current playbook's items, optionally filtered by parent.
+
+        Superseded items (an earlier version's, kept for the runs that executed them)
+        are left out.
+        """
+        query = self._session.query(PlaybookItem).filter(
+            PlaybookItem.playbook_id == playbook_id, PlaybookItem.superseded.is_(False)
+        )
 
         if parent_id:
             query = query.filter(PlaybookItem.parent_id == parent_id)

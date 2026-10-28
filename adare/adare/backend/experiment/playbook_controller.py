@@ -455,7 +455,7 @@ class PlaybookController(FailureHandlingMixin):
                     log.warning(f"No playbook found for experiment {self.experiment_id}")
                     return
 
-                # Get playbook items ordered by sequence
+                # The current playbook's items (superseded ones excluded), ordered by sequence
                 items = playbook_api.get_playbook_items(playbook.id)
 
                 # Map action index to playbook_item_id
