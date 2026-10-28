@@ -22,7 +22,7 @@ def __check_project_directory(project_directory: Path) -> bool:
     return True
 
 
-def determine_projectdirectory(project: str, silent: bool = False) -> Path | None:
+def determine_projectdirectory(project: str | None, silent: bool = False) -> Path | None:
     """Resolve ``-p/--project`` to a project directory, or fall back to the cwd.
 
     Accepts a project **name or path**, which is what ``--project``'s help text
