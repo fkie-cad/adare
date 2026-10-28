@@ -47,17 +47,15 @@ produced the current schema, so every ``upgrade()`` is a cheap no-op that is
 then stamped in the ledger.
 
 A migration can also repair *data*. ``delete_orphan_run_rows`` (project scope)
-deletes the run-files rows that run deletions left behind while they relied on
-the ORM cascade alone (foreign keys are off in SQLite): ``experiment_run_files``
-rows no run references, and the ``log_file`` rows only they referenced. It does
-**not** delete ``action_execution`` rows whose run id names no run: dev
-sessions record their actions with ``experiment_run_id`` set to a console ULID
-(a fresh one per ``adare dev start`` / ``resume``, stored nowhere else), so such
-a row cannot be told apart from what a deleted run left behind. Those rows are
-kept and only counted by ``adare db check``. A data-repair migration must only
-delete what is provably unreferenced, and it must stay set-based (no per-row
-Python, no reading blob columns) because it runs on every project database when
-it is first opened. Run deletion itself goes through
+deletes the rows that run deletions left behind while they relied on the ORM
+cascade alone (foreign keys are off in SQLite): ``action_execution`` rows whose
+non-NULL ``experiment_run_id`` names no run, ``experiment_run_files`` rows no
+run references, and the ``log_file`` rows only they referenced. Only runs write
+execution rows with a run id (dev sessions write none), so such a row is always
+a deleted run's leftover; rows without a run id are kept. A data-repair
+migration must only delete what is provably unreferenced, and it must stay
+set-based (no per-row Python, no reading blob columns) because it runs on every
+project database when it is first opened. Run deletion itself goes through
 :func:`adare.database.api.run_cleanup.delete_runs`, which removes a run's rows
 along with the run.
 

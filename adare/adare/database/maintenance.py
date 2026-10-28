@@ -42,7 +42,11 @@ from typing import Any
 from adare.core.dto.manage import DbCheckEntry, DbCompactEntry, ForeignKeyViolationCount
 from adare.database.api.base import dispose_engines
 from adare.database.api.playbook import MAX_RESULT_STRING, is_image_payload, omitted_image_marker
-from adare.database.migrations.delete_orphan_run_rows import _DELETE_ORPHAN_FILES, _DELETE_ORPHAN_LOG_FILES
+from adare.database.migrations.delete_orphan_run_rows import (
+    _DELETE_ORPHAN_EXECUTIONS,
+    _DELETE_ORPHAN_FILES,
+    _DELETE_ORPHAN_LOG_FILES,
+)
 
 log = logging.getLogger(__name__)
 
@@ -77,19 +81,12 @@ def _count_sql(delete_sql: str) -> str:
 
 #: Orphan counts reported by ``check``, as ``name -> (count SQL, tables it needs)``:
 #:
-#: - ``action_execution_without_run``: executions whose run id names no run. Dev-session
-#:   consoles write a console ULID there (no run row ever has it), and run deletions of
-#:   older versions left their executions behind; the two cannot be told apart, so these
-#:   rows are informational and kept.
-#: - the files/log rows the ``delete_orphan_run_rows`` migration deletes (its SQL, counted);
+#: - the executions, files and log rows the ``delete_orphan_run_rows`` migration deletes (its
+#:   SQL, counted): leftovers of runs deleted by older versions;
 #: - executions whose playbook item is gone (``PlaybookApi`` replaces an experiment's items
 #:   when the experiment is loaded again).
 ORPHAN_QUERIES: dict[str, tuple[str, frozenset[str]]] = {
-    'action_execution_without_run': (
-        'SELECT COUNT(*) FROM action_execution '
-        'WHERE experiment_run_id IS NOT NULL AND experiment_run_id NOT IN (SELECT id FROM experiment_run)',
-        _RUN_ORPHAN_TABLES,
-    ),
+    'action_execution_without_run': (_count_sql(_DELETE_ORPHAN_EXECUTIONS), _RUN_ORPHAN_TABLES),
     'experiment_run_files_unreferenced': (_count_sql(_DELETE_ORPHAN_FILES), _RUN_ORPHAN_TABLES),
     'log_file_unreferenced': (_count_sql(_DELETE_ORPHAN_LOG_FILES), _RUN_ORPHAN_TABLES),
     'action_execution_dangling_playbook_item': (

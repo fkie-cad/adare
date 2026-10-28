@@ -153,7 +153,7 @@ def test_check_exits_1_on_a_corrupt_database(tmp_path):
     assert data['databases'][0]['problems']
 
 
-def test_check_rich_output_labels_runless_executions_as_kept(tmp_path, monkeypatch):
+def test_check_rich_output_labels_runless_executions(tmp_path, monkeypatch):
     monkeypatch.setenv('COLUMNS', '300')
     target = _make_db(tmp_path)
     entry = maintenance.check_database(target)
@@ -166,7 +166,7 @@ def test_check_rich_output_labels_runless_executions_as_kept(tmp_path, monkeypat
         result = _invoke('check', '--all', '--format', 'rich')
 
     assert result.exit_code == 0, result.output
-    assert 'dev-session consoles or runs deleted by older versions; kept' in result.output
+    assert 'action executions whose run no longer exists' in result.output
     assert 'adare db migrate' not in result.output
 
 
