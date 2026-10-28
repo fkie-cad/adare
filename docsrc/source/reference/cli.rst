@@ -110,6 +110,9 @@ runs fit (see :doc:`../guide/host-resources`). Every subcommand takes the global
     disks before a run starts; 0 switches the check off
   * ``ADARE_DEV_SESSION_MAX_AGE_DAYS`` (off) - stopped dev sessions unused for longer
     are removed by every experiment run and ``adare vm prune --force``
+  * ``ADARE_TEST_RUNS_KEEP`` (10) - test (fake) runs kept per experiment; each test
+    run removes the older ones (see :ref:`test-run retention <cli-test-run-retention>`).
+    The run that just finished counts, so 0 keeps only it
 
   Example: ``adare system settings set ADARE_DEV_SESSION_MAX_AGE_DAYS 30``
 
@@ -264,7 +267,8 @@ By default, experiments run in **test mode** which is ideal for development:
 * **Test Mode (Default)**:
 
   * Allows continuous modification and testing of playbook files
-  * Creates "fake runs" that can be cleaned up with ``adare experiment clean``
+  * Creates "fake runs"; only the newest ones per experiment are kept (see below),
+    ``adare experiment clean`` removes them all
   * Skips integrity checks to enable rapid iteration
   * Perfect for developing and debugging experiments
 
@@ -277,6 +281,32 @@ By default, experiments run in **test mode** which is ideal for development:
 
 **Workflow**: Develop and test in default test mode, then use ``--production`` only when ready for final data collection.
 For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>`.
+
+.. _cli-test-run-retention:
+
+**Test-run retention.** Every test-mode run (``adare experiment run`` /
+``replicate`` without ``--production``; not dev sessions) ends by removing the experiment's older test runs, so that only the
+``ADARE_TEST_RUNS_KEEP`` newest remain (default 10, all environments of the
+experiment together). The run that just finished takes one of those places and is
+never removed, so ``0`` and ``1`` both keep only it. Runs are ranked by start time,
+and a run that would go is still kept when it
+
+* started less than an hour ago, or is not finished (pending, running, paused, no
+  status);
+* belongs to a dev session;
+* has a run folder that fails the :ref:`run-folder test <cli-run-folders>` (e.g.
+  something in it changed in the last hour); its database row stays too.
+
+Production runs are never touched. The rows go in one transaction, then the
+folders; when something was removed, one line such as ``removed 3 older test runs
+(1.2 GiB; ADARE_TEST_RUNS_KEEP=10)`` is printed. If the runs or the dev sessions
+cannot be read, a warning is logged, nothing is removed and the run is unaffected.
+
+.. code-block:: bash
+
+   adare system settings set ADARE_TEST_RUNS_KEEP 25   # keep more
+   ADARE_TEST_RUNS_KEEP=0 adare experiment run exp -e env   # keep only this run
+   adare system settings unset ADARE_TEST_RUNS_KEEP     # back to 10
 
 ``adare experiment diff <experiment>``
   Run an experiment in visual diff mode for manual side-by-side comparison
