@@ -46,6 +46,17 @@ Fresh installations need no special handling: ``create_all`` has already
 produced the current schema, so every ``upgrade()`` is a cheap no-op that is
 then stamped in the ledger.
 
+A migration can also repair *data*. ``delete_orphan_run_rows`` (project scope)
+deletes the rows that run deletions left behind while they relied on the ORM
+cascade alone (foreign keys are off in SQLite): ``action_execution`` rows of
+runs that no longer exist (rows with a NULL run id belong to dev sessions and
+are kept), ``experiment_run_files`` rows no run references, and their
+``log_file`` rows. Such a migration must stay set-based (no per-row Python, no
+reading blob columns) because it runs on every project database when it is
+first opened. Run deletion itself goes through
+:func:`adare.database.api.run_cleanup.delete_runs`, which removes those rows
+along with the run.
+
 Each migration runs in its own transaction together with its ledger row, so a
 failure leaves the database at the last fully applied migration. A failure is
 raised as a ``DatabaseError`` suggesting ``adare --verbose db migrate``.

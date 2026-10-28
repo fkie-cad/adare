@@ -322,6 +322,19 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   file and left its `-wal`/`-shm`/`-journal` files behind, which could corrupt the
   next database created under that name; they now remove all of them. Removing a
   project closes its pooled database connections before deleting the directory.
+- Deleting runs left rows behind in the project database: every run delete
+  (`adare runs remove`, `adare experiment clean`, `adare experiment remove`,
+  fake-run cleanup after a test run, `adare environment remove --force`, and
+  replacing an in-use testfunction) kept the run's action executions (with their
+  result blobs), its run-files row and its two log-file rows, because foreign keys
+  are off in SQLite and the ORM cascade does not reach them. All of them now go
+  through one `delete_runs` helper that removes these rows too. A project
+  migration (`delete_orphan_run_rows`) deletes what earlier deletions left; dev
+  session action executions (no run) are kept. The freed space is reused by the
+  database but the file only shrinks after a vacuum.
+- Replacing an in-use testfunction with `--force` said it deleted the runs that
+  used it but deleted none: it searched the global database, while runs live in
+  each project's database. It now deletes them in every registered project.
 - `adare runs list` took ~150 s on a project with 4.5k runs and now takes under a
   second: every run's verdict lazy-loaded all of its events through an unindexed
   column. Verdicts are now read for all runs in two queries (also in the web UI's

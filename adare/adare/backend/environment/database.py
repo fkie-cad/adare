@@ -181,13 +181,14 @@ def resolve_environment_identifier(identifier: str, trigger_exception: bool = Tr
 
 
 def _scan_environment_references(
-    version_ids: set[str], detach: bool
+    version_ids: set[str], detach: bool, deleted_run_paths: list[str] | None = None
 ) -> tuple[dict[Path, int], list[tuple[Path, str]], list[str]]:
     """Scan every registered project for runs and experiments using ``version_ids``.
 
     With ``detach`` (``--force``) the same pass deletes those runs and drops the
     ids from experiments (left with no environment, not deleted), so each project
-    database is opened once.
+    database is opened once. The deleted runs' directory paths are appended to
+    ``deleted_run_paths`` when given.
 
     Returns:
         (run count per project path, [(project path, experiment name)] for
@@ -195,6 +196,7 @@ def _scan_environment_references(
         scanned -- their references are unknown)
     """
     from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
+    from adare.database.api.run_cleanup import delete_runs
     from adare.database.models.global_models import Project
     from adare.database.models.project_models import Experiment, ExperimentRun
 
@@ -226,10 +228,13 @@ def _scan_environment_references(
                         experiment.environment_ids = [env_id for env_id in env_ids if env_id not in version_ids]
                         log.info(f'detached environment from experiment {experiment.name} ({project_path.name})')
                 if detach:
-                    for run in runs:
-                        project_api._session.delete(run)
-                        log.info(f'deleted run {run.id} from project {project_path.name}')
+                    run_ids = [run.id for run in runs]
+                    paths = delete_runs(project_api._session, runs)
                     project_api._session.commit()
+                    for run_id in run_ids:
+                        log.info(f'deleted run {run_id} from project {project_path.name}')
+                    if deleted_run_paths is not None:
+                        deleted_run_paths.extend(paths)
         except (OSError, DatabaseError, SQLAlchemyError) as e:
             log.warning(f"Error checking project {project_path}: {e}")
             unscanned.append(f'{project_path} ({e})')
@@ -256,13 +261,16 @@ def delete_managed_file(path: Path, managed_dir: Path) -> bool:
     return False
 
 
-def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: bool = True):
+def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: bool = True) -> list[str]:
     """Delete an environment -- every version of its name.
 
     Refuses while runs or single-environment experiments reference any version,
     unless ``force``: then those runs are deleted and the experiments are
     detached from the environment (left with no environment, not deleted).
     A VM no longer referenced by any environment is torn down when ``cleanup_vm``.
+
+    Returns:
+        The directory paths of the runs deleted by ``force`` (empty otherwise).
     """
     from adare.config.configdirectory import ENVIRONMENTS_DIR
 
@@ -278,7 +286,13 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
         version_ids = {version.id for version in versions}
         vm_ids = {version.vm_id for version in versions if version.vm_id}
 
-    runs_per_project, orphaned, unscanned = _scan_environment_references(version_ids, detach=force)
+    deleted_run_paths: list[str] = []
+    if force:
+        runs_per_project, orphaned, unscanned = _scan_environment_references(
+            version_ids, detach=True, deleted_run_paths=deleted_run_paths
+        )
+    else:
+        runs_per_project, orphaned, unscanned = _scan_environment_references(version_ids, detach=False)
     total_runs = sum(runs_per_project.values())
     if force:
         if total_runs or orphaned:
@@ -326,7 +340,7 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
                 delete_managed_file(env_file, ENVIRONMENTS_DIR)
 
     if not cleanup_vm:
-        return
+        return deleted_run_paths
     from adare.backend.vm.removal import teardown_unreferenced_vm
 
     for vm_id in vm_ids:
@@ -339,6 +353,7 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
             teardown_unreferenced_vm(vm_id, force=force)
         except (OSError, DatabaseError, ValueError) as e:
             log.warning(f'Failed to cleanup VM {vm_id}: {e}')
+    return deleted_run_paths
 
 
 def get_environments_ulids(project_path: Path = None) -> list[str]:
