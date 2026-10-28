@@ -1108,6 +1108,11 @@ database is opened -- see :doc:`../architecture/database-migrations`.
   ``reporting/screenshots`` folder; ``compact`` only drops the database copy,
   then runs ``VACUUM`` so the file actually gets smaller. Run it once on a
   project that predates the change, or whenever ``ls -l .adare/`` looks too big.
+  Any command that opens a project database larger than 512 MiB that still holds
+  such copies prints a one-line hint to run it (on stderr, not with ``--json``);
+  the hint is shown once and comes back only when the database has grown by half
+  again (``.adare/compact-hint.json`` records the size; a successful ``compact``
+  writes it too).
 
   * Only image payloads are removed, and a row's images only when every one of
     them is byte-for-byte identical to the PNG its ``screenshot_path`` names
