@@ -136,28 +136,25 @@ class TestManageServiceResetDb:
     """Tests for ManageService.reset_db()."""
 
     @patch("adare.services.manage_service.get_global_database_location")
-    def test_reset_db_exists(self, mock_get_loc, service):
-        mock_path = MagicMock(spec=Path)
-        mock_path.exists.return_value = True
-        mock_get_loc.return_value = mock_path
+    def test_reset_db_exists(self, mock_get_loc, service, tmp_path):
+        db_path = tmp_path / 'global.db.sqlite3'
+        db_path.write_bytes(b'')
+        mock_get_loc.return_value = db_path
 
         result = service.reset_db()
 
         assert result.success is True
         assert result.data.was_reset is True
-        mock_path.unlink.assert_called_once()
+        assert not db_path.exists()
 
     @patch("adare.services.manage_service.get_global_database_location")
-    def test_reset_db_not_exists(self, mock_get_loc, service):
-        mock_path = MagicMock(spec=Path)
-        mock_path.exists.return_value = False
-        mock_get_loc.return_value = mock_path
+    def test_reset_db_not_exists(self, mock_get_loc, service, tmp_path):
+        mock_get_loc.return_value = tmp_path / 'global.db.sqlite3'
 
         result = service.reset_db()
 
         assert result.success is True
         assert result.data.was_reset is False
-        mock_path.unlink.assert_not_called()
 
     @patch("adare.services.manage_service.get_global_database_location")
     def test_reset_db_exception(self, mock_get_loc, service):

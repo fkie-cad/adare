@@ -160,6 +160,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   commands as suggestions, instead of filling the disk mid-run.
 
 ### Changed
+- SQLite databases now use write-ahead logging (`journal_mode=WAL`) with
+  `synchronous=NORMAL` and a 30 s busy timeout (was 5 s), set on every connection:
+  readers no longer block a writer, so the CLI, web UI and a running experiment can
+  share a database without `database is locked`. WAL is recorded in the database
+  file, which gains `-wal`/`-shm` sidecar files next to it. Foreign-key enforcement
+  stays off. See *Connection settings* in the database migrations docs.
 - Development tasks have one definition: CI runs the Makefile targets (`make lint`,
   `make test`, `make test-agent`, …) instead of its own copies of the commands.
   Every target syncs what it needs first (`--inexact`, so it never strips the
@@ -312,6 +318,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- `adare db reset` and `adare db clean-install` deleted only the main database
+  file and left its `-wal`/`-shm`/`-journal` files behind, which could corrupt the
+  next database created under that name; they now remove all of them. Removing a
+  project closes its pooled database connections before deleting the directory.
 - `adare runs list` took ~150 s on a project with 4.5k runs and now takes under a
   second: every run's verdict lazy-loaded all of its events through an unindexed
   column. Verdicts are now read for all runs in two queries (also in the web UI's
