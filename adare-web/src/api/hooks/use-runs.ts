@@ -27,13 +27,14 @@ function buildRunsUrl(filter?: ListRunsFilter): string {
   return qs ? `${endpoints.runs}?${qs}` : endpoints.runs
 }
 
-export function useRuns(filter?: ListRunsFilter) {
+export function useRuns(filter?: ListRunsFilter, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['runs', filter ?? {}],
     queryFn: async () => {
       const { data } = await api.get<ApiResponse<Run[]>>(buildRunsUrl(filter))
       return data.data ?? []
     },
+    enabled: options?.enabled ?? true,
   })
 }
 

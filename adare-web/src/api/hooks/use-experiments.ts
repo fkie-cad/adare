@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { endpoints } from '@/api/endpoints'
-import type { ApiResponse } from '@/types/api'
+import { unwrap, type ApiResponse } from '@/types/api'
 
 export interface Experiment {
   name: string
@@ -68,7 +68,7 @@ export function useExperiment(name: string) {
     queryKey: ['experiment', name],
     queryFn: async () => {
       const { data } = await api.get<ApiResponse<Experiment>>(endpoints.experiment(name))
-      return data.data!
+      return unwrap(data, `Experiment '${name}' not found.`)
     },
     enabled: !!name,
   })
