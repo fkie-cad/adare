@@ -391,7 +391,14 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
         # get one cv-server per machine (each needs its own port/log/debug dir);
         # today's single-VM playbooks (no `machines:` key) get exactly one, under
         # the implicit None key -- net-zero behavior change.
-        from adare.backend.experiment.mcp_server_manager import MCPServerManager, find_free_cv_port
+        from adare.backend.experiment.mcp_server_manager import (
+            MCPServerManager,
+            find_free_cv_port,
+            resolve_ocr_settings,
+        )
+
+        # The experiment's `ocr:` pin (metadata.yml) overrides the global OCR default.
+        ocr_engine, ocr_lang = resolve_ocr_settings(context.experiment_directory)
 
         for machine_key, view in _machine_views(context):
             # Determine debug output directory
@@ -423,8 +430,13 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
                 debug=context.config.dev_mode,
                 debug_output_dir=debug_output_dir,
                 exit_with_parent=not context.config.dev_mode,
+                ocr_engine=ocr_engine,
+                ocr_lang=ocr_lang,
             )
-            log.info(f"CV/OCR server for machine {machine_key!r} will use port {cv_port}")
+            log.info(
+                f"CV/OCR server for machine {machine_key!r} will use port {cv_port} "
+                f"(OCR {view.mcp_server.ocr_engine}/{view.mcp_server.ocr_lang})"
+            )
 
 
 def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
@@ -566,6 +578,13 @@ async def step_start_mcp_server(context: ExperimentRunCtx):
                         view.mcp_server.server_port,
                         view.mcp_server.known_server_pid,
                         machine_key=machine_key,
+                    )
+                    # OCR provenance: which engine/models/params serve this run. Also
+                    # loads + verifies the pinned models now rather than at the first click.
+                    from adare.backend.experiment.mcp_server_manager import record_ocr_provenance
+
+                    await record_ocr_provenance(
+                        view.mcp_server, context.experiment_run_directory.path, machine_key=machine_key
                     )
             else:
                 from adare.exceptions import LoggedException
