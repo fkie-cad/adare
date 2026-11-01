@@ -448,6 +448,12 @@ def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
         context.test_execution_mode = 'agent'
         return
 
+    if context.config.backend == 'hostside':
+        # Tests run on the host either way; the host-side backend swaps the transport (GuestFS, not QGA)
+        context.test_execution_mode = 'host'
+        log.info("Test execution mode resolved to: host (host-side backend, offline GuestFS)")
+        return
+
     try:
         playbook_settings = getattr(context.playbook, 'settings', None) if context.playbook else None
         mode = resolve_test_execution_mode(
@@ -704,8 +710,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         )
 
         # Set up host-mode test executor if in HOST test mode
-        if is_host_test_mode:
-            _setup_guest_to_host_test_executor(controller, context.vm, context.playbook, vm_os)
+        _wire_host_test_executor(controller, context, is_host_test_mode, vm_os)
 
         # Execute complete experiment (playbook + tests)
         log.info(f"Starting experiment execution for {context.config.experiment_name}")
@@ -714,9 +719,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         # Store execution result in context for final message generation
         context.execution_result = result
 
-        # Cleanup host-mode executor temp files
-        if is_host_test_mode and hasattr(controller, '_guest_to_host_test_executor'):
-            controller._guest_to_host_test_executor.cleanup()
+        _cleanup_host_test_executor(controller, context, is_host_test_mode)
 
         if result.success:
             log.info(
@@ -725,6 +728,37 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         else:
             log.error(f"Experiment failed: {result.error_message}")
             log.error(f"Action results: {result.successful_actions}/{result.total_actions} succeeded")
+
+
+def _wire_host_test_executor(controller, context: ExperimentRunCtx, is_host_test_mode: bool, vm_os: str | None) -> None:
+    """Install the executor for host-evaluated tests: GuestFS (host-side backend) or QGA (``--test-mode host``)."""
+    if context.config.backend == 'hostside':
+        _setup_hostside_test_executor(controller, context)
+    elif is_host_test_mode:
+        _setup_guest_to_host_test_executor(controller, context.vm, context.playbook, vm_os)
+
+
+def _cleanup_host_test_executor(controller, context: ExperimentRunCtx, is_host_test_mode: bool) -> None:
+    """Remove the temp mirrors of the host test executors."""
+    if is_host_test_mode and hasattr(controller, '_guest_to_host_test_executor'):
+        controller._guest_to_host_test_executor.cleanup()
+    if context.config.backend == 'hostside':
+        controller._hostside_test_executor.cleanup()
+
+
+def _setup_hostside_test_executor(controller, context: ExperimentRunCtx):
+    """Wire the host-side backend into the controller: deferred tests evaluated over a GuestFS."""
+    from adare.backend.experiment.execution.base import TestExecutionMode
+    from adare.backend.hostside.testing import HostsideTestExecutor
+
+    session = context.hostside
+    executor = HostsideTestExecutor(session, session.testfunctions)
+    controller.hostside = session
+    controller._hostside_test_executor = executor
+    controller.action_executor.test_actions.set_test_execution_mode(TestExecutionMode.HOST)
+    controller.action_executor.test_actions.set_guest_to_host_test_executor(executor)
+    controller.action_executor.hostside = session
+    log.info("Host-side backend: HostsideTestExecutor configured (tests are deferred to the quiesced image)")
 
 
 def _setup_guest_to_host_test_executor(controller, vm, playbook, vm_os: str):
@@ -818,7 +852,9 @@ async def _collect_machine_system_info(context: ExperimentRunCtx, machine_key, v
     # Use QGA-based collection in host test mode, WebSocket otherwise
     is_host_test_mode = context.test_execution_mode == 'host'
 
-    if is_host_test_mode and view.vm:
+    if context.config.backend == 'hostside':
+        success = context.hostside.collect_system_info(output_file) if context.hostside else False
+    elif is_host_test_mode and view.vm:
         from adare.backend.experiment.system_info_collector import collect_system_info_via_qga
 
         success = await collect_system_info_via_qga(
