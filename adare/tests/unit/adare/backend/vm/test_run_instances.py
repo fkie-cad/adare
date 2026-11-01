@@ -183,3 +183,30 @@ class TestReconcile:
 
         assert report.empty
         hooks['remove_run'].assert_not_called()
+
+
+class TestReservePortRace:
+    def test_port_taken_after_the_scan_retries_the_next_port(self, global_db):
+        """Two runs starting at once both see 18765 free; the loser must move on, not fail."""
+        from adare.backend.vm.port_manager import PORT_RANGE_START, reserve_port_atomically
+
+        vm = _vm()
+        _instance(vm, 'winner', port=PORT_RANGE_START)  # the other process committed first
+
+        with VmApi() as api, patch.object(api, 'get_all_vm_instances', return_value=[]):  # stale scan
+            port = reserve_port_atomically(api, vm.id, 'loser', '01JAAAAAAAAAAAAAAAAAAAAAAA')
+
+        assert port == PORT_RANGE_START + 1
+        with VmApi() as api:
+            assert api.get_vm_instance_by_name('loser').websocket_port == PORT_RANGE_START + 1
+
+    def test_duplicate_instance_name_is_not_retried_over_ports(self, global_db):
+        from sqlalchemy.exc import IntegrityError
+
+        from adare.backend.vm.port_manager import reserve_port_atomically
+
+        vm = _vm()
+        _instance(vm, 'taken-name')
+
+        with VmApi() as api, pytest.raises(IntegrityError, match='instance_name'):
+            reserve_port_atomically(api, vm.id, 'taken-name', '01JAAAAAAAAAAAAAAAAAAAAAAA')
