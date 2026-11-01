@@ -65,6 +65,9 @@ export interface VmInstance {
   instance_name?: string
   status?: 'active' | 'available' | 'stopped' | string
   websocket_port?: number
+  hypervisor?: string
+  /** ULID of the run holding this instance (an experiment run or a dev session), if any. */
+  current_experiment_run_id?: string | null
   [key: string]: unknown
 }
 
@@ -89,6 +92,64 @@ export function useVmInstances(vmId?: string) {
       return data.data ?? []
     },
   })
+}
+
+/** Instances that are running right now (status `active`), refreshed every few seconds. */
+export function useRunningVmInstances() {
+  return useQuery({
+    queryKey: ['vm-instances', null],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<VmInstance[]>>(endpoints.vmInstances)
+      return data.data ?? []
+    },
+    select: (instances) => instances.filter((i) => i.status === 'active'),
+    refetchInterval: 5000,
+  })
+}
+
+/** A log file a running instance can be tailed through (GET /api/vm-instances/{id}/logs). */
+export interface VmInstanceLogSource {
+  /** `run/<file>` for the run's logs, `libvirt` for the hypervisor's domain log. */
+  key: string
+  name: string
+  size: number
+}
+
+export function useVmInstanceLogs(instanceId: string | undefined) {
+  return useQuery({
+    queryKey: ['vm-instance-logs', instanceId],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<VmInstanceLogSource[]>>(
+        endpoints.vmInstanceLogs(instanceId!),
+      )
+      return data.data ?? []
+    },
+    enabled: !!instanceId,
+    // Logs appear as a run progresses (the agent log only once the guest is up).
+    refetchInterval: 5000,
+  })
+}
+
+/** One read of a log (GET /api/vm-instances/{id}/logs/{key}?offset=). */
+export interface VmInstanceLogChunk {
+  text: string
+  offset: number
+  next_offset: number
+  size: number
+  /** The file got shorter than the requested offset: drop what is shown. */
+  reset: boolean
+}
+
+export async function fetchVmInstanceLogChunk(
+  instanceId: string,
+  key: string,
+  offset: number | null,
+): Promise<VmInstanceLogChunk> {
+  const { data } = await api.get<ApiResponse<VmInstanceLogChunk>>(
+    endpoints.vmInstanceLog(instanceId, key),
+    { params: offset === null ? {} : { offset } },
+  )
+  return data.data!
 }
 
 export function useVmInstance(instanceId: string) {

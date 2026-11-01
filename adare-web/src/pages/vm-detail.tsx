@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from '@tanstack/react-router'
-import { Camera, Eye, HardDrive, Trash2 } from 'lucide-react'
+import { Link, useParams, useNavigate } from '@tanstack/react-router'
+import { Activity, Camera, Eye, HardDrive, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -87,6 +87,14 @@ function InstanceRow({ instance }: { instance: VmInstance }) {
             <Eye size={14} />
             Watch
           </Button>
+          {instance.status === 'active' && (
+            <Button variant="ghost" size="sm" asChild title="Display and live logs">
+              <Link to="/live" search={{ instance: String(instance.id) }}>
+                <Activity size={14} />
+                Live
+              </Link>
+            </Button>
+          )}
           <Button
             variant={expanded === 'snapshots' ? 'default' : 'ghost'}
             size="sm"

@@ -28,6 +28,13 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- Web UI **Live** page (sidebar *VMs → Live*, `/live`): lists the running VM instances
+  (refreshed every 5 s) and shows the selected one's display view-only and/or its logs
+  as they are written (`tail -f` style, one tab per `logs/*.log` of the run holding the
+  instance plus the libvirt domain log; filter, pause, follow, wrap). Running instances
+  on a VM's page link to it. New endpoints `GET /api/vm-instances/{id}/logs` and
+  `GET /api/vm-instances/{id}/logs/{source}?offset=`; instance list rows now carry
+  `current_experiment_run_id`.
 - Host-side (agent-free) backend: `adare experiment run --backend hostside` (also
   `ADARE_BACKEND`, playbook `settings.backend`; default stays `agent`). Playbooks run
   unchanged with no process of ours in the guest (QEMU Linux guests): GUI through QMP,
