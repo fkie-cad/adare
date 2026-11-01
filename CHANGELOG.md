@@ -28,6 +28,17 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- Host-side (agent-free) backend: `adare experiment run --backend hostside` (also
+  `ADARE_BACKEND`, playbook `settings.backend`; default stays `agent`). Playbooks run
+  unchanged with no process of ours in the guest (QEMU Linux guests): GUI through QMP,
+  file-effect `command:` actions and environment installations staged into the run
+  overlay before first boot (libguestfs or e2fsprogs `debugfs`), `test:` actions
+  evaluated on the host over a new `GuestFS` abstraction (offline qcow2/LVM/ext4 via
+  dissect) after a clean shutdown, `pull:` and the filesystem diff taken from the image,
+  playbook steps written as `marker` events into a qemufile run directory (`<run>/qfm/`).
+  Commands that need a guest process fail before boot, naming their class. See
+  `docs/guide/hostside-backend`, `scripts/hostside_inventory.py`; optional dependencies
+  `uv pip install 'adare[hostside]'`.
 - OCR provenance: every run records the cv-server's OCR profile in `<run>/ocr.yml`
   (`ocr-<machine>.yml` per machine): profile, engine and package versions (incl.
   `cv2`), model names + sha256, parameters, language, leading-glyph tolerance and the
@@ -431,6 +442,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- `--test-mode host`: every host-evaluated test read as failed (UNKNOWN) whatever the test
+  function returned, because its result was handed on in the wrong shape; and tests with
+  `str | int | float` parameters (`standard.file_timestamps`) could not be loaded host-side.
 - Web API / web UI contract sweep (every route now has contract tests in
   `tests/unit/adare/webapi`, asserting the fields adare-web reads):
   - Security: `/api/playbooks/save` only accepts a bare file name; run-artifact and

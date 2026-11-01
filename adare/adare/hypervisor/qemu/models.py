@@ -159,6 +159,10 @@ class QEMUVMConfig:
     # (see hypervisor.qemu.libvirt_network). None = single NIC, unchanged.
     secondary_network_name: str | None = None
 
+    # QEMU guest-agent virtio-serial channel. The host-side (agent-free) backend turns it
+    # off so that the guest's qemu-guest-agent has no port to attach to and does not run.
+    guest_agent_channel: bool = True
+
     def __post_init__(self):
         """Initialize empty collections if None."""
         if self.port_forwarding_rules is None:
@@ -202,6 +206,7 @@ class QEMUVMConfig:
             'iso_path': self.iso_path,
             'boot_from_cdrom': self.boot_from_cdrom,
             'pcap_paths': self.pcap_paths,
+            'guest_agent_channel': self.guest_agent_channel,
         }
 
     @classmethod
@@ -242,4 +247,5 @@ class QEMUVMConfig:
         data.setdefault('iso_path', '')
         data.setdefault('boot_from_cdrom', False)
         data.setdefault('pcap_paths', {})
+        data.setdefault('guest_agent_channel', True)
         return cls(**data)
