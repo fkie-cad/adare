@@ -431,6 +431,11 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Two VMs starting at the same moment no longer fail with "UNIQUE constraint failed:
+  vm_instance.websocket_port". The loser of the port race now moves on to the next
+  free port; its retry handler used to crash on a missing `session` attribute. A
+  clash on anything other than the port, such as a duplicate instance name, is
+  reported directly instead of being retried across the whole port range.
 - Unattended Windows 10 x64 builds: the answer file selects an edition (generic Pro
   key, no activation), so the multi-edition 22H2 ISO no longer stops at "Windows
   cannot read the <ProductKey> setting from the unattend answer file", and it loads
