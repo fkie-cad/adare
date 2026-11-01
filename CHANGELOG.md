@@ -431,6 +431,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Unattended Windows 10 x64 builds: the answer file selects an edition (generic Pro
+  key, no activation), so the multi-edition 22H2 ISO no longer stops at "Windows
+  cannot read the <ProductKey> setting from the unattend answer file", and it loads
+  viostor from the Autounattend floppy (A:\) only, like Windows 11. `vm create`'s
+  Setup error watch now also stops on "Windows cannot ..." dialogs instead of waiting
+  for the 90-minute timeout.
 - Web API / web UI contract sweep (every route now has contract tests in
   `tests/unit/adare/webapi`, asserting the fields adare-web reads):
   - Security: `/api/playbooks/save` only accepts a bare file name; run-artifact and

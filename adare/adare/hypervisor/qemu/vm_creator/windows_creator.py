@@ -581,8 +581,9 @@ def _run_windows_installation(
 
 
 # Lowercase fragments of Windows Setup's error dialogs, e.g. "Windows installation
-# encountered an unexpected error. Error code: 0x80070103 - 0x40031".
-_SETUP_ERROR_MARKERS = ('encountered an unexpected error', 'error code:', 'windows could not')
+# encountered an unexpected error. Error code: 0x80070103 - 0x40031" or "Windows
+# cannot read the <ProductKey> setting from the unattend answer file".
+_SETUP_ERROR_MARKERS = ('encountered an unexpected error', 'error code:', 'windows could not', 'windows cannot')
 
 
 class _SetupErrorWatch:
