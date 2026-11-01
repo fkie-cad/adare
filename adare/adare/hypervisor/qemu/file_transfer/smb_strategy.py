@@ -34,16 +34,14 @@ SMB_GATEWAY = '10.0.2.4'
 SMB_SHARE_NAME = 'qemu'
 
 
-def _ignore_host_generated_files(directory: str, contents: list[str]) -> set[str]:
-    """Skip host-generated files during SMB writeback.
-
-    The SMB temp directory contains stale copies of host-written files
-    (notably adare.log). Writing them back would overwrite the live
-    versions and erase data written since the share was created.
-    """
-    if Path(directory).name == 'logs':
-        return {'adare.log'}
-    return set()
+def _file_states(root: Path) -> dict[str, tuple[int, int]]:
+    """``{relative path: (size, mtime_ns)}`` of every regular file under ``root``."""
+    states = {}
+    for path in root.rglob('*'):
+        if path.is_file() and not path.is_symlink():
+            st = path.stat()
+            states[path.relative_to(root).as_posix()] = (st.st_size, st.st_mtime_ns)
+    return states
 
 
 class SMBStrategy(FileTransferStrategy):
@@ -59,6 +57,9 @@ class SMBStrategy(FileTransferStrategy):
         self._smb_dir: Path | None = None
         self._shares: list[dict[str, Any]] = []
         self._writeback_dirs: dict[str, Path] = {}  # tag -> original host path (for read-write shares)
+        # tag -> file states of the staged copy right after staging (read-write shares).
+        # Writeback copies back only what the guest created or changed since then.
+        self._staged_states: dict[str, dict[str, tuple[int, int]]] = {}
 
     @property
     def setup_description(self) -> str:
@@ -110,6 +111,7 @@ class SMBStrategy(FileTransferStrategy):
         smb_dir = Path(tempfile.mkdtemp(prefix=f'adare_smb_{vm_name}_'))
         self._smb_dir = smb_dir
         self._writeback_dirs = {}
+        self._staged_states = {}
 
         for i, share in enumerate(self._shares, 1):
             tag = share['tag']
@@ -131,6 +133,7 @@ class SMBStrategy(FileTransferStrategy):
 
             if not share.get('readonly', True):
                 self._writeback_dirs[tag] = Path(host_path)
+                self._staged_states[tag] = _file_states(target_path)
 
         # Configure VM for SMB (XML builder reads this)
         context.vm.config.smb_share_path = str(smb_dir)
@@ -255,7 +258,13 @@ class SMBStrategy(FileTransferStrategy):
     # ---------------------------------------------------------------
 
     def _writeback_to_host(self) -> None:
-        """Copy read-write shares from the temp SMB dir back to their original host paths.
+        """Copy what the guest wrote in read-write shares back to their original host paths.
+
+        Only files the guest created or changed since staging are copied. The staged
+        copy also holds every host file that existed at setup (``mcp_gui.log``,
+        ``adare.log``, ``qemu_debug.log``, ...); the host keeps writing those during the
+        run, so copying the whole tree back would reset them to their setup-time
+        content (and mtime) and silently erase everything logged since.
 
         Clears ``_writeback_dirs`` after copying so that repeated calls
         (e.g. retrieve_artifacts then cleanup) are idempotent.
@@ -268,15 +277,20 @@ class SMBStrategy(FileTransferStrategy):
             if not smb_copy.exists():
                 log.debug(f"Writeback skipped for '{tag}': {smb_copy} does not exist")
                 continue
-            log.info(f"Writing back SMB share '{tag}': {smb_copy} -> {host_path}")
-            shutil.copytree(
-                smb_copy,
-                host_path,
-                dirs_exist_ok=True,
-                ignore=_ignore_host_generated_files,
-            )
+            staged = self._staged_states.get(tag, {})
+            changed = [rel for rel, state in _file_states(smb_copy).items() if staged.get(rel) != state]
+            log.info(f"Writing back SMB share '{tag}': {len(changed)} guest-written file(s) {smb_copy} -> {host_path}")
+            for rel in changed:
+                target = host_path / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(smb_copy / rel, target)
+            # Directories the guest created but left empty still belong to its output.
+            for directory in smb_copy.rglob('*'):
+                if directory.is_dir() and not directory.is_symlink():
+                    (host_path / directory.relative_to(smb_copy)).mkdir(parents=True, exist_ok=True)
 
         self._writeback_dirs.clear()
+        self._staged_states.clear()
 
     async def _mount_smb_linux(self, context: Any) -> None:
         """Mount QEMU SLIRP SMB share on Linux guest."""

@@ -431,6 +431,13 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- SMB file transfer no longer reverts host-written run files. The SMB share serves a
+  copy of the run directory taken at VM setup, and the writeback at retrieval copied
+  that whole copy back, resetting every file the host kept writing (`logs/mcp_gui.log`,
+  `qemu_debug.log`, ...) to its setup-time content and mtime: SMB runs (e.g. all T2F
+  arm64 runs) kept only the cv-server's first ~2 s of log, losing every OCR/CV call.
+  The writeback now copies only files the guest created or changed since staging
+  (replacing the `adare.log`-only exclusion).
 - On Windows, any adare command that printed a character the console encoding
   (cp1252) cannot represent crashed with `UnicodeEncodeError`; e.g. `adare db
   migrate` (run by `make install`) aborted on a migration's `✓`. The CLI now
