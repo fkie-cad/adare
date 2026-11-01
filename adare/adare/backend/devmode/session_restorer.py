@@ -7,7 +7,7 @@ is still running.
 """
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from adare.backend.devmode.session import DevModeSession, DevModeSnapshot
@@ -68,8 +68,8 @@ async def restore_infrastructure_context(
         # But we need to manually set the experiment_run_ulid for proper functioning
         # We use session_id directly as the experiment run ID (aligned with session.py)
         session.experiment_ctx.experiment_run_ulid = session.session_id
-        session.experiment_ctx.timestamp_start = datetime.now()
-        session.experiment_ctx.timestamp_before_vm_start = datetime.now()
+        session.experiment_ctx.timestamp_start = datetime.now(UTC)
+        session.experiment_ctx.timestamp_before_vm_start = datetime.now(UTC)
         session.experiment_ctx.adarevm = ADAREVM_DIR
         session.experiment_ctx.adarelib = ADARELIB_DIR
 
@@ -397,7 +397,7 @@ async def restore_application_context(
         # or just set current time if re-running)
         # Assuming caller tracks this, or we just set it to now if not available
         if not session.started_at:
-            session.started_at = datetime.now()
+            session.started_at = datetime.now(UTC)
 
         log.info(f"Successfully restored dev session application context {session.session_id}")
         return True

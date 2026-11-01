@@ -55,6 +55,17 @@ function buildRunsUrl(filter?: ListRunsFilter): string {
   return qs ? `${endpoints.runs}?${qs}` : endpoints.runs
 }
 
+/** Run statuses (StatusEnum names) of a run that has not finished yet. */
+const ACTIVE_RUN_STATUSES = new Set(['RUNNING', 'PENDING', 'PAUSE'])
+
+export function isActiveRun(run: Run): boolean {
+  return ACTIVE_RUN_STATUSES.has((run.status ?? '').toUpperCase())
+}
+
+/**
+ * Runs, newest first (the backend sorts by start time across projects).
+ * Polls so runs started from the CLI show up: fast while one is active, slower otherwise.
+ */
 export function useRuns(filter?: ListRunsFilter, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['runs', filter ?? {}],
@@ -63,6 +74,7 @@ export function useRuns(filter?: ListRunsFilter, options?: { enabled?: boolean }
       return data.data ?? []
     },
     enabled: options?.enabled ?? true,
+    refetchInterval: (query) => (query.state.data?.some(isActiveRun) ? 5_000 : 15_000),
   })
 }
 

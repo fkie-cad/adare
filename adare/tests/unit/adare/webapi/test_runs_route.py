@@ -11,6 +11,7 @@ Tests marked ``xfail(strict=True)`` encode known backend/frontend contract bugs:
 is fixed the test flips to XPASS and fails, forcing the marker to be removed.
 """
 
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -20,8 +21,11 @@ from fastapi.testclient import TestClient
 
 from adare.core.dto.show import RunRemoveRequest, RunRemoveResult
 from adare.core.result import Result
+from adare.database.api.experiment import ExperimentApi
+from adare.database.models.project_models import ExperimentRun
 from adare.webapi.routes.experiments import router as experiments_router
 from adare.webapi.routes.runs import _classify_artifact, router
+from adarelib.constants import StatusEnum
 
 from .seeded_projects import _age, seeded_fixture  # noqa: F401  (pytest fixture, registered as `seeded`)
 
@@ -142,6 +146,27 @@ def test_list_runs_filters_combine(client, seeded):
 
     assert set(rows) == {seeded.run_id}
     assert _rows_by_ulid(client, '?project=Alpha&experiment=exp&environment=other-env') == {}
+
+
+def _add_bare_run(project: Path, experiment_id: str, env_id: str, status: StatusEnum, start_time=None) -> str:
+    with ExperimentApi(project) as api:
+        run = ExperimentRun(experiment_id=experiment_id, environment_id=env_id, status=status, start_time=start_time)
+        api._session.add(run)
+        api._session.flush()
+        return run.id
+
+
+def test_list_runs_are_newest_first_across_projects(client, seeded):
+    """runs-list.tsx shows the latest (and still running) runs on top; projects are merged, not appended."""
+    running = _add_bare_run(seeded.beta, seeded.beta_exp_id, seeded.env_id, StatusEnum.RUNNING, datetime(2026, 3, 1))
+    # Still setting up: no start_time yet, so its ULID (minted now) dates it.
+    pending = _add_bare_run(seeded.alpha, seeded.exp_id, seeded.env_id, StatusEnum.PENDING)
+
+    body = client.get('/api/runs').json()
+
+    ulids = [row['ulid'] for row in body['data']]
+    assert ulids[:2] == [pending, running]
+    assert set(ulids[2:]) == {seeded.run_id, seeded.beta_run_id}
 
 
 def test_list_runs_database_failure_is_reported_in_the_envelope(client):

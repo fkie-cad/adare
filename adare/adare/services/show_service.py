@@ -7,8 +7,10 @@ that can be consumed by any frontend (CLI, Web UI, REST API).
 
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
+import ulid
 from sqlalchemy.exc import SQLAlchemyError
 
 from adare.config.database import get_project_database_location
@@ -33,6 +35,23 @@ from adare.services.environment_source import os_label, parse_env_source
 from adare.services.show_run_extras import find_run_project_path, load_run_extras, project_paths_by_name
 
 log = logging.getLogger(__name__)
+
+
+def _run_started_at(item: RunListItem) -> datetime:
+    """Sort key: the run's start time (naive UTC), else its ULID's creation time.
+
+    A run that is still setting up has no ``start_time`` yet; its ULID was minted when the run
+    began, so it still sorts with the newest runs instead of falling to either end.
+    """
+    started = item.start_time
+    if started is None:
+        try:
+            started = ulid.ULID.from_str(item.ulid).datetime
+        except ValueError:
+            return datetime.min
+    if started.tzinfo is not None:
+        started = started.astimezone(UTC).replace(tzinfo=None)
+    return started
 
 
 class ShowService:
@@ -127,6 +146,8 @@ class ShowService:
             if environment_filter:
                 items = [item for item in items if item.environment_name == environment_filter]
 
+            # Newest first across all projects (each project database is queried in turn).
+            items.sort(key=_run_started_at, reverse=True)
             return Result.ok(items)
 
         except FileNotFoundError as e:
