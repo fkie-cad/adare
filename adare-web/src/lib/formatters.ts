@@ -2,26 +2,39 @@
  * Pure utility formatters — no React, no side effects, never throw.
  */
 
+/** An ISO date-time without a zone designator (`Z` or `±hh:mm`), e.g. `2026-01-02T03:04:05.123`. */
+const NAIVE_ISO_DATETIME = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/
+
 /**
- * Parse an ISO-ish timestamp (string, number, Date, null, undefined) and
- * return a local "YYYY-MM-DD HH:mm" string, or "—" for anything invalid.
+ * Parse a backend timestamp (ISO string, epoch seconds/ms, Date) into a Date, or null if invalid.
+ *
+ * The backend stores times as naive UTC and sends them without a zone; `new Date()` would read
+ * such a string as local time, so it is read as UTC here.
  */
-export function formatDateTime(value: unknown): string {
-  if (value == null) return '—'
+export function parseTimestamp(value: unknown): Date | null {
   let d: Date
   if (value instanceof Date) {
     d = value
   } else if (typeof value === 'number') {
     // Heuristic: epoch-seconds have ~10 digits, epoch-ms ~13 digits
-    const ms = value < 1e12 ? value * 1000 : value
-    d = new Date(ms)
+    d = new Date(value < 1e12 ? value * 1000 : value)
   } else if (typeof value === 'string') {
-    if (value.trim() === '') return '—'
-    d = new Date(value)
+    const s = value.trim()
+    if (s === '') return null
+    d = new Date(NAIVE_ISO_DATETIME.test(s) ? `${s.replace(' ', 'T')}Z` : s)
   } else {
-    return '—'
+    return null
   }
-  if (isNaN(d.getTime())) return '—'
+  return isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * Parse an ISO-ish timestamp (string, number, Date, null, undefined) and
+ * return a local "YYYY-MM-DD HH:mm" string, or "—" for anything invalid.
+ */
+export function formatDateTime(value: unknown): string {
+  const d = parseTimestamp(value)
+  if (!d) return '—'
 
   const pad = (n: number) => String(n).padStart(2, '0')
   const year = d.getFullYear()
@@ -37,20 +50,8 @@ export function formatDateTime(value: unknown): string {
  * "just now", "3 days ago", or "—" for null/undefined/invalid input.
  */
 export function formatRelativeTime(value: unknown): string {
-  if (value == null) return '—'
-  let d: Date
-  if (value instanceof Date) {
-    d = value
-  } else if (typeof value === 'number') {
-    const ms = value < 1e12 ? value * 1000 : value
-    d = new Date(ms)
-  } else if (typeof value === 'string') {
-    if (value.trim() === '') return '—'
-    d = new Date(value)
-  } else {
-    return '—'
-  }
-  if (isNaN(d.getTime())) return '—'
+  const d = parseTimestamp(value)
+  if (!d) return '—'
 
   const diffMs = Date.now() - d.getTime()
   const diffSec = Math.round(diffMs / 1000)

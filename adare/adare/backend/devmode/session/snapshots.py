@@ -8,7 +8,7 @@ creating/restoring snapshots, soft/hard resets, and checkpoint management.
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import ulid
@@ -633,7 +633,7 @@ class DevModeSnapshotsMixin:
             disk_file_path=disk_file_path,
             snapshot_name=snapshot_name,
             variable_state=variable_state,
-            created_at=datetime.now(),
+            created_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with DevModeApi() as api:
@@ -647,7 +647,7 @@ class DevModeSnapshotsMixin:
         # Store snapshot metadata in memory
         snapshot = DevModeSnapshot(
             snapshot_name=snapshot_name,
-            created_at=datetime.now(),
+            created_at=datetime.now(UTC).replace(tzinfo=None),
             variable_state=variable_state,
             description=description,
             memory_file_path=memory_file_path,

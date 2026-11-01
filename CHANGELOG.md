@@ -431,6 +431,15 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Runs list (`/api/runs`, `adare runs list`, web Runs page) is newest first across all
+  projects instead of project by project in database order, so running runs are on top.
+  The web Runs page sorts by any column (click a header), counts active runs, and
+  refreshes itself (every 5 s while a run is active, else 15 s) so CLI-started runs appear.
+- Times in the web UI were shown shifted by the UTC offset: the backend stores naive UTC and
+  the browser read the zone-less strings as local time; adare-web now reads them as UTC.
+  Dev-mode sessions, checkpoints and restored dev-session runs wrote local time instead of
+  UTC (which also skewed stale-session expiry); they now write UTC like everything else.
+  Rows written earlier by dev mode keep their local time.
 - Two VMs starting at the same moment no longer fail with "UNIQUE constraint failed:
   vm_instance.websocket_port". The loser of the port race now moves on to the next
   free port; its retry handler used to crash on a missing `session` attribute. A
