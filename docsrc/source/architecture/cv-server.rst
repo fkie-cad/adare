@@ -4,7 +4,7 @@ CV Server
 
 The CV server (``adare-cv-server``) is a standalone process that provides
 computer vision capabilities for ADARE experiments. It runs on the **host
-machine**, not inside the VM, keeping heavy OpenCV and PaddleOCR
+machine**, not inside the VM, keeping heavy OpenCV and OCR
 dependencies out of the guest.
 
 .. contents:: On this page
@@ -25,11 +25,13 @@ subprocess before experiment execution. If a server is already running on
 the configured port, the manager attaches to it rather than starting a
 duplicate.
 
-Three MCP tools are registered:
+Four MCP tools are registered:
 
 - ``find_icon`` -- locate an icon image within a screenshot.
 - ``find_text`` -- find a text string within a screenshot.
 - ``get_all_text`` -- extract all visible text from a screenshot.
+- ``get_engine_info`` -- describe the OCR profile (engine, models + sha256,
+  parameters); recorded per run as ``ocr.yml``.
 
 
 Detection Methods
@@ -95,9 +97,79 @@ out transparent pixels before comparison.
 Text Detection
 ==============
 
-Text detection uses PaddleOCR for optical character recognition. The
-``OCRProcessor`` (``adare_cv_server.ocr_processing``) runs PaddleOCR in a
-thread pool to avoid blocking the async server loop.
+OCR decides where ADARE clicks, so the OCR engine is part of an experiment's
+reproducibility: engine, model files and parameters form a pinned **profile**,
+and every run records the profile that served it.
+
+.. list-table:: OCR profiles
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Profile
+     - Engine
+   * - ``rapidocr-v5m-latin`` (default)
+     - RapidOCR on onnxruntime (CPU on Linux, Windows and macOS): PP-OCRv5
+       mobile detection + mobile *Latin* recognition (umlauts and accents),
+       with leading-glyph tolerance. ``rapidocr-v5m-en`` uses the English
+       recognizer instead (``--ocr-lang en``).
+   * - ``paddle-legacy``
+     - The previous PaddleOCR path (PP-OCRv5 server detection + English mobile
+       recognition), byte-for-byte unchanged. Needs the ``paddle`` extra of
+       ``adare-cv-server``; kept until existing experiments are A/B-validated.
+
+Measured on 60 real 1080p screenshots (M4 Max, CPU): RapidOCR takes
+0.2-0.3 s per frame with ~1 GB peak memory, PaddleOCR 11.3 s and 6-21 GB;
+word recall 97.4% vs 95.1%; exact lines on rendered German UI text 92% vs 76%.
+
+**Selection.** The engine is chosen once per server process:
+``adare-cv-server --ocr-engine {rapidocr,paddle} --ocr-lang {latin,en}``
+(environment fallbacks ``ADARE_OCR_ENGINE`` / ``ADARE_OCR_LANG``). The client
+always passes both explicitly: the global default comes from
+``ADARE_OCR_ENGINE`` / ``ADARE_OCR_LANG`` (or ``~/.adare/config.json``), and an
+experiment can pin its own in ``metadata.yml``:
+
+.. code-block:: yaml
+
+   environments: [ubuntu2404]
+   ocr:
+     engine: paddle   # keep this experiment on the legacy profile
+     # lang: latin    # rapidocr only: latin (default) or en
+
+``ADARE_OCR_THREADS`` sets the onnxruntime threads per server (default 4); it
+changes speed only, not results.
+
+**Model pinning.** RapidOCR model files are pinned by sha256
+(``OCRProfiles`` in ``adare_cv_server.constants``). On first use they are
+downloaded to RapidOCR's model directory (or ``ADARE_OCR_MODEL_DIR``) and
+verified; an existing file with another hash is a hard error, never silently
+re-downloaded. OpenCV is pinned too (workspace ``constraint-dependencies``):
+the ``cv2`` version alone changed RapidOCR output on 10 of 60 benchmark frames.
+
+**Provenance.** After the server starts, the client calls the
+``get_engine_info`` tool and writes ``<run>/ocr.yml`` (``ocr-<machine>.yml``
+per machine of a multi-machine run): profile, engine and package versions,
+model names + sha256, parameters, language, glyph tolerance and the
+cv-server version. It also loads the models, so a model problem surfaces at
+run start rather than at the first click.
+
+**Per-frame cache.** ``OCRProcessor`` (``adare_cv_server.ocr_processing``)
+keeps an LRU of 64 results keyed by sha256 of the screenshot bytes plus the
+profile fingerprint, and identical concurrent requests share one computation.
+The client OCRs the same frame repeatedly (multi-leaf ``wait_until``,
+``when`` conditions, ``ClosestTo`` reference + target, failure evidence,
+polling an unchanged screen); a hit returns exactly what a fresh run would.
+OCR itself runs on a single-worker thread pool, off the async server loop.
+
+**Leading-glyph tolerance** (rapidocr profiles only). A line also matches
+when one leading run of one or two non-word glyphs is stripped
+(``>Bookmarks Menu``, ``• Other``, ``★All``): the Latin model reads tree
+arrows as ``>``. The reported text stays the line as read. It is off for
+``paddle-legacy``.
+
+**Known differences** between the profiles: about one in six anchored-line
+queries can resolve differently; RapidOCR's mobile detector merges two words
+up to ~30 px apart into one line (PaddleOCR splits from 30 px), which moves
+the click centre of a substring query to the middle of the merged line.
 
 The ``find_text`` tool supports four matching modes:
 
@@ -132,7 +204,7 @@ All CV processing happens on the host. The workflow is:
 5. The host uses the coordinates for subsequent GUI actions (clicking a
    found icon or text element).
 
-This design keeps the VM image clean -- no OpenCV, PaddleOCR, or large
+This design keeps the VM image clean -- no OpenCV, OCR engine, or large
 model files are needed inside the guest, preserving forensic integrity.
 
 

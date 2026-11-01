@@ -4,6 +4,7 @@ import logging
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import jinja2
 
@@ -42,6 +43,13 @@ def _make_unique_run_dir(base: Path) -> Path:
             candidate = base.with_name(f'{base.name}_{n}')
 
 
+def ocr_info_file(run_directory: Path, machine_key: str | None = None) -> Path:
+    """OCR provenance record of a run (``ocr.yml``; ``ocr-<machine>.yml`` per machine of a
+    multi-machine run). A function rather than only an attribute because the dev-session
+    restorer rebuilds ExperimentRunDirectory via ``__new__`` without ``_set_paths``."""
+    return run_directory / ('ocr.yml' if machine_key is None else f'ocr-{machine_key}.yml')
+
+
 class ExperimentRunDirectory(Directory):
     log_directory: Path
     adare_log_file: Path
@@ -56,6 +64,8 @@ class ExperimentRunDirectory(Directory):
         self.adare_log_file = self.log_directory / 'adare.log'
         self.adarevm_log_file = self.log_directory / 'adarevm.log'
         self.mcp_gui_log_file = self.log_directory / 'mcp_gui.log'
+        # OCR provenance: the cv-server's engine, models (sha256) and parameters.
+        self.ocr_info_file = ocr_info_file(self.path)
         self.experiment_debug_log_file = self.log_directory / 'experiment_debug.log'
         self.serial_console_log_file = self.log_directory / 'serial_console.log'
         self.qemu_debug_log_file = self.log_directory / 'qemu_debug.log'
@@ -137,6 +147,8 @@ class DiffRunDirectory(Directory):
         self.log_directory = self.path / 'logs'
         self.adare_log_file = self.log_directory / 'adare.log'
         self.mcp_gui_log_file = self.log_directory / 'mcp_gui.log'
+        # OCR provenance: the cv-server's engine, models (sha256) and parameters.
+        self.ocr_info_file = ocr_info_file(self.path)
         self.reporting_directory = self.path / 'reporting'
         self.screenshots_directory = self.reporting_directory / 'screenshots'
         self.tmp_directory = self.path / '.tmp'
@@ -294,10 +306,11 @@ class ExperimentDirectory(Directory):
 
     def save_metadata(self, metadata: ExperimentMetadata):
         """Save metadata to the metadata.yml file."""
+        import attrs
         import yaml
 
         # Convert ExperimentMetadata to dictionary
-        metadata_dict = {
+        metadata_dict: dict[str, Any] = {
             'environments': metadata.environments,
             'description': metadata.description,
         }
@@ -313,6 +326,8 @@ class ExperimentDirectory(Directory):
             metadata_dict['usb'] = metadata.usb
         if metadata.disk:
             metadata_dict['disk'] = metadata.disk
+        if metadata.ocr:
+            metadata_dict['ocr'] = {k: v for k, v in attrs.asdict(metadata.ocr).items() if v is not None}
 
         try:
             with open(self.metadatafile, 'w') as f:

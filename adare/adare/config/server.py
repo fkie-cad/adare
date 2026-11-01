@@ -40,6 +40,15 @@ PUBLISH_RUN_URL = f'{WEBSERVER_URL}api/run/publish/'
 
 TIMEOUT_SECONDS = 10
 
+# ── OCR engine of the cv-server ──────────────────────────────────────────────
+# Default profile for new cv-servers: rapidocr + latin (pinned RapidOCR, PP-OCRv5
+# mobile). An experiment can pin its own in metadata.yml (`ocr: {engine, lang}`),
+# e.g. `engine: paddle` for the legacy PaddleOCR profile. ADARE_OCR_THREADS sets the
+# onnxruntime intra-op threads per cv-server (cv-server default: 4).
+OCR_ENGINE = _cfg('ADARE_OCR_ENGINE', 'rapidocr')
+OCR_LANG = _cfg('ADARE_OCR_LANG', 'latin')
+OCR_THREADS = _cfg('ADARE_OCR_THREADS', None)
+
 # ── GUI-automation vision-LLM (vLLM) configuration ───────────────────────────
 # A grounding-capable vision model served over an OpenAI-compatible endpoint
 # (Qwen3-VL / Qwen2-VL / UI-TARS / Molmo-class). Used ONLY during a GUI-automation

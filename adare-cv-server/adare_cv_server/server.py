@@ -9,7 +9,7 @@ import click
 import cv2
 from fastmcp import FastMCP
 
-from .constants import DEFAULT_HOST, DEFAULT_MAX_RESULTS, DEFAULT_PORT, MCP_PATH, CVConstants
+from .constants import DEFAULT_HOST, DEFAULT_MAX_RESULTS, DEFAULT_PORT, MCP_PATH, CVConstants, OCRProfiles
 from .exceptions import FeatureMatchingError, ImageDecodingError, OCRProcessingError
 from .feature_matching import CannyEdgeMatcher, MultiScaleTemplateMatcher, ORBMatcher, SIFTMatcher, TemplateMatcher
 from .image_processing import (
@@ -19,7 +19,8 @@ from .image_processing import (
     non_maximum_suppression,
     shared_decodes,
 )
-from .ocr_processing import TextDetector
+from .ocr_engines import configure_engine, get_engine, package_version
+from .ocr_processing import _OCR_EXECUTOR, TextDetector
 
 log = logging.getLogger(__name__)
 
@@ -616,6 +617,28 @@ async def find_text(
         return {"error": f"Text search failed: {str(e)}", "locations": []}
 
 
+@mcp.tool()
+async def get_engine_info() -> dict[str, Any]:
+    """Describe the OCR engine this server runs: profile, engine and package versions,
+    model names + sha256, parameters, language, leading-glyph tolerance, server version.
+
+    Loads (and verifies) the pinned models first, so a model problem surfaces here
+    rather than at the first click. Clients record the result per run (ocr.yml).
+    """
+    engine = get_engine()
+    try:
+        await asyncio.get_running_loop().run_in_executor(_OCR_EXECUTOR, engine.load)
+    except OCRProcessingError as e:
+        log.error(f"OCR engine failed to load: {e}")
+        return {"error": f"OCR engine failed to load: {e}", **engine.fingerprint()}
+    info = engine.fingerprint()
+    info["versions"] = {
+        **info.get("versions", {}),
+        "adare-cv-server": package_version("adare-cv-server"),
+    }
+    return info
+
+
 def create_server():
     """Create the FastMCP server instance."""
     return mcp
@@ -631,7 +654,27 @@ def create_server():
 @click.option(
     '--exit-with-parent', is_flag=True, help='Exit when the process that started the server is gone (no orphans).'
 )
-def main(port: int, host: str, debug: bool, debug_output_dir: str = None, exit_with_parent: bool = False) -> None:
+@click.option(
+    '--ocr-engine',
+    type=click.Choice(OCRProfiles.ENGINES),
+    default=None,
+    help=f'OCR engine (default: $ADARE_OCR_ENGINE or {OCRProfiles.DEFAULT_ENGINE}).',
+)
+@click.option(
+    '--ocr-lang',
+    type=click.Choice(OCRProfiles.LANGS),
+    default=None,
+    help=f'OCR recognition language for rapidocr (default: $ADARE_OCR_LANG or {OCRProfiles.DEFAULT_LANG}).',
+)
+def main(
+    port: int,
+    host: str,
+    debug: bool,
+    debug_output_dir: str = None,
+    exit_with_parent: bool = False,
+    ocr_engine: str | None = None,
+    ocr_lang: str | None = None,
+) -> None:
     """Start the Adare CV server."""
 
     # Configure logging
@@ -639,6 +682,7 @@ def main(port: int, host: str, debug: bool, debug_output_dir: str = None, exit_w
     logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     log.info(f"Starting Adare CV server on {host}:{port}")
+    configure_engine(ocr_engine, ocr_lang)
 
     if exit_with_parent:
         from .parent_watch import exit_when_parent_dies
