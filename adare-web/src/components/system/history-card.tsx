@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeSeriesChart } from '@/components/system/time-series-chart'
 import { useSystemHistory } from '@/api/hooks/use-system'
-import { formatBytes, formatPercent } from '@/lib/formatters'
+import { formatBytes, formatPercent, parseTimestamp } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 
 const RANGES = [
@@ -30,7 +30,7 @@ export function HistoryCard() {
   const chart = useMemo(() => {
     const points = data ?? []
     return {
-      times: points.map((p) => new Date(p.taken_at)),
+      times: points.map((p) => parseTimestamp(p.taken_at) ?? new Date(NaN)),
       cpu: points.map((p) => p.cpu_percent),
       memUsed: points.map((p) => p.memory_used_bytes),
       vmRss: points.map((p) => p.vm_rss_bytes),

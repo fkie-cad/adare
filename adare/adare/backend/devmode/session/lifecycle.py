@@ -6,7 +6,7 @@ starting the VM session, shutting down, and full removal/cleanup.
 """
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from adare.backend.experiment.exceptions import ExperimentException
@@ -227,7 +227,7 @@ class DevModeLifecycleMixin:
             except (DatabaseError, LoggedErrorException) as e:
                 log.error(f"Failed to retrieve VM instance ID: {e}")
 
-            self.started_at = datetime.now()
+            self.started_at = datetime.now(UTC)
             self.is_running = True
             log.info(f"Dev mode session {self.session_id} started successfully")
             return Result.ok(None)

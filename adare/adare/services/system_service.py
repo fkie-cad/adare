@@ -6,7 +6,7 @@ the CLI's JSON output and Claude reading `adare system ...` see the same shape.
 """
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import psutil
@@ -81,7 +81,7 @@ def _resources_dict(host: HostSnapshot) -> dict:
                 'name': vm.name,
                 'rss_bytes': vm.rss_bytes,
                 'cpu_percent': vm.cpu_percent,
-                'started_at': datetime.fromtimestamp(vm.started_at).isoformat(),
+                'started_at': datetime.fromtimestamp(vm.started_at, UTC).isoformat(),
                 'memory_mb': vm.memory_mb,
                 'cpus': vm.cpus,
                 **instances.get(vm.name, {}),
