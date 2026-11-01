@@ -6,6 +6,27 @@ whole workflow: projects, environments, experiments and their runs, the VM
 workbench (live VM view, single actions, checkpoints, the vision agent), and the
 **System** page with host resources and run capacity (:doc:`host-resources`).
 
+Live: running VMs
+-----------------
+
+*VMs → Live* lists the VM instances that are running right now (experiment runs and
+dev sessions) and shows the selected one in three layouts, *Both*, *Display* and
+*Logs*:
+
+Display
+   The VM's screen, view only: no keyboard or mouse input reaches the guest, so
+   watching never changes what a run records. *Pop out* opens it in its own tab.
+
+Logs
+   Follows the instance's log files as they are written, one tab per file: the
+   ``logs/*.log`` of the run holding the instance (``adare.log``, the guest agent's
+   ``adarevm.log``, ``serial_console.log``, ...) and the libvirt domain log when it is
+   readable. Tabs appear as the files are created. *Filter* shows matching lines only;
+   scrolling up stops following the end, scrolling back down resumes it.
+
+A running instance on a VM's page has a *Live* button that opens it here; the URL
+(``/live?instance=<id>&mode=logs``) can be bookmarked.
+
 Terminal and Claude
 -------------------
 

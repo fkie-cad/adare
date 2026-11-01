@@ -342,6 +342,7 @@ class VMService:
                             websocket_port=instance.websocket_port,
                             hypervisor=hypervisor,
                             vm_id=instance.vm_id,
+                            current_experiment_run_id=instance.current_experiment_run_id,
                         )
                     )
 
