@@ -83,8 +83,19 @@ def list_experiments(tags: str | None = Query(None, description="Comma-separated
 
 @router.get("/{name}")
 def get_experiment(name: str):
-    """Get experiment details by name."""
-    result = _api().show.get_experiment(name=name)
+    """Get experiment details by ``Project.experiment`` dotnotation or by short name.
+
+    Links built from run rows (Runs list, Environment page) carry the dotnotation;
+    the Experiments list links with the short name. Short names are unique only per
+    project, so the dotnotation is the precise form and is tried first. A dotted
+    value that matches no dotnotation still falls back to a short-name lookup.
+    """
+    show = _api().show
+    if "." in name:
+        result = show.get_experiment(dotnotation=name)
+        if result.success:
+            return result_to_response(result)
+    result = show.get_experiment(name=name)
     return result_to_response(result)
 
 

@@ -431,6 +431,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Web UI: experiment pages opened from the Runs list or an Environment page showed
+  `["experiment", …] data is undefined`. Those links pass the `Project.experiment`
+  dotnotation, which `GET /api/experiments/{name}` now resolves (short names still
+  work); a missing experiment now shows "not found" instead. The page also scopes its
+  runs to the experiment's project and enables Run from the detail payload's
+  `environments`.
 - SMB file transfer no longer reverts host-written run files. The SMB share serves a
   copy of the run directory taken at VM setup, and the writeback at retrieval copied
   that whole copy back, resetting every file the host kept writing (`logs/mcp_gui.log`,
