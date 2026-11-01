@@ -44,6 +44,11 @@ export const endpoints = {
   vmInstanceUsage: '/vm-instances/usage',
   vmInstance: (id: string) => `/vm-instances/${id}`,
   vmInstanceSnapshots: (id: string) => `/vm-instances/${id}/snapshots`,
+  // Log files of a running instance (its run's logs/*.log + the libvirt domain log),
+  // and one log read from a byte offset for live tailing.
+  vmInstanceLogs: (id: string) => `/vm-instances/${id}/logs`,
+  vmInstanceLog: (id: string, key: string) =>
+    `/vm-instances/${id}/logs/${key.split('/').map(encodeURIComponent).join('/')}`,
   vmInstanceSnapshotDelete: (id: string, name: string) =>
     `/vm-instances/${id}/snapshots/${encodeURIComponent(name)}`,
 

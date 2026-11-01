@@ -13,6 +13,7 @@ import {
   Palette,
   Gauge,
   SquareTerminal,
+  Activity,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -38,7 +39,10 @@ const navSections = [
   },
   {
     label: 'VMs',
-    items: [{ to: '/vms', label: 'VMs', icon: HardDrive }],
+    items: [
+      { to: '/vms', label: 'VMs', icon: HardDrive },
+      { to: '/live', label: 'Live', icon: Activity },
+    ],
   },
   {
     label: 'Develop',

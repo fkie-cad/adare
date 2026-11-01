@@ -151,8 +151,17 @@ def test_list_row_shape(client, ubuntu):
             'websocket_port': 5901,
             'hypervisor': 'qemu',
             'vm_id': ubuntu,
+            'current_experiment_run_id': None,
         }
     ]
+
+
+def test_list_row_carries_the_run_live_links_to(client, ubuntu):
+    _add_instance(ubuntu, 'ubuntu2404_run_1', status='active', port=5901, run_id='01RUNRUNRUNRUNRUNRUNRUNRUN')
+
+    (row,) = client.get('/api/vm-instances').json()['data']
+
+    assert row['current_experiment_run_id'] == '01RUNRUNRUNRUNRUNRUNRUNRUN'
 
 
 def test_list_filters_by_the_vm_id_vm_detail_passes(client, ubuntu, debian):
@@ -574,3 +583,136 @@ def test_delete_snapshot_of_a_virtualbox_instance_without_vboxmanage_is_an_error
     error = _error(response.json())
     assert error['code']
     assert 'VBoxManage' in error['message'] or 'VirtualBox' in error['message']
+
+
+# ---- GET /api/vm-instances/{id}/logs[/{source}] (live.tsx log tail) ----
+
+RUN_ID = '01RUNRUNRUNRUNRUNRUNRUNRUN'
+
+
+@pytest.fixture
+def run_logs(tmp_path):
+    """A run directory with a logs/ folder the instance's run resolves to; no libvirt log."""
+    run_dir = tmp_path / 'run'
+    (run_dir / 'logs').mkdir(parents=True)
+    run_dirs = {RUN_ID: run_dir}
+    with (
+        patch('adare.webapi.routes.runs._resolve_run_dir', side_effect=run_dirs.get),
+        patch(
+            'adare.webapi.routes.vm_instances._libvirt_log_candidates',
+            return_value=[tmp_path / 'libvirt' / 'domain.log'],
+        ),
+    ):
+        yield run_dir / 'logs'
+
+
+@pytest.fixture
+def running(client, ubuntu, run_logs):
+    return _add_instance(ubuntu, 'ubuntu2404_run_1', status='active', port=5901, run_id=RUN_ID)
+
+
+def test_logs_lists_the_run_logs(client, running, run_logs):
+    (run_logs / 'adare.log').write_text('hello\n')
+    (run_logs / 'adarevm.log').write_text('')
+    (run_logs / 'notes.txt').write_text('not a log')
+
+    body = client.get(f'/api/vm-instances/{running}/logs').json()
+
+    assert body == {
+        'success': True,
+        'data': [
+            {'key': 'run/adare.log', 'name': 'adare.log', 'size': 6},
+            {'key': 'run/adarevm.log', 'name': 'adarevm.log', 'size': 0},
+        ],
+    }
+
+
+def test_logs_include_a_readable_libvirt_log(client, running, tmp_path):
+    (tmp_path / 'libvirt').mkdir()
+    (tmp_path / 'libvirt' / 'domain.log').write_text('qemu started\n')
+
+    keys = [s['key'] for s in client.get(f'/api/vm-instances/{running}/logs').json()['data']]
+
+    assert keys == ['libvirt']
+
+
+def test_logs_of_an_instance_without_a_run_are_empty(client, ubuntu, run_logs):
+    instance_id = _add_instance(ubuntu, 'ubuntu2404_run_2', status='active', port=5902)
+
+    assert client.get(f'/api/vm-instances/{instance_id}/logs').json() == {'success': True, 'data': []}
+
+
+def test_logs_of_an_unknown_instance_are_not_found(client, run_logs):
+    assert client.get(f'/api/vm-instances/{UNKNOWN_ID}/logs').status_code == 404
+
+
+def test_log_read_without_offset_returns_the_whole_small_file(client, running, run_logs):
+    (run_logs / 'adare.log').write_text('one\ntwo\n')
+
+    data = client.get(f'/api/vm-instances/{running}/logs/run/adare.log').json()['data']
+
+    assert data == {'text': 'one\ntwo\n', 'offset': 0, 'next_offset': 8, 'size': 8, 'reset': False}
+
+
+def test_log_read_from_offset_returns_only_what_was_appended(client, running, run_logs):
+    log = run_logs / 'adare.log'
+    log.write_text('one\n')
+    first = client.get(f'/api/vm-instances/{running}/logs/run/adare.log').json()['data']
+    with log.open('a') as fh:
+        fh.write('two\n')
+
+    data = client.get(
+        f'/api/vm-instances/{running}/logs/run/adare.log', params={'offset': first['next_offset']}
+    ).json()['data']
+
+    assert data['text'] == 'two\n'
+    assert data['next_offset'] == 8
+    assert data['reset'] is False
+
+
+def test_log_read_at_the_end_returns_nothing(client, running, run_logs):
+    (run_logs / 'adare.log').write_text('one\n')
+
+    data = client.get(f'/api/vm-instances/{running}/logs/run/adare.log', params={'offset': 4}).json()['data']
+
+    assert data['text'] == ''
+    assert data['next_offset'] == 4
+
+
+def test_log_read_past_a_truncated_file_resets(client, running, run_logs):
+    (run_logs / 'adare.log').write_text('new\n')
+
+    data = client.get(f'/api/vm-instances/{running}/logs/run/adare.log', params={'offset': 100}).json()['data']
+
+    assert data == {'text': 'new\n', 'offset': 0, 'next_offset': 4, 'size': 4, 'reset': True}
+
+
+def test_log_tail_of_a_big_file_starts_at_a_line_boundary(client, running, run_logs):
+    from adare.webapi.routes.vm_instances import _LOG_TAIL_BYTES
+
+    line = b'x' * 99 + b'\n'
+    (run_logs / 'adare.log').write_bytes(line * (2 * _LOG_TAIL_BYTES // len(line)))
+
+    data = client.get(f'/api/vm-instances/{running}/logs/run/adare.log').json()['data']
+
+    assert data['next_offset'] == data['size']
+    assert len(data['text']) <= _LOG_TAIL_BYTES
+    assert data['text'].startswith('x' * 99 + '\n')
+    assert data['offset'] % len(line) == 0
+
+
+def test_log_chunk_short_of_the_end_stops_at_a_newline(client, running, run_logs):
+    with patch('adare.webapi.routes.vm_instances._LOG_CHUNK_MAX_BYTES', 10):
+        (run_logs / 'adare.log').write_text('abcd\nefgh\nijkl\n')
+
+        data = client.get(f'/api/vm-instances/{running}/logs/run/adare.log', params={'offset': 0}).json()['data']
+
+    assert data['text'] == 'abcd\nefgh\n'
+    assert data['next_offset'] == 10
+
+
+def test_log_read_of_an_unlisted_path_is_not_found(client, running, run_logs):
+    (run_logs / 'adare.log').write_text('x\n')
+
+    assert client.get(f'/api/vm-instances/{running}/logs/run/../../etc/passwd').status_code == 404
+    assert client.get(f'/api/vm-instances/{running}/logs/run/missing.log').status_code == 404

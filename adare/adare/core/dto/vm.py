@@ -128,6 +128,7 @@ class VmInstanceListItem:
     websocket_port: int | None
     hypervisor: str = "virtualbox"
     vm_id: str | None = None  # the VM (image) this is an instance of
+    current_experiment_run_id: str | None = None  # the run (ULID) holding this instance, if any
 
 
 @dataclass
