@@ -181,6 +181,35 @@ class VMGuestAgentWaitStage(Stage):
 
 @register_stage
 @attrs.define
+class VMDisplayWaitStage(Stage):
+    name: ClassVar[str] = 'vm_display_wait'
+    msg: ClassVar[str] = 'Waiting for the guest desktop'
+    description: ClassVar[str] = 'Host-side backend: waiting until the guest screen has settled (no guest agent)'
+    parent: ClassVar[str] = 'vm_setup'
+
+
+@register_stage
+@attrs.define
+class HostsideStagingStage(Stage):
+    name: ClassVar[str] = 'hostside_staging'
+    msg: ClassVar[str] = 'Staging offline file operations'
+    description: ClassVar[str] = 'Host-side backend: applying file-effect commands to the run overlay before first boot'
+    parent: ClassVar[str] = 'vm_setup'
+    collapse: ClassVar[bool] = True
+
+
+@register_stage
+@attrs.define
+class HostsideQuiesceStage(Stage):
+    name: ClassVar[str] = 'hostside_quiesce'
+    msg: ClassVar[str] = 'Quiescing the guest'
+    description: ClassVar[str] = 'Host-side backend: clean shutdown so the disk image can be read consistently'
+    parent: ClassVar[str | None] = None
+    collapse: ClassVar[bool] = True
+
+
+@register_stage
+@attrs.define
 class VMCreateStage(Stage):
     name: ClassVar[str] = 'vm_create'
     msg: ClassVar[str] = 'Creating Virtual Machine'

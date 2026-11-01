@@ -620,6 +620,7 @@ class TestLoader:
             # Structure the test using cattrs
             import cattrs
 
+            _register_primitive_union_hook()
             test_instance = cattrs.structure(resolved_test, test_class)
             # The placeholder metadata (!re, !timestamp) travels as `_VARIABLE_METADATA`, which
             # cattrs does not map onto `variable_metadata`; set it as the agent does.
@@ -634,6 +635,36 @@ class TestLoader:
         except (TypeError, KeyError, AttributeError) as e:
             log.error(f"Test Loader: Failed to structure test '{test_name}': {e}", exc_info=True)
             raise ValueError(f"Failed to structure test: {e}") from e
+
+
+_PRIMITIVE_UNION_HOOK = False
+
+
+def _register_primitive_union_hook() -> None:
+    """Let cattrs structure ``str | int | float`` style parameters (passed through unchanged).
+
+    Test functions declare e.g. ``expected_time: str | int | float``. cattrs refuses such unions without
+    a hook, so a test using one (``standard.file_timestamps``) could not be structured for host
+    execution, while the guest agent structures it. The value is already a plain YAML scalar.
+    """
+    global _PRIMITIVE_UNION_HOOK
+    if _PRIMITIVE_UNION_HOOK:
+        return
+    import types
+    import typing
+
+    import cattrs
+
+    scalars = (str, int, float, bool, type(None))
+
+    def _is_scalar_union(t) -> bool:
+        if typing.get_origin(t) not in (typing.Union, types.UnionType):
+            return False
+        args = typing.get_args(t)
+        return bool(args) and all(a in scalars for a in args)
+
+    cattrs.register_structure_hook_func(_is_scalar_union, lambda value, _type: value)
+    _PRIMITIVE_UNION_HOOK = True
 
 
 def _attach_guest_utc_offset(metadata: dict[str, Any], runtime_execution_context: dict[str, Any]) -> None:

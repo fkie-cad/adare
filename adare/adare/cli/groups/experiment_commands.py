@@ -93,6 +93,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         type=click.Choice(['auto', 'agent', 'host']),
         help='Test execution mode: auto (default), agent (WebSocket), or host (QGA for QEMU only)',
     )
+    @click.option(
+        '--backend',
+        type=click.Choice(['agent', 'hostside']),
+        help='Guest backend: agent (in-guest adarevm, default) or hostside (agent-free: QMP GUI, offline-image tests, '
+        'qemufile step markers; QEMU Linux guests)',
+    )
     @click.option('--diff/--no-diff', default=None, help='Enable/disable filesystem diff (overrides playbook setting)')
     @click.option(
         '--diff-mode',
@@ -135,6 +141,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         vm_cpus,
         gui_mode,
         test_mode,
+        backend,
         diff,
         diff_mode,
         export_disk_image,
@@ -173,6 +180,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             vm_cpus=vm_cpus,
             gui_mode=gui_mode,
             test_mode=test_mode,
+            backend=backend,
             diff=diff,
             diff_mode=diff_mode,
             export_disk_image=export_disk_image,

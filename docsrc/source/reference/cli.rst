@@ -246,6 +246,7 @@ mode alike) compare the playbook's hash with the loaded one:
     * ``-s, --preserve-snapshot`` - VirtualBox: snapshot the final VM state (QEMU runs are discarded; use ``--export-disk-image``)
     * ``--vm-memory INTEGER``, ``--vm-cpus INTEGER`` - VM resources
     * ``--gui-mode [auto|agent|host]``, ``--test-mode [auto|agent|host]`` - Run GUI actions / tests through the guest agent or from the host (QMP/QGA, QEMU only)
+    * ``--backend [agent|hostside]`` - Guest backend: ``agent`` (default, in-guest ``adarevm``) or ``hostside`` (no process of ours in the guest; QEMU Linux guests; see :doc:`/guide/hostside-backend`). Also ``ADARE_BACKEND`` and the playbook setting ``settings.backend``
     * ``--diff/--no-diff``, ``--diff-mode [auto|guest|host]`` - Filesystem diff (overrides the playbook setting)
     * ``--export-disk-image``, ``--capture-pcap``, ``--export-memory-dump`` - Forensic artifacts (overrides the playbook setting)
     * ``--no-runlog`` - Do not save the adare log to the run directory

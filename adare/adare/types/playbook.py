@@ -52,6 +52,9 @@ class Settings:
         False  # Live-dump guest RAM via QMP dump-guest-memory (artifacts/memory/), e.g. for Volatility ingestion
     )
     clock_log: bool = True  # Sample the guest clock around every action into clock.jsonl (offset, jumps, timezone)
+    backend: str = (
+        'agent'  # 'agent' (in-guest adarevm) or 'hostside' (agent-free); CLI --backend / ADARE_BACKEND override
+    )
 
 
 @attrs.define
