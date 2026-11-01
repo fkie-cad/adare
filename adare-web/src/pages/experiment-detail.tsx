@@ -108,13 +108,21 @@ function RunExperimentDialog({
 }
 
 export default function ExperimentDetailPage() {
-  const { name } = useParams({ from: '/experiments/$name' })
-  const experimentQuery = useExperiment(name)
-  const runsQuery = useRuns({ experiment: name })
+  // The route param is either a short name (Experiments list) or a
+  // `Project.experiment` dotnotation (links built from run rows). The backend
+  // resolves both; everything after the lookup uses the resolved experiment's
+  // own short name and project, which is what the run/develop endpoints expect.
+  const { name: routeName } = useParams({ from: '/experiments/$name' })
+  const experimentQuery = useExperiment(routeName)
+  const exp = experimentQuery.data
+  const name = exp?.name ?? routeName
+  // Short names repeat across projects, so scope the runs to this project.
+  const runsQuery = useRuns({ project: exp?.project, experiment: exp?.name }, { enabled: !!exp })
   const [runOpen, setRunOpen] = useState(false)
 
-  const exp = experimentQuery.data
-  const envNames: string[] = exp?.environment_names ?? []
+  // The detail payload carries `environments`; the list payload `environment_names`.
+  const envNames: string[] =
+    exp?.environment_names ?? (exp?.environments as string[] | undefined) ?? []
   const tags: string[] = Array.isArray(exp?.tags) ? exp.tags : []
   const projectPath = projectPathOf(exp)
   const claude = useLaunchTerminal()
@@ -217,7 +225,7 @@ export default function ExperimentDetailPage() {
         </CardHeader>
         <CardContent>
           <AsyncBoundary
-            isPending={runsQuery.isPending}
+            isPending={experimentQuery.isPending || (!!exp && runsQuery.isPending)}
             isError={runsQuery.isError}
             error={runsQuery.error}
             onRetry={() => runsQuery.refetch()}
