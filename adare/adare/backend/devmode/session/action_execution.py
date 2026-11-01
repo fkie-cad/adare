@@ -17,6 +17,7 @@ from adare.backend.experiment.exceptions import ExperimentException
 from adare.backend.experiment.mcp_server_manager import (
     MCPServerManager,
     find_free_cv_port,
+    resolve_ocr_settings,
     save_cv_state,
 )
 from adare.backend.experiment.websocket_client import WebSocketTimeoutError
@@ -286,7 +287,8 @@ class DevModeActionExecutionMixin:
 
             # 2. Determine configuration
             # Use provided values or fall back to existing config
-            current_server = self.experiment_ctx.mcp_server
+            ctx = self.experiment_ctx
+            current_server = ctx.mcp_server
 
             # Debug flag
             new_debug = debug if debug is not None else (current_server.debug if current_server else False)
@@ -322,8 +324,18 @@ class DevModeActionExecutionMixin:
 
             # 3. Create new manager
             log.info(f"Creating new MCP server manager (debug={new_debug}, output={new_debug_output_dir})")
+            # Keep the session's OCR profile across the restart (else the experiment's pin).
+            if current_server is not None:
+                ocr_engine, ocr_lang = current_server.ocr_engine, current_server.ocr_lang
+            else:
+                ocr_engine, ocr_lang = resolve_ocr_settings(ctx.experiment_directory)
             new_manager = MCPServerManager(
-                server_port=new_port, log_file=log_file, debug=new_debug, debug_output_dir=new_debug_output_dir
+                server_port=new_port,
+                log_file=log_file,
+                debug=new_debug,
+                debug_output_dir=new_debug_output_dir,
+                ocr_engine=ocr_engine,
+                ocr_lang=ocr_lang,
             )
 
             # 4. Start new server

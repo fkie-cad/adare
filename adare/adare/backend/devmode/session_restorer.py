@@ -274,6 +274,7 @@ async def restore_application_context(
                 MCPServerManager,
                 find_free_cv_port,
                 load_cv_state,
+                resolve_ocr_settings,
             )
             from adare.backend.experiment.run import step_start_mcp_server
 
@@ -291,8 +292,12 @@ async def restore_application_context(
             else:
                 log.info(f"Reclaiming this session's CV port {recorded_port} (pid={recorded_pid})")
 
+            ocr_engine, ocr_lang = resolve_ocr_settings(session.experiment_ctx.experiment_directory)
             session.experiment_ctx.mcp_server = MCPServerManager(
-                server_port=recorded_port, log_file=session.experiment_ctx.experiment_run_directory.mcp_gui_log_file
+                server_port=recorded_port,
+                log_file=session.experiment_ctx.experiment_run_directory.mcp_gui_log_file,
+                ocr_engine=ocr_engine,
+                ocr_lang=ocr_lang,
             )
             session.experiment_ctx.mcp_server.known_server_pid = recorded_pid
 

@@ -28,6 +28,26 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- OCR provenance: every run records the cv-server's OCR profile in `<run>/ocr.yml`
+  (`ocr-<machine>.yml` per machine): profile, engine and package versions (incl.
+  `cv2`), model names + sha256, parameters, language, leading-glyph tolerance and the
+  cv-server version, read from the new cv-server MCP tool `get_engine_info`. A server
+  that was attached to rather than spawned is recorded as-is, with a warning when its
+  profile differs from the requested one.
+- Per-experiment OCR pin: `ocr: {engine: rapidocr|paddle, lang: latin|en}` in
+  `metadata.yml` overrides the global default (`ADARE_OCR_ENGINE` / `ADARE_OCR_LANG`);
+  pin `engine: paddle` to keep an existing experiment on the legacy profile. Dev
+  sessions keep their profile across resume and `restart_mcp_server`.
+- cv-server: per-frame OCR cache (64-entry LRU keyed by screenshot sha256 + profile
+  fingerprint, single-flight). Repeated OCR of the same frame (multi-leaf `wait_until`,
+  `when`, `ClosestTo`, failure evidence, polling an unchanged screen) is computed once;
+  results are identical by construction.
+- cv-server: `--ocr-engine {rapidocr,paddle}` / `--ocr-lang {latin,en}` (env
+  `ADARE_OCR_ENGINE` / `ADARE_OCR_LANG`), `ADARE_OCR_THREADS` (onnxruntime threads,
+  default 4), `ADARE_OCR_MODEL_DIR`.
+- cv-server: golden OCR test on real T2F screenshots and rendered German UI text
+  (`make test-cv`), and `adare-cv-server/scripts/ocr_compare.py`, an offline A/B of two
+  OCR profiles over a project's recorded runs and text queries.
 - Automatic test-run retention: every test-mode run (`adare experiment run` /
   `replicate` without `--production`, not dev sessions) ends by removing older
   finished fake runs of the same experiment **and environment** (rows in one
@@ -223,6 +243,23 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   commands as suggestions, instead of filling the disk mid-run.
 
 ### Changed
+- **OCR engine: RapidOCR is the new default.** New cv-servers use the pinned profile
+  `rapidocr-v5m-latin`: RapidOCR on onnxruntime (CPU on Linux, Windows and macOS),
+  PP-OCRv5 mobile detection + mobile Latin recognition, model files verified by sha256
+  (a mismatch is a hard error). Measured on real T2F screenshots: 0.2-0.3 s and ~1 GB
+  per frame instead of 11.3 s and 6-21 GB (PaddleOCR), word recall 97.4% vs 95.1%,
+  rendered German UI lines 92% vs 76%. OCR results - and so clicks - can differ from
+  the PaddleOCR runs (about one in six anchored-line queries; two words up to ~30 px
+  apart now read as one line): pin `ocr: {engine: paddle}` for experiments that must
+  stay on the old profile. With this profile only, a line also matches with one
+  leading run of 1-2 glyphs stripped (`>Bookmarks Menu`, `• Other`).
+- PaddleOCR is now the `paddle-legacy` profile, unchanged, in the optional
+  `adare-cv-server[paddle]` extra (the workspace still installs it). The cv-server
+  starts it with `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True` (~3 s faster start).
+- OpenCV is pinned to 4.10.0.84 for `opencv-python`, `opencv-python-headless` and
+  `opencv-contrib-python` (workspace `constraint-dependencies`): all three install the
+  same `cv2` module, so which version loaded depended on install order (the lock said
+  4.13, the environment ran 4.10).
 - `adare runs remove`, `DELETE /api/runs/{ulid}`, `adare experiment clean` and
   `adare experiment remove` also delete the run folders of the runs they remove,
   through the same run-folder safety test as `runs prune` (a refused folder is kept

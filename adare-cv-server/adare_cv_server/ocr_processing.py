@@ -1,11 +1,12 @@
-"""OCR processing utilities using PaddleOCR."""
+"""OCR processing: per-frame cached OCR, text matching and search."""
 
 import asyncio
+import hashlib
 import io
 import logging
-import math
 import re
-import threading
+import time
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
@@ -13,152 +14,124 @@ from typing import Any
 import cv2
 import numpy as np
 
-from .constants import OCRConstants
+from .constants import OCRConstants, OCRProfiles
 from .exceptions import OCRProcessingError
+from .ocr_engines import OcrEngine, fingerprint_key, get_engine
 
 log = logging.getLogger(__name__)
 
 # One executor for the process instead of a fresh ThreadPoolExecutor (thread
 # start + join) per OCR call. It also bounds how many OCR predictions run at once
-# on the shared PaddleOCR instance to MAX_WORKERS.
+# on the shared engine instance to MAX_WORKERS.
 _OCR_EXECUTOR = ThreadPoolExecutor(max_workers=OCRConstants.MAX_WORKERS, thread_name_prefix='ocr')
 
 
+def decode_screenshot(screenshot_bytes: bytes) -> np.ndarray:
+    """Decode PNG/JPEG/BMP (or SVG, rasterized first) screenshot bytes to a BGR image."""
+    if screenshot_bytes[:200].decode('utf-8', errors='ignore').strip().lower().startswith(('<?xml', '<svg')):
+        try:
+            import cairosvg
+        except ImportError as e:
+            raise OCRProcessingError("CairoSVG library required for SVG support. Install: pip install cairosvg") from e
+        log.info("Detected SVG format, converting to PNG for OCR")
+        try:
+            screenshot_bytes = cairosvg.svg2png(bytestring=screenshot_bytes)
+        except (ValueError, OSError) as e:
+            raise OCRProcessingError(f"SVG conversion failed: {e}") from e
+
+    img = cv2.imdecode(np.frombuffer(screenshot_bytes, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        raise OCRProcessingError("Could not decode screenshot image data")
+    return img
+
+
+class _OcrResultCache:
+    """LRU of OCR results per (screenshot bytes, engine fingerprint), single-flight.
+
+    The same frame is OCR'd repeatedly by the client (multi-leaf wait_until, `when`
+    conditions, ClosestTo reference + target, failure evidence, polling an
+    unchanged screen). A hit returns exactly what a fresh run would, because the key
+    covers the bytes and everything that determines the engine's output.
+    Concurrent requests for the same key await one computation.
+    """
+
+    def __init__(self, maxsize: int):
+        self.maxsize = maxsize
+        self._results: OrderedDict[str, list[Any]] = OrderedDict()
+        self._inflight: dict[str, asyncio.Future] = {}
+        self.hits = 0
+        self.misses = 0
+
+    def clear(self) -> None:
+        self._results.clear()
+        self._inflight.clear()
+
+    async def get_or_compute(self, key: str, compute) -> list[Any]:
+        if key in self._results:
+            self._results.move_to_end(key)
+            self.hits += 1
+            log.info(f"OCR cache hit ({self.hits} hits / {self.misses} misses)")
+            return self._results[key]
+
+        loop = asyncio.get_running_loop()
+        pending = self._inflight.get(key)
+        # A future from another (finished) event loop - e.g. an earlier asyncio.run()
+        # by an in-process caller - can never complete here; recompute instead.
+        if pending is not None and pending.get_loop() is loop:
+            self.hits += 1
+            log.info("OCR cache: awaiting identical in-flight request")
+            return await asyncio.shield(pending)
+
+        self.misses += 1
+        future = loop.run_in_executor(_OCR_EXECUTOR, compute)
+        self._inflight[key] = future
+        try:
+            result = await asyncio.shield(future)
+        finally:
+            if self._inflight.get(key) is future:
+                del self._inflight[key]
+        self._results[key] = result
+        self._results.move_to_end(key)
+        while len(self._results) > self.maxsize:
+            self._results.popitem(last=False)
+        return result
+
+
 class OCRProcessor:
-    """Handles OCR processing operations using PaddleOCR."""
+    """Runs the process's pinned OCR engine (see ocr_engines) with a per-frame cache."""
 
-    # PaddleOCR's constructor is expensive (model-availability checks that can
-    # involve network I/O) and was previously rebuilt on every single call, which
-    # is why a single find_text call could intermittently take 10s of minutes
-    # instead of its usual sub-second cost. Cache one instance for the process
-    # lifetime instead. Guarded by a lock since the first callers can race to
-    # build it (OCR runs on the module-level executor's MAX_WORKERS threads).
-    _ocr_instance = None
-    _ocr_instance_lock = threading.Lock()
-
-    @classmethod
-    def _get_paddle_ocr(cls):
-        """Return the cached PaddleOCR instance, building it on first use."""
-        if cls._ocr_instance is None:
-            with cls._ocr_instance_lock:
-                if cls._ocr_instance is None:
-                    from paddleocr import PaddleOCR
-
-                    log.info("Initializing PaddleOCR (first use - cached for process lifetime)...")
-
-                    # Capture current logging level as PaddleOCR might change it
-                    root_logger = logging.getLogger()
-                    original_level = root_logger.getEffectiveLevel()
-
-                    cls._ocr_instance = PaddleOCR(
-                        use_doc_orientation_classify=False,
-                        use_doc_unwarping=False,
-                        use_textline_orientation=False,
-                        text_det_unclip_ratio=OCRConstants.OCR_DET_UNCLIP_RATIO,
-                        text_det_thresh=OCRConstants.OCR_DET_DB_THRESH,
-                        text_det_box_thresh=OCRConstants.OCR_DET_BOX_THRESH,
-                        lang='en',  # Explicitly set language
-                    )
-
-                    # Restore logging level
-                    root_logger.setLevel(original_level)
-        return cls._ocr_instance
+    _cache = _OcrResultCache(OCRConstants.OCR_CACHE_SIZE)
 
     @staticmethod
-    def _run_paddle_ocr(screenshot_bytes: bytes) -> list[tuple[list[list[float]], tuple[str, float]]]:
-        """Run PaddleOCR in a separate thread to avoid blocking."""
-        try:
-            ocr = OCRProcessor._get_paddle_ocr()
-
-            log.info("Converting bytes to numpy array...")
-
-            # Handle SVG format
-            if screenshot_bytes[:200].decode('utf-8', errors='ignore').strip().lower().startswith(('<?xml', '<svg')):
-                try:
-                    import cairosvg
-
-                    log.info("Detected SVG format, converting to PNG for OCR")
-                    screenshot_bytes = cairosvg.svg2png(bytestring=screenshot_bytes)
-                except ImportError:
-                    raise OCRProcessingError("CairoSVG library required for SVG support. Install: pip install cairosvg")
-                except Exception as e:
-                    raise OCRProcessingError(f"SVG conversion failed: {e}") from e
-
-            nparr = np.frombuffer(screenshot_bytes, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            original_max_side = max(img.shape[:2])
-
-            # Pre-OCR upscaling: PaddleOCR recognizes tiny text poorly (e.g. a
-            # wrapped desktop-icon caption), so small images benefit from being
-            # upscaled before predict(). But scaling is adaptive, not flat: we
-            # only scale up to OCR_TARGET_SIDE (the detector's sweet spot), never
-            # beyond OCR_UPSCALE, and not at all once the image already meets it.
-            # A flat upscale on an already-large screenshot pushes it past the
-            # detection-side-length limit, silently defeating itself (PaddleOCR
-            # downscales back down for detection) and wrecking recall on
-            # ordinary-sized UI text - see OCR_UPSCALE's docstring in constants.py.
-            max_upscale = OCRConstants.OCR_UPSCALE
-            target_side = OCRConstants.OCR_TARGET_SIDE
-            if max_upscale and max_upscale > 1.0 and target_side and original_max_side > 0:
-                upscale = min(max_upscale, max(1.0, target_side / original_max_side))
-            else:
-                upscale = 1.0
-
-            if upscale != 1.0:
-                log.info(f"Upscaling screenshot {upscale:.2f}x before OCR ({img.shape[1]}x{img.shape[0]})")
-                img = cv2.resize(img, None, fx=upscale, fy=upscale, interpolation=cv2.INTER_CUBIC)
-
-            # The detection-side limit must never be smaller than the image we're
-            # about to hand PaddleOCR, or "max" limit_type will downscale it right
-            # back down before detection - undoing any upscale above and, just as
-            # importantly, shrinking already-large native screenshots (e.g. 4K)
-            # that never went through the upscale path at all.
-            processed_max_side = max(img.shape[:2])
-            det_limit_side_len = max(OCRConstants.OCR_DET_LIMIT_SIDE_LEN, math.ceil(processed_max_side))
-
-            log.info("Running OCR prediction with numpy array...")
-            result = ocr.predict(
-                input=img,
-                text_det_limit_side_len=det_limit_side_len,
-                text_det_limit_type=OCRConstants.OCR_DET_LIMIT_TYPE,
-            )
-
-            # Extract detection results from predict() format
-            detections = []
-            for res in result:
-                rec_texts = res['rec_texts']
-                rec_polys = res['rec_polys']
-                rec_scores = res['rec_scores']
-
-                # Combine texts, boxes and scores
-                for text, box, score in zip(rec_texts, rec_polys, rec_scores):
-                    # Rescale box back to original screenshot-pixel space
-                    if upscale and upscale != 1.0:
-                        box = box / upscale
-                    box_points = box.tolist()
-                    detections.append([box_points, (text, score)])
-
-            log.info(f"OCR prediction completed - found {len(detections)} text detections")
-            return detections
-
-        except Exception as e:
-            raise OCRProcessingError(f"OCR failed: {str(e)}") from e
+    def _run_engine(engine: OcrEngine, screenshot_bytes: bytes) -> list[tuple[list[list[float]], tuple[str, float]]]:
+        """Decode and OCR one screenshot (runs on the OCR executor)."""
+        img = decode_screenshot(screenshot_bytes)
+        log.info(f"Running OCR ({engine.profile}) on {img.shape[1]}x{img.shape[0]} image...")
+        started = time.perf_counter()
+        detections = engine.detect(img)
+        log.info(
+            f"OCR prediction completed in {time.perf_counter() - started:.3f}s"
+            f" - found {len(detections)} text detections"
+        )
+        return detections
 
     @staticmethod
     async def process_screenshot(screenshot_bytes: bytes) -> list[tuple[list[list[float]], tuple[str, float]]]:
-        """Process screenshot with OCR asynchronously."""
-        try:
-            log.info("Running PaddleOCR...")
-            result = await asyncio.get_running_loop().run_in_executor(
-                _OCR_EXECUTOR, OCRProcessor._run_paddle_ocr, screenshot_bytes
-            )
-            log.info("PaddleOCR completed successfully")
-            return result
+        """OCR a screenshot asynchronously; identical frames are served from the cache.
 
+        The returned list is shared with the cache - callers must not mutate it.
+        """
+        engine = get_engine()
+        key = f"{hashlib.sha256(screenshot_bytes).hexdigest()}:{fingerprint_key(engine)}"
+        try:
+            return await OCRProcessor._cache.get_or_compute(
+                key, lambda: OCRProcessor._run_engine(engine, screenshot_bytes)
+            )
         except OCRProcessingError:
             raise
         except Exception as e:
-            raise OCRProcessingError(f"PaddleOCR failed: {e}") from e
+            # Engine boundary: PaddleOCR / onnxruntime raise arbitrary exception types.
+            raise OCRProcessingError(f"OCR failed: {e}") from e
 
     @staticmethod
     def calculate_text_center(box: list[list[float]], offset_x: int = 0, offset_y: int = 0) -> tuple[int, int]:
@@ -631,6 +604,42 @@ class TextDetector:
         height = int(max(y_coords) - min(y_coords))
         return width, height
 
+    MATCH_MODES = ("substring", "regex", "fuzzy", "regex_fuzzy")
+    _LEADING_GLYPHS = re.compile(OCRProfiles.LEADING_GLYPH_PATTERN)
+
+    @staticmethod
+    def _match_candidates(text_rec: str, glyph_tolerance: bool) -> list[str]:
+        """The OCR line, plus - with leading-glyph tolerance - the line without one
+        leading run of 1-2 non-word glyphs (tree arrows read as '>', bullets, stars)."""
+        if glyph_tolerance:
+            stripped = TextDetector._LEADING_GLYPHS.sub('', text_rec, count=1)
+            if stripped and stripped != text_rec:
+                return [text_rec, stripped]
+        return [text_rec]
+
+    @staticmethod
+    def _line_matches(
+        text: str,
+        text_rec: str,
+        match_mode: str,
+        regex_flags: list[str] | None,
+        allow_missing_chars: bool | str | list[str] | None,
+        max_missing: int | None,
+        min_similarity: float | None,
+        case_sensitive: bool,
+    ) -> bool:
+        """Whether one OCR line matches the query under ``match_mode``."""
+        if match_mode == "regex":
+            return TextMatcher.regex_match(text, text_rec, regex_flags)
+        if match_mode == "fuzzy":
+            return FuzzyMatcher.fuzzy_match(
+                text, text_rec, allow_missing_chars, max_missing, min_similarity, case_sensitive
+            )
+        if match_mode == "regex_fuzzy":
+            return FuzzyMatcher.regex_fuzzy_match(text, text_rec, regex_flags, min_similarity or 0.8, case_sensitive)
+        # substring: case-insensitive containment
+        return text.lower() in text_rec.lower()
+
     @staticmethod
     async def find_text(
         text: str,
@@ -689,28 +698,27 @@ class TextDetector:
             log.info(f"CLAUDE:   '{text_rec}' (conf: {confidence:.3f}) at ({center_x}, {center_y})")
 
         # Find all detections that match the text using specified mode
+        if match_mode not in TextDetector.MATCH_MODES:
+            log.warning(f"Unknown match_mode '{match_mode}', falling back to substring")
+            match_mode = "substring"
+        glyph_tolerance = get_engine().glyph_tolerance
         matches = []
         for detection in result:
             box, (text_rec, confidence) = detection
 
-            # Apply matching strategy
-            matched = False
-            if match_mode == "substring":
-                # Preserve current behavior - case-insensitive substring match
-                matched = text.lower() in text_rec.lower()
-            elif match_mode == "regex":
-                matched = TextMatcher.regex_match(text, text_rec, regex_flags)
-            elif match_mode == "fuzzy":
-                matched = FuzzyMatcher.fuzzy_match(
-                    text, text_rec, allow_missing_chars, max_missing, min_similarity, case_sensitive
+            matched = any(
+                TextDetector._line_matches(
+                    text,
+                    candidate,
+                    match_mode,
+                    regex_flags,
+                    allow_missing_chars,
+                    max_missing,
+                    min_similarity,
+                    case_sensitive,
                 )
-            elif match_mode == "regex_fuzzy":
-                matched = FuzzyMatcher.regex_fuzzy_match(
-                    text, text_rec, regex_flags, min_similarity or 0.8, case_sensitive
-                )
-            else:
-                log.warning(f"Unknown match_mode '{match_mode}', falling back to substring")
-                matched = text.lower() in text_rec.lower()
+                for candidate in TextDetector._match_candidates(text_rec, glyph_tolerance)
+            )
 
             if matched:
                 center_x, center_y = OCRProcessor.calculate_text_center(box, offset_x, offset_y)

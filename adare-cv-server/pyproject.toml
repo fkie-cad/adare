@@ -11,11 +11,20 @@ dependencies = [
     "fastmcp>=2.9.2",
     "click>=8.1.7",
     "opencv-python>=4.10.0",
-    "paddleocr>=3.1.0",
-    "paddlepaddle==3.2.2",
+    # OCR engine. Exact pins: preprocessing/runtime changes shift OCR results (and so
+    # clicks); bump only together with the golden test and an A/B (see OCRProfiles).
+    "rapidocr==3.10.0",
+    "onnxruntime==1.31.1",
     "numpy>=1.26.0",
     "scikit-learn>=1.7.2",
     "cairosvg>=2.7.1",
+]
+
+[project.optional-dependencies]
+# Legacy OCR profile (paddle-legacy), kept until existing experiments are A/B-validated.
+paddle = [
+    "paddleocr>=3.1.0",
+    "paddlepaddle==3.2.2",
 ]
 
 [project.scripts]

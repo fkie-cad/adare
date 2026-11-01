@@ -159,6 +159,81 @@ class OCRConstants:
     OCR_DET_LIMIT_SIDE_LEN = int(os.environ.get("ADARE_OCR_DET_LIMIT_SIDE_LEN", "2880"))
     OCR_DET_LIMIT_TYPE = os.environ.get("ADARE_OCR_DET_LIMIT_TYPE", "max")
 
+    # The rapidocr profile only upscales when the adaptive factor above is at
+    # least this large. 1080p frames (factor 2048/1920 = 1.07) are therefore
+    # never resampled; small crops and sub-HD frames still are.
+    OCR_MIN_UPSCALE = 1.5
+
+    # Per-frame OCR result cache (LRU entries). Keyed by sha256(screenshot bytes)
+    # + the engine fingerprint, so a hit returns exactly what a fresh run would.
+    OCR_CACHE_SIZE = 64
+
+
+class OCRProfiles:
+    """Pinned OCR profiles: engine, model files (sha256) and parameters.
+
+    OCR decides where the client clicks, so any change here changes experiment
+    results. Changing a value means a new profile name, a regenerated golden test
+    (``tests/test_ocr_engines.py``) and an A/B over real experiments.
+    """
+
+    ENGINE_RAPIDOCR = "rapidocr"
+    ENGINE_PADDLE = "paddle"
+    ENGINES = (ENGINE_RAPIDOCR, ENGINE_PADDLE)
+    LANGS = ("latin", "en")
+
+    DEFAULT_ENGINE = ENGINE_RAPIDOCR
+    DEFAULT_LANG = "latin"
+    DEFAULT_THREADS = 4
+
+    # Profile names recorded in run provenance (ocr*.yml).
+    RAPIDOCR_PROFILE = {"latin": "rapidocr-v5m-latin", "en": "rapidocr-v5m-en"}
+    PADDLE_PROFILE = "paddle-legacy"
+
+    # RapidOCR model files, pinned by sha256. Same files and hashes as rapidocr
+    # 3.10.0's default_models.yaml; the URL is versioned, so it never moves.
+    # The PP-OCRv5 rec ONNX models carry their character dictionary in the model
+    # metadata, so there is no separate dictionary file to pin.
+    RAPIDOCR_MODEL_BASE_URL = "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv5"
+    RAPIDOCR_DET_MODEL = (
+        "det/ch_PP-OCRv5_det_mobile.onnx",
+        "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae",
+    )
+    RAPIDOCR_REC_MODELS = {
+        "latin": (
+            "rec/latin_PP-OCRv5_rec_mobile.onnx",
+            "b20bd37c168a570f583afbc8cd7925603890efbcdc000a59e22c269d160b5f5a",
+        ),
+        "en": (
+            "rec/en_PP-OCRv5_rec_mobile.onnx",
+            "c3461add59bb4323ecba96a492ab75e06dda42467c9e3d0c18db5d1d21924be8",
+        ),
+    }
+
+    # RapidOCR parameters (benchmarked 2026-11-01 on 60 T2F screenshots).
+    # Detection never downscales: limit_type "max" with a side limit far above any
+    # screen equals the planned max(1920, image side) for every frame up to 8192 px.
+    RAPIDOCR_PARAMS = {
+        "Global.use_cls": False,
+        "Global.max_side_len": 8192,
+        "Global.text_score": 0.5,
+        "Det.limit_type": "max",
+        "Det.limit_side_len": 8192,
+        "Det.thresh": 0.3,
+        "Det.box_thresh": 0.6,
+        "Det.unclip_ratio": 1.8,
+        "Det.use_dilation": False,
+    }
+
+    # PaddleOCR (legacy) picks these models for lang='en' with default settings.
+    PADDLE_DET_MODEL = "PP-OCRv5_server_det"
+    PADDLE_REC_MODEL = "en_PP-OCRv5_mobile_rec"
+
+    # Leading-glyph tolerance (rapidocr profiles only): a line also matches with
+    # one leading run of 1-2 non-word glyphs stripped (">Bookmarks Menu",
+    # "• Other", "★All"). The Latin model reads tree arrows as ">".
+    LEADING_GLYPH_PATTERN = r"^\s*[^\w\s]{1,2}\s*"
+
 
 # Result limits
 DEFAULT_MAX_RESULTS = 50

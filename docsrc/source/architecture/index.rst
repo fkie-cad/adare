@@ -21,7 +21,7 @@ actions, execute shell commands, and run test functions. A **shared library**
 provides the common protocol, data models, and test infrastructure used by
 both sides. An **external CV server** handles all computer-vision work
 (screenshot analysis, icon detection, OCR) so that heavy OpenCV and
-PaddleOCR dependencies stay out of the VM.
+OCR dependencies stay out of the VM.
 
 ::
 
@@ -81,7 +81,7 @@ Guest Agent (adarevm)
 A lightweight WebSocket server that runs inside the VM. It receives
 ``TOOL_CALL`` messages from the host, dispatches them to tool mixins
 (GUI, test, system, file), and returns ``TOOL_RESULT`` messages with the
-outcome. PyAutoGUI drives mouse and keyboard; PaddleOCR and OpenCV stay on
+outcome. PyAutoGUI drives mouse and keyboard; OCR and OpenCV stay on
 the host side. See :doc:`guest-agent` for the full architecture.
 
 
@@ -107,7 +107,7 @@ CV Server (adare-cv-server)
 ===========================
 
 A standalone MCP (Model Context Protocol) server built on FastMCP. It
-exposes three tools -- ``find_icon``, ``find_text``, and ``get_all_text`` --
+exposes four tools -- ``find_icon``, ``find_text``, ``get_all_text`` and ``get_engine_info`` --
 over a streamable HTTP transport. The host starts it as a subprocess
 before experiment execution and communicates via the MCP client. See
 :doc:`cv-server` for detection methods and integration details.
