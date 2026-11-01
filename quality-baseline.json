@@ -1,8 +1,8 @@
 {
   "ruff": {
     "B007": 8,
-    "B904": 13,
-    "B905": 19,
+    "B904": 12,
+    "B905": 18,
     "BLE001": 124,
     "C901": 86,
     "E402": 171,
@@ -15,7 +15,7 @@
   },
   "mypy": {
     "arg-type": 462,
-    "assignment": 382,
+    "assignment": 378,
     "attr-defined": 363,
     "call-arg": 25,
     "call-overload": 4,

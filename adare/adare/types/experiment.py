@@ -9,6 +9,24 @@ import attrs
 
 from .backend import Disk, NFSConfiguration, SMBConfiguration, UsbDevice
 
+# OCR engines/languages the cv-server offers (adare_cv_server.constants.OCRProfiles;
+# duplicated because adare must not hard-depend on the cv-server package).
+OCR_ENGINES = ('rapidocr', 'paddle')
+OCR_LANGS = ('latin', 'en')
+
+
+@attrs.define
+class OcrSettings:
+    """Per-experiment OCR pin (``ocr:`` in metadata.yml); unset fields use the global default.
+
+    Pin ``engine: paddle`` to keep an existing experiment on the legacy OCR profile.
+    """
+
+    engine: str | None = attrs.field(
+        default=None, validator=attrs.validators.optional(attrs.validators.in_(OCR_ENGINES))
+    )
+    lang: str | None = attrs.field(default=None, validator=attrs.validators.optional(attrs.validators.in_(OCR_LANGS)))
+
 
 @attrs.define
 class ExperimentMetadata:
@@ -23,6 +41,7 @@ class ExperimentMetadata:
     usb: list[UsbDevice] = attrs.Factory(list)
     disk: list[Disk] = attrs.Factory(list)
     description: str = attrs.Factory(str)
+    ocr: OcrSettings | None = None
 
     def fix_smb_users(self):
         """

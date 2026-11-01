@@ -28,6 +28,9 @@ async def test_restart_mcp_server_success(mock_session):
     # allocate a new one, otherwise the old server's port is abandoned and the
     # session drifts off the port its recorded state names.
     mock_old_server.server_port = 13117
+    # The session's OCR profile must survive the restart.
+    mock_old_server.ocr_engine = 'paddle'
+    mock_old_server.ocr_lang = 'en'
 
     mock_session.experiment_ctx.mcp_server = mock_old_server
 
@@ -54,6 +57,8 @@ async def test_restart_mcp_server_success(mock_session):
             log_file=Path("/tmp/old_log.log"),  # Should reuse log file
             debug=True,
             debug_output_dir=Path("/tmp/debug"),
+            ocr_engine='paddle',  # Inherited OCR profile
+            ocr_lang='en',
         )
 
         # 3. Start called on new manager
@@ -71,6 +76,8 @@ async def test_restart_mcp_server_defaults(mock_session):
     mock_old_server.debug_output_dir = Path("/tmp/existing_debug")
     mock_old_server.log_file = Path("/tmp/old_log.log")
     mock_old_server.server_port = 13120
+    mock_old_server.ocr_engine = 'rapidocr'
+    mock_old_server.ocr_lang = 'latin'
 
     mock_session.experiment_ctx.mcp_server = mock_old_server
 
@@ -92,6 +99,8 @@ async def test_restart_mcp_server_defaults(mock_session):
             log_file=Path("/tmp/old_log.log"),
             debug=True,  # Inherited
             debug_output_dir=Path("/tmp/existing_debug"),  # Inherited
+            ocr_engine='rapidocr',  # Inherited
+            ocr_lang='latin',
         )
 
 

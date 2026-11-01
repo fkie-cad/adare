@@ -59,7 +59,22 @@ MCP server for computer vision and OCR capabilities for the Adare testing framew
 - ✅ Precision maintained via global NMS (no duplicate reporting)
 
 ### OCR Processing
-- **Text Detection**: PaddleOCR-based text extraction from screenshots
+- **Text Detection**: pinned OCR profiles, chosen once per process with
+  `--ocr-engine {rapidocr,paddle}` / `--ocr-lang {latin,en}` (env `ADARE_OCR_ENGINE` /
+  `ADARE_OCR_LANG`):
+  - `rapidocr-v5m-latin` (default): RapidOCR on onnxruntime (CPU), PP-OCRv5 mobile det +
+    mobile Latin rec. Model files are verified by sha256 (`OCRProfiles` in
+    `constants.py`); a mismatch is a hard error. `ADARE_OCR_THREADS` (default 4),
+    `ADARE_OCR_MODEL_DIR` (default: RapidOCR's model directory).
+  - `paddle-legacy`: the previous PaddleOCR path, unchanged; needs the `paddle` extra
+    (`adare-cv-server[paddle]`).
+- **Provenance**: the `get_engine_info` tool reports profile, versions, model sha256 and
+  parameters; the adare client records it per run as `ocr.yml`.
+- **Per-frame cache**: 64-entry LRU keyed by screenshot sha256 + profile fingerprint;
+  identical concurrent requests share one computation.
+- **Leading-glyph tolerance** (rapidocr only): `>Bookmarks Menu` matches `^Bookmarks Menu`.
+- **Regression tests**: `tests/test_ocr_engines.py` pins the default profile's output on
+  real screenshots; `scripts/ocr_compare.py` A/Bs two profiles over a project's runs.
 - **SVG Screenshots**: Full support for SVG format screenshots in OCR operations
 - **Advanced Matching**: Substring, regex, fuzzy, and hybrid matching modes
 
@@ -68,8 +83,9 @@ MCP server for computer vision and OCR capabilities for the Adare testing framew
 ### Python Dependencies
 
 ```bash
-cd adare-cv-server
-poetry install
+make sync                      # from the workspace root (uv); installs the paddle extra too
+uv pip install adare-cv-server # standalone, rapidocr only
+uv pip install 'adare-cv-server[paddle]'  # + legacy PaddleOCR profile
 ```
 
 ### System Dependencies (Linux only)

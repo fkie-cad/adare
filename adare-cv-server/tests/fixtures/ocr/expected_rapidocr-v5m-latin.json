@@ -1,0 +1,1126 @@
+{
+ "profile": {
+  "profile": "rapidocr-v5m-latin",
+  "engine": "rapidocr",
+  "lang": "latin",
+  "models": {
+   "det": {
+    "name": "ch_PP-OCRv5_det_mobile.onnx",
+    "sha256": "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae"
+   },
+   "rec": {
+    "name": "latin_PP-OCRv5_rec_mobile.onnx",
+    "sha256": "b20bd37c168a570f583afbc8cd7925603890efbcdc000a59e22c269d160b5f5a"
+   }
+  },
+  "params": {
+   "Global.use_cls": false,
+   "Global.max_side_len": 8192,
+   "Global.text_score": 0.5,
+   "Det.limit_type": "max",
+   "Det.limit_side_len": 8192,
+   "Det.thresh": 0.3,
+   "Det.box_thresh": 0.6,
+   "Det.unclip_ratio": 1.8,
+   "Det.use_dilation": false
+  },
+  "upscale": {
+   "max": 2.0,
+   "target_side": 2048,
+   "min_factor": 1.5
+  },
+  "glyph_tolerance": true,
+  "versions": {
+   "rapidocr": "3.10.0",
+   "onnxruntime": "1.31.1",
+   "cv2": "4.10.0"
+  }
+ },
+ "frames": {
+  "t2f_add_bookmark_library.png": {
+   "lines": [
+    {
+     "text": "Nov 1 12:11",
+     "center": [
+      993.0,
+      14.5
+     ]
+    },
+    {
+     "text": "Library",
+     "center": [
+      465.5,
+      49.0
+     ]
+    },
+    {
+     "text": "← →",
+     "center": [
+      93.5,
+      92.0
+     ]
+    },
+    {
+     "text": "Organize",
+     "center": [
+      179.5,
+      93.0
+     ]
+    },
+    {
+     "text": "Views",
+     "center": [
+      268.0,
+      93.0
+     ]
+    },
+    {
+     "text": "↓↑ Import and Backup",
+     "center": [
+      399.5,
+      93.0
+     ]
+    },
+    {
+     "text": "Search Bookm...",
+     "center": [
+      768.5,
+      92.5
+     ]
+    },
+    {
+     "text": "Ca",
+     "center": [
+      1328.0,
+      90.5
+     ]
+    },
+    {
+     "text": " History",
+     "center": [
+      123.0,
+      130.0
+     ]
+    },
+    {
+     "text": "Name",
+     "center": [
+      294.5,
+      131.5
+     ]
+    },
+    {
+     "text": "Tags",
+     "center": [
+      521.0,
+      132.5
+     ]
+    },
+    {
+     "text": "Location",
+     "center": [
+      651.0,
+      131.0
+     ]
+    },
+    {
+     "text": "Downloads",
+     "center": [
+      136.5,
+      155.5
+     ]
+    },
+    {
+     "text": "Tags",
+     "center": [
+      106.5,
+      179.0
+     ]
+    },
+    {
+     "text": "All Bookmarks",
+     "center": [
+      137.0,
+      203.0
+     ]
+    },
+    {
+     "text": "Bookmarks Toolba...",
+     "center": [
+      183.5,
+      226.5
+     ]
+    },
+    {
+     "text": ">Bookmarks Menu",
+     "center": [
+      164.5,
+      250.0
+     ]
+    },
+    {
+     "text": "Other Bookmarks",
+     "center": [
+      174.5,
+      275.5
+     ]
+    },
+    {
+     "text": "No items",
+     "center": [
+      569.0,
+      436.0
+     ]
+    }
+   ],
+   "queries": {
+    "substring:Organize": [
+     [
+      179,
+      93
+     ]
+    ],
+    "substring:Manage Bookmarks": [],
+    "substring:Browsing & download history": [],
+    "substring:Show all downloads": [],
+    "regex:^\\s*Everything\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Cancel\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Clear\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Menu\\s*[.…]*\\s*$": [
+     [
+      164,
+      250
+     ]
+    ],
+    "regex:^\\s*Bookmarks\\ Toolbar\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Other\\ Bookmarks\\s*[.…]*\\s*$": [
+     [
+      174,
+      275
+     ]
+    ],
+    "regex:^\\s*New\\ Tab\\s*[.…]*\\s*$": [],
+    "regex:^\\s*History\\s*[.…]*\\s*$": [
+     [
+      123,
+      130
+     ]
+    ],
+    "substring:Mozilla Firefox": []
+   }
+  },
+  "t2f_bookmark_menubar.png": {
+   "lines": [
+    {
+     "text": "Nov 1 12:01",
+     "center": [
+      992.5,
+      14.5
+     ]
+    },
+    {
+     "text": "T2F PAGE BM SOURCE HTML — Mozilla Firefox",
+     "center": [
+      706.0,
+      49.5
+     ]
+    },
+    {
+     "text": "File Edit",
+     "center": [
+      110.5,
+      81.5
+     ]
+    },
+    {
+     "text": "View",
+     "center": [
+      167.5,
+      82.0
+     ]
+    },
+    {
+     "text": "History",
+     "center": [
+      230.5,
+      82.0
+     ]
+    },
+    {
+     "text": "Bookmarks",
+     "center": [
+      297.5,
+      82.0
+     ]
+    },
+    {
+     "text": "Tools",
+     "center": [
+      367.0,
+      82.0
+     ]
+    },
+    {
+     "text": "Help",
+     "center": [
+      410.0,
+      82.5
+     ]
+    },
+    {
+     "text": "T2F PAGE BM SOURCE HTM",
+     "center": [
+      164.5,
+      118.0
+     ]
+    },
+    {
+     "text": "Manage Bookmarks",
+     "center": [
+      354.0,
+      113.0
+     ]
+    },
+    {
+     "text": "Ctrl+Shift+O",
+     "center": [
+      474.0,
+      112.5
+     ]
+    },
+    {
+     "text": "Ca",
+     "center": [
+      1327.0,
+      119.0
+     ]
+    },
+    {
+     "text": "Sync Bookmarks to Mobile",
+     "center": [
+      376.0,
+      137.5
+     ]
+    },
+    {
+     "text": "Bookmark Current Tab...",
+     "center": [
+      370.5,
+      172.5
+     ]
+    },
+    {
+     "text": "Ctrl+D",
+     "center": [
+      495.5,
+      172.0
+     ]
+    },
+    {
+     "text": "(ml",
+     "center": [
+      538.0,
+      160.5
+     ]
+    },
+    {
+     "text": "Search Bookmarks",
+     "center": [
+      349.5,
+      196.5
+     ]
+    },
+    {
+     "text": "T2F",
+     "center": [
+      113.0,
+      242.5
+     ]
+    },
+    {
+     "text": "PAGI",
+     "center": [
+      203.5,
+      241.5
+     ]
+    },
+    {
+     "text": "Bookmark All Tabs...",
+     "center": [
+      358.5,
+      221.5
+     ]
+    },
+    {
+     "text": "Ctrl+Shift+D",
+     "center": [
+      474.5,
+      221.5
+     ]
+    },
+    {
+     "text": "HTML",
+     "center": [
+      604.5,
+      241.0
+     ]
+    },
+    {
+     "text": "Bookmarks Toolbar",
+     "center": [
+      350.5,
+      255.0
+     ]
+    },
+    {
+     "text": "Other Bookmarks",
+     "center": [
+      347.0,
+      281.5
+     ]
+    },
+    {
+     "text": "Target page",
+     "center": [
+      134.5,
+      319.5
+     ]
+    },
+    {
+     "text": "Mozilla Firefox",
+     "center": [
+      336.5,
+      315.5
+     ]
+    },
+    {
+     "text": "Target page",
+     "center": [
+      328.5,
+      341.0
+     ]
+    }
+   ],
+   "queries": {
+    "substring:Organize": [],
+    "substring:Manage Bookmarks": [
+     [
+      354,
+      113
+     ]
+    ],
+    "substring:Browsing & download history": [],
+    "substring:Show all downloads": [],
+    "regex:^\\s*Everything\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Cancel\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Clear\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Menu\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Toolbar\\s*[.…]*\\s*$": [
+     [
+      350,
+      255
+     ]
+    ],
+    "regex:^\\s*Other\\ Bookmarks\\s*[.…]*\\s*$": [
+     [
+      347,
+      281
+     ]
+    ],
+    "regex:^\\s*New\\ Tab\\s*[.…]*\\s*$": [],
+    "regex:^\\s*History\\s*[.…]*\\s*$": [
+     [
+      230,
+      82
+     ]
+    ],
+    "substring:Mozilla Firefox": [
+     [
+      706,
+      49
+     ],
+     [
+      336,
+      315
+     ]
+    ]
+   }
+  },
+  "t2f_bookmark_sidebar.png": {
+   "lines": [
+    {
+     "text": "Nov 1 11:19",
+     "center": [
+      993.0,
+      14.5
+     ]
+    },
+    {
+     "text": "Bookmarked Page — Mozilla Firefox",
+     "center": [
+      704.5,
+      48.0
+     ]
+    },
+    {
+     "text": "Bookmarked Page",
+     "center": [
+      134.5,
+      89.0
+     ]
+    },
+    {
+     "text": "Ca",
+     "center": [
+      1328.0,
+      90.5
+     ]
+    },
+    {
+     "text": "http://127.0.0.1:8080/bookmarked.html",
+     "center": [
+      477.0,
+      132.5
+     ]
+    },
+    {
+     "text": "Bookmarks",
+     "center": [
+      160.5,
+      191.0
+     ]
+    },
+    {
+     "text": "Bookmarked Page",
+     "center": [
+      659.5,
+      215.0
+     ]
+    },
+    {
+     "text": "Search bookmarks",
+     "center": [
+      213.0,
+      238.5
+     ]
+    },
+    {
+     "text": "Bookmarks Toolbar",
+     "center": [
+      202.5,
+      275.5
+     ]
+    },
+    {
+     "text": "Bookmarked Page",
+     "center": [
+      216.0,
+      299.0
+     ]
+    },
+    {
+     "text": "Bookmarks Menu",
+     "center": [
+      194.0,
+      323.5
+     ]
+    },
+    {
+     "text": "Other Bookmarks",
+     "center": [
+      199.0,
+      347.0
+     ]
+    }
+   ],
+   "queries": {
+    "substring:Organize": [],
+    "substring:Manage Bookmarks": [],
+    "substring:Browsing & download history": [],
+    "substring:Show all downloads": [],
+    "regex:^\\s*Everything\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Cancel\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Clear\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Menu\\s*[.…]*\\s*$": [
+     [
+      194,
+      323
+     ]
+    ],
+    "regex:^\\s*Bookmarks\\ Toolbar\\s*[.…]*\\s*$": [
+     [
+      202,
+      275
+     ]
+    ],
+    "regex:^\\s*Other\\ Bookmarks\\s*[.…]*\\s*$": [
+     [
+      199,
+      347
+     ]
+    ],
+    "regex:^\\s*New\\ Tab\\s*[.…]*\\s*$": [],
+    "regex:^\\s*History\\s*[.…]*\\s*$": [],
+    "substring:Mozilla Firefox": [
+     [
+      704,
+      48
+     ]
+    ]
+   }
+  },
+  "t2f_bookmark_toolbar.png": {
+   "lines": [
+    {
+     "text": "Nov 1 11:09",
+     "center": [
+      993.0,
+      14.5
+     ]
+    },
+    {
+     "text": "Mozilla Firefox",
+     "center": [
+      706.0,
+      49.5
+     ]
+    },
+    {
+     "text": "Bookmarked Page",
+     "center": [
+      134.5,
+      88.5
+     ]
+    },
+    {
+     "text": "New Tab",
+     "center": [
+      339.5,
+      89.0
+     ]
+    },
+    {
+     "text": "Ca",
+     "center": [
+      1327.5,
+      90.5
+     ]
+    },
+    {
+     "text": "Search with Google or enter address",
+     "center": [
+      505.5,
+      133.0
+     ]
+    },
+    {
+     "text": "Bookmarked Page",
+     "center": [
+      148.5,
+      167.5
+     ]
+    }
+   ],
+   "queries": {
+    "substring:Organize": [],
+    "substring:Manage Bookmarks": [],
+    "substring:Browsing & download history": [],
+    "substring:Show all downloads": [],
+    "regex:^\\s*Everything\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Cancel\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Clear\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Menu\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Toolbar\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Other\\ Bookmarks\\s*[.…]*\\s*$": [],
+    "regex:^\\s*New\\ Tab\\s*[.…]*\\s*$": [
+     [
+      339,
+      89
+     ]
+    ],
+    "regex:^\\s*History\\s*[.…]*\\s*$": [],
+    "substring:Mozilla Firefox": [
+     [
+      706,
+      49
+     ]
+    ]
+   }
+  },
+  "t2f_clear_history_dialog.png": {
+   "lines": [
+    {
+     "text": "Nov 1",
+     "center": [
+      974.0,
+      14.5
+     ]
+    },
+    {
+     "text": "11:34",
+     "center": [
+      1012.5,
+      14.5
+     ]
+    },
+    {
+     "text": "Example Domain — Mozilla Firefox",
+     "center": [
+      706.5,
+      49.0
+     ]
+    },
+    {
+     "text": "Example Domain",
+     "center": [
+      130.5,
+      89.5
+     ]
+    },
+    {
+     "text": "t2f-lab.com",
+     "center": [
+      391.5,
+      132.0
+     ]
+    },
+    {
+     "text": "For quick access, place your bookmarks here on the bookmarks toolbar. Manage bookmarks...",
+     "center": [
+      384.5,
+      168.0
+     ]
+    },
+    {
+     "text": "Example",
+     "center": [
+      171.0,
+      246.0
+     ]
+    },
+    {
+     "text": "Domain",
+     "center": [
+      354.5,
+      244.5
+     ]
+    }
+   ],
+   "queries": {
+    "substring:Organize": [],
+    "substring:Manage Bookmarks": [
+     [
+      384,
+      168
+     ]
+    ],
+    "substring:Browsing & download history": [],
+    "substring:Show all downloads": [],
+    "regex:^\\s*Everything\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Cancel\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Clear\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Menu\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Toolbar\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Other\\ Bookmarks\\s*[.…]*\\s*$": [],
+    "regex:^\\s*New\\ Tab\\s*[.…]*\\s*$": [],
+    "regex:^\\s*History\\s*[.…]*\\s*$": [],
+    "substring:Mozilla Firefox": [
+     [
+      706,
+      49
+     ]
+    ]
+   }
+  },
+  "t2f_downloads_panel.png": {
+   "lines": [
+    {
+     "text": "Nov 1 10:50",
+     "center": [
+      993.5,
+      14.5
+     ]
+    },
+    {
+     "text": "Mozilla Firefox",
+     "center": [
+      706.0,
+      49.5
+     ]
+    },
+    {
+     "text": "New Tab",
+     "center": [
+      103.0,
+      88.0
+     ]
+    },
+    {
+     "text": "Ca",
+     "center": [
+      1327.5,
+      90.5
+     ]
+    },
+    {
+     "text": "Search or enter address",
+     "center": [
+      462.5,
+      132.0
+     ]
+    },
+    {
+     "text": "f.bin",
+     "center": [
+      757.5,
+      173.5
+     ]
+    },
+    {
+     "text": "Unknown time left — 180 of 180 bytes (0 bytes/sec)",
+     "center": [
+      894.5,
+      205.0
+     ]
+    },
+    {
+     "text": "Show all downloads",
+     "center": [
+      769.5,
+      247.0
+     ]
+    }
+   ],
+   "queries": {
+    "substring:Organize": [],
+    "substring:Manage Bookmarks": [],
+    "substring:Browsing & download history": [],
+    "substring:Show all downloads": [
+     [
+      769,
+      247
+     ]
+    ],
+    "regex:^\\s*Everything\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Cancel\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Clear\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Menu\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Toolbar\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Other\\ Bookmarks\\s*[.…]*\\s*$": [],
+    "regex:^\\s*New\\ Tab\\s*[.…]*\\s*$": [
+     [
+      103,
+      88
+     ]
+    ],
+    "regex:^\\s*History\\s*[.…]*\\s*$": [],
+    "substring:Mozilla Firefox": [
+     [
+      706,
+      49
+     ]
+    ]
+   }
+  },
+  "t2f_history_checkbox.png": {
+   "lines": [
+    {
+     "text": "Nov 1",
+     "center": [
+      973.5,
+      14.5
+     ]
+    },
+    {
+     "text": "12:07",
+     "center": [
+      1012.5,
+      14.5
+     ]
+    },
+    {
+     "text": "Begin — Mozilla Firefox",
+     "center": [
+      705.5,
+      48.5
+     ]
+    },
+    {
+     "text": "Begin",
+     "center": [
+      94.0,
+      90.5
+     ]
+    },
+    {
+     "text": "Ca",
+     "center": [
+      1327.5,
+      90.5
+     ]
+    },
+    {
+     "text": "t2f-lab.com/begin.html",
+     "center": [
+      431.5,
+      132.5
+     ]
+    },
+    {
+     "text": "For quick access, place your bookmarks here on the bookmarks toolbar. Manage bookmarks.",
+     "center": [
+      379.5,
+      167.5
+     ]
+    },
+    {
+     "text": "Other Bookmarks",
+     "center": [
+      1265.0,
+      167.0
+     ]
+    },
+    {
+     "text": "Clear browsing data and cookies",
+     "center": [
+      634.0,
+      206.0
+     ]
+    },
+    {
+     "text": "Begin",
+     "center": [
+      137.0,
+      247.0
+     ]
+    },
+    {
+     "text": "When:",
+     "center": [
+      494.0,
+      242.5
+     ]
+    },
+    {
+     "text": "Everything",
+     "center": [
+      578.0,
+      242.5
+     ]
+    },
+    {
+     "text": "All selected items will be cleared.",
+     "center": [
+      662.0,
+      297.0
+     ]
+    },
+    {
+     "text": "This action cannot be undone.",
+     "center": [
+      652.0,
+      319.5
+     ]
+    },
+    {
+     "text": "Browsing & download history",
+     "center": [
+      591.5,
+      382.0
+     ]
+    },
+    {
+     "text": "Clears site and download history",
+     "center": [
+      589.0,
+      407.5
+     ]
+    },
+    {
+     "text": "Cookies and site data (0 bytes)",
+     "center": [
+      594.5,
+      451.0
+     ]
+    },
+    {
+     "text": "May sign you out of sites or empty shopping carts",
+     "center": [
+      637.5,
+      477.0
+     ]
+    },
+    {
+     "text": "Temporary cached Files and pages (0 bytes)",
+     "center": [
+      635.5,
+      518.5
+     ]
+    },
+    {
+     "text": "Clears items that help sites load faster",
+     "center": [
+      605.0,
+      545.5
+     ]
+    },
+    {
+     "text": "Saved form info",
+     "center": [
+      547.0,
+      589.5
+     ]
+    },
+    {
+     "text": "Clears things like names, emails, and other items you enter in forms",
+     "center": [
+      688.0,
+      616.0
+     ]
+    },
+    {
+     "text": "Site settings",
+     "center": [
+      535.5,
+      657.5
+     ]
+    },
+    {
+     "text": "Resets your permissions and site preferences to original settings",
+     "center": [
+      679.0,
+      685.0
+     ]
+    },
+    {
+     "text": "Cancel",
+     "center": [
+      794.5,
+      738.0
+     ]
+    },
+    {
+     "text": "Clear",
+     "center": [
+      893.5,
+      738.0
+     ]
+    }
+   ],
+   "queries": {
+    "substring:Organize": [],
+    "substring:Manage Bookmarks": [
+     [
+      379,
+      167
+     ]
+    ],
+    "substring:Browsing & download history": [
+     [
+      591,
+      382
+     ]
+    ],
+    "substring:Show all downloads": [],
+    "regex:^\\s*Everything\\s*[.…]*\\s*$": [
+     [
+      578,
+      242
+     ]
+    ],
+    "regex:^\\s*Cancel\\s*[.…]*\\s*$": [
+     [
+      794,
+      738
+     ]
+    ],
+    "regex:^\\s*Clear\\s*[.…]*\\s*$": [
+     [
+      893,
+      738
+     ]
+    ],
+    "regex:^\\s*Bookmarks\\ Menu\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Toolbar\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Other\\ Bookmarks\\s*[.…]*\\s*$": [
+     [
+      1265,
+      167
+     ]
+    ],
+    "regex:^\\s*New\\ Tab\\s*[.…]*\\s*$": [],
+    "regex:^\\s*History\\s*[.…]*\\s*$": [],
+    "substring:Mozilla Firefox": [
+     [
+      705,
+      48
+     ]
+    ]
+   }
+  },
+  "t2f_launch.png": {
+   "lines": [
+    {
+     "text": "Nov 1 12:10",
+     "center": [
+      993.5,
+      14.5
+     ]
+    },
+    {
+     "text": "Mozilla Firefox",
+     "center": [
+      706.0,
+      49.5
+     ]
+    },
+    {
+     "text": "New Tab",
+     "center": [
+      104.0,
+      89.5
+     ]
+    },
+    {
+     "text": "Ca",
+     "center": [
+      1327.5,
+      90.5
+     ]
+    },
+    {
+     "text": "Search or enter address",
+     "center": [
+      462.0,
+      133.0
+     ]
+    }
+   ],
+   "queries": {
+    "substring:Organize": [],
+    "substring:Manage Bookmarks": [],
+    "substring:Browsing & download history": [],
+    "substring:Show all downloads": [],
+    "regex:^\\s*Everything\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Cancel\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Clear\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Menu\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Bookmarks\\ Toolbar\\s*[.…]*\\s*$": [],
+    "regex:^\\s*Other\\ Bookmarks\\s*[.…]*\\s*$": [],
+    "regex:^\\s*New\\ Tab\\s*[.…]*\\s*$": [
+     [
+      104,
+      89
+     ]
+    ],
+    "regex:^\\s*History\\s*[.…]*\\s*$": [],
+    "substring:Mozilla Firefox": [
+     [
+      706,
+      49
+     ]
+    ]
+   }
+  }
+ }
+}
