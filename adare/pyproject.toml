@@ -48,6 +48,8 @@ adare = "adare.run:main"
 adareexp = "adare.example:main"
 
 [project.optional-dependencies]
+# Host-side (agent-free) backend: offline qcow2 / LVM / ext4 reading (adare.backend.hostside)
+hostside = ["dissect.hypervisor>=3.21", "dissect.extfs>=3.15", "dissect.volume>=3.18", "backports.zstd; python_version < '3.14'"]
 docs = ["sphinx", "sphinx-rtd-theme"]
 qemu = ["libvirt-python>=11.0.0"]
 # Optional local element-grounding backend for `adare dev agent --ground`:

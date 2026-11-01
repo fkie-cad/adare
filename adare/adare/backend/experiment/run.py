@@ -73,6 +73,21 @@ def _playbook_settings_memory(project_path: Path, experiment_name: str) -> int |
     return getattr(settings, 'vm_memory', None) if settings else None
 
 
+def _playbook_settings_backend(project_path: Path, experiment_name: str):
+    """The experiment playbook's ``settings`` object (for ``settings.backend``), or None when unreadable."""
+    try:
+        from adare.backend.experiment.directory import ExperimentDirectory
+        from adare.types.playbook import parse_playbook
+
+        exp_dir = ExperimentDirectory(project_path, experiment_name)
+        if not exp_dir.playbookfile.exists():
+            return None
+        return getattr(parse_playbook(exp_dir.playbookfile), 'settings', None)
+    except (FileNotFoundError, OSError, ValueError, KeyError, TypeError) as e:
+        log.warning(f"Could not read settings.backend from playbook: {e}")
+        return None
+
+
 def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_success: bool) -> tuple[bool, dict]:
     """Resolve the success verdict for an experiment run.
 
@@ -166,6 +181,7 @@ async def experiment_run(
     vm_cpus: int = None,
     gui_mode: str = None,
     test_exec_mode: str = None,
+    backend: str | None = None,
     diff: bool = None,
     diff_mode: str = 'auto',
     export_disk_image: bool = None,
@@ -262,6 +278,13 @@ async def experiment_run(
     if test_exec_mode is not None:
         config.test_mode_override = test_exec_mode
         log.info(f"Using custom test execution mode: {test_exec_mode}")
+
+    # Guest backend: CLI > ADARE_BACKEND > playbook settings.backend > agent
+    from adare.backend.hostside import resolve_backend
+
+    config.backend = resolve_backend(backend, _playbook_settings_backend(project_path, experiment_name))
+    if config.backend != 'agent':
+        log.info(f"Using guest backend: {config.backend}")
 
     # Set filesystem diff parameters
     if diff is not None:
@@ -490,7 +513,11 @@ async def experiment_run(
             _resolve_and_store_test_execution_mode(experiment_run_context)
 
         # Software Installation Phase
-        if not stop_event.is_set():
+        if not stop_event.is_set() and experiment_run_context.config.backend == 'hostside':
+            # No agent to install, no QGA to run installations through: environment installations were
+            # classified and staged into the overlay before first boot (see backend/hostside).
+            log.info("Host-side backend: skipping adarevm installation, WebSocket connection and QGA installations")
+        elif not stop_event.is_set():
             is_host_test_mode = experiment_run_context.test_execution_mode == 'host'
             is_host_gui_mode = experiment_run_context.config.gui_mode_override == 'host' or (
                 experiment_run_context.config.gui_mode_override is None

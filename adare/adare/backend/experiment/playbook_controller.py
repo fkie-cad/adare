@@ -222,6 +222,11 @@ class PlaybookController(FailureHandlingMixin):
         self._auto_pull_files: list[str] = []
         self._auto_pull_executed: bool = False
 
+        # Host-side backend (agent-free): set by run_setup after construction. Tests are deferred
+        # to the quiesced image and evaluated in a second pass (see backend/hostside/session.py).
+        self.hostside: Any | None = None
+        self._deferred_pass: bool = False
+
     def _build_machine_handles(
         self, cfg: PlaybookControllerConfig, websocket_client: AdareVMClient, vm: Any
     ) -> dict[str | None, MachineHandles]:
@@ -533,6 +538,12 @@ class PlaybookController(FailureHandlingMixin):
                     if auto_fs_diff and initial_snapshot_ref and diff_mode != 'host':
                         await diff_mgr.capture_and_export_diff(initial_snapshot_ref, "_fs_snapshot_final")
                     return playbook_result
+                if self.hostside is not None:
+                    from adare.backend.hostside.second_pass import run_second_pass
+
+                    playbook_result = await run_second_pass(self, playbook_result)
+                    if not playbook_result.success:
+                        return playbook_result
             else:
                 log.warning("No playbook.yml found, skipping GUI actions")
         else:
@@ -567,12 +578,16 @@ class PlaybookController(FailureHandlingMixin):
             failed_tests=failed_tests,
         )
 
-    async def execute_playbook(self, indices: list[int] | None = None) -> PlaybookExecutionResult:
+    async def execute_playbook(
+        self, indices: list[int] | None = None, reload_variables: bool = True
+    ) -> PlaybookExecutionResult:
         """
         Execute YAML playbook actions in order.
 
         Args:
             indices: Optional list of 1-based indices to execute. If None, execute all.
+            reload_variables: Reload the playbook variables into the execution context (the host-side
+                backend's second pass keeps the runtime-captured values instead).
 
         Returns:
             PlaybookExecutionResult with execution details
@@ -602,7 +617,7 @@ class PlaybookController(FailureHandlingMixin):
 
         # Set up experiment variables and playbook access
         self.execution_context['playbook'] = playbook
-        if hasattr(playbook, 'variables') and playbook.variables:
+        if reload_variables and hasattr(playbook, 'variables') and playbook.variables:
             log.info("Loading experiment variables...")
             # Debug what variables are in the registry
             log.info(f"Variables in registry: {list(playbook.variables.variables.keys())}")
@@ -637,7 +652,7 @@ class PlaybookController(FailureHandlingMixin):
             log.info(f"Selected indices: {indices}")
 
         # Capture initial baseline screenshot before any actions run
-        if self.action_executor.debug_screenshots:
+        if self.action_executor.debug_screenshots and not self._deferred_pass:
             try:
                 await self.action_executor.target_resolution.get_current_screenshot_with_path(
                     action_context="a00_initial"
@@ -655,6 +670,12 @@ class PlaybookController(FailureHandlingMixin):
                 continue
 
             action_name = type(action).__name__
+
+            # Host-side backend: a test is evaluated after the guest quiesced, not at its position.
+            if self.hostside is not None and not self._deferred_pass and self._is_test_action(action):
+                self.hostside.defer_test(action_index, getattr(action, 'name', ''))
+                continue
+
             log.info(f"Executing action {action_index}/{total_actions}: {action_name}")
 
             # Skip pause actions when not in test mode
@@ -777,8 +798,9 @@ class PlaybookController(FailureHandlingMixin):
                     break
 
             # Apply global idle setting
-            if hasattr(playbook, 'settings') and playbook.settings and playbook.settings.idle:
-                await self.client.idle(playbook.settings.idle)
+            settings = getattr(playbook, 'settings', None)
+            if not self._deferred_pass and settings and settings.idle:
+                await self.client.idle(settings.idle)
 
         # Run the playbook's on_failure steps once, before the run ends. They are not part of
         # action_results, so they cannot change the failed status or the tallies.

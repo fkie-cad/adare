@@ -77,6 +77,11 @@ class FilesystemDiffManager:
         config = self.execution_context.get('config')
         requested_mode = getattr(config, 'diff_mode', 'auto') if config else 'auto'
 
+        if getattr(config, 'backend', 'agent') == 'hostside':
+            # No guest process to run `find` in: the host diffs base vs overlay offline (hostside/fsdiff.py)
+            log.info("Host-side backend: using the offline base-vs-overlay diff")
+            return 'host'
+
         if requested_mode == 'auto':
             # Smart selection based on hypervisor and tool availability
             if self._is_qemu_vm():
@@ -97,6 +102,10 @@ class FilesystemDiffManager:
         Raises:
             LoggedException: If host mode requirements are not met
         """
+        config = self.execution_context.get('config')
+        if getattr(config, 'backend', 'agent') == 'hostside':
+            return  # the host-side backend reads the images itself (dissect), no libguestfs needed
+
         if not self._is_qemu_vm():
             from adare.exceptions import LoggedException
 

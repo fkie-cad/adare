@@ -1,0 +1,39 @@
+# Example environment for the host-side (agent-free) backend: docs/guide/hostside-backend.rst
+#
+# ubuntu-2404 (no conda) plus two environment installations that the host-side backend applies to
+# the run overlay *before first boot* (class c: file effects), and the agent backend runs through
+# adarevm, so the same environment drives both backends:
+#   * gnome-initial-setup-done: suppress the first-login "Welcome to Ubuntu" wizard
+#   * no-release-upgrade-prompt: keep the "Ubuntu 26.04 upgrade available" dialog off the desktop
+# Adjust `vm:` / `vm_sha256:` to your image, then `adare env load examples/hostside/ubuntu-2404-gis.yml`.
+# The experiment is paper/experiments/2_artifact_regression_testing/open-single-text-file-ubuntu-2404
+# with `environments: [ubuntu-2404-gis]`:
+#   adare experiment run open-single-text-file-ubuntu-2404 -e ubuntu-2404-gis --backend hostside --diff
+name: ubuntu-2404-gis
+vm: /Users/miq/.adare/state/vms/ubuntu2404arm64-noconda.qcow2
+vm_type: path
+vm_sha256: 3b988a0d31cedb6d59556d340938cdadd16e40556f1163f59ce679bd54e0578f
+os:
+  os: "Ubuntu 24.04 LTS (Noble Numbat, ARM64) — no conda"
+  platform: linux
+  distribution: Noble Numbat
+  version: '24.04'
+  language: English
+  architecture: aarch64
+hypervisor: qemu
+postsetupinstallations:
+- name: gnome-initial-setup-done
+  command: mkdir -p /home/adare/.config && echo yes > /home/adare/.config/gnome-initial-setup-done
+    && chown -R adare:adare /home/adare/.config && (pkill -f "[g]nome-initial-setup"
+    || true) && echo "gis_flag=$(cat /home/adare/.config/gnome-initial-setup-done)
+    wizard_left=$(pgrep -cf "[g]nome-initial-setup" || echo 0)"
+  description: First-login wizard suppression (flag file; wizard kill is a no-op before boot)
+  cwd: ''
+  shell: true
+- name: no-release-upgrade-prompt
+  command: printf '[DEFAULT]\nPrompt=never\n' > /etc/update-manager/release-upgrades
+  description: Do not offer the 26.04 release upgrade dialog (it covers the desktop mid-run)
+  cwd: ''
+  shell: true
+tags: []
+description: ubuntu-2404 (no conda) plus GNOME first-login wizard and release-upgrade dialog suppression
