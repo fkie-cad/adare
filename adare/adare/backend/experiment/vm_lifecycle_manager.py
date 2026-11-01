@@ -93,12 +93,18 @@ class VMLifecycleManager:
         if vm_instance is None:
             return
 
-        with StageCtxManager(
-            VMRuntimePreparationStage(), context.experiment_run_ulid, event=context.user_interrupt_event
-        ):
-            await self._ensure_vm_runtime_ready(context)
+        hostside = context.config.backend == 'hostside'
+        if not hostside:  # the agent wheels are only for the in-guest agent
+            with StageCtxManager(
+                VMRuntimePreparationStage(), context.experiment_run_ulid, event=context.user_interrupt_event
+            ):
+                await self._ensure_vm_runtime_ready(context)
 
         await self.strategy.prepare_vm_for_experiment(context)
+        if hostside:
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            hostside_lifecycle.prepare(context, self.hypervisor_type)
 
         # VirtualBox: a pooled instance can have vanished from VirtualBox since it
         # was last used. verify_and_cleanup removes such a row; allocate again,
@@ -164,6 +170,9 @@ class VMLifecycleManager:
         - VirtualBox: Configure port forwarding via VBoxManage
         - QEMU: Save port forwarding rules to config (applied on VM start)
         """
+        if context.config.backend == 'hostside':
+            log.info("Host-side backend: no agent port forwarding to set up")
+            return
         with StageCtxManager(VMNetworkingStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
             await self.strategy.setup_networking(context)
 
@@ -176,6 +185,11 @@ class VMLifecycleManager:
         - QEMU: Stop VM if needed, copy files via libguestfs
         """
         log.info("Starting file transfer setup")
+        if context.config.backend == 'hostside':
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            await hostside_lifecycle.stage(context)
+            return
         with StageCtxManager(
             VMFileTransferSetupStage(), context.experiment_run_ulid, event=context.user_interrupt_event
         ) as stage_ctx:
@@ -195,6 +209,11 @@ class VMLifecycleManager:
         Note: Stages are now created inside strategy.start_and_initialize_vm()
         for better granularity (VMStartStage, VMGuestAgentWaitStage, etc.)
         """
+        if context.config.backend == 'hostside':
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            await hostside_lifecycle.boot(context)
+            return
         await self.strategy.start_and_initialize_vm(context)
 
     async def wait_until_ready(self, context: ExperimentRunCtx):
@@ -247,6 +266,12 @@ class VMLifecycleManager:
         # Don't check interrupt event when retrieving artifacts during post-interrupt cleanup
         event = None if post_interrupt else context.user_interrupt_event
 
+        if context.config.backend == 'hostside':
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            await hostside_lifecycle.retrieve(context, self.strategy, event)
+            return
+
         with StageCtxManager(VMFileTransferRetrievalStage(), context.experiment_run_ulid, event=event) as stage_ctx:
             if self.hypervisor_type == 'qemu' and hasattr(self.strategy, 'file_transfer'):
                 stage_ctx.stage.sub_msg = self.strategy.file_transfer.retrieval_description
@@ -275,6 +300,11 @@ class VMLifecycleManager:
 
         # Check diff mode (only run for 'host' or 'auto' mode)
         diff_mode = self._get_diff_mode(context)
+        if context.config.backend == 'hostside':
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            await hostside_lifecycle.diff(context, None if post_interrupt else context.user_interrupt_event)
+            return
         if diff_mode not in ('host', 'auto'):
             log.debug(f"Host-side diff skipped - diff mode is '{diff_mode}'")
             return
@@ -584,6 +614,10 @@ class VMLifecycleManager:
         Delegates to hypervisor-specific strategy for:
         - Hypervisor-specific cleanup (port forwarding, etc.)
         """
+        if context.config.backend == 'hostside':
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            await hostside_lifecycle.finish(context)
         event = None if post_interrupt else context.user_interrupt_event
         with StageCtxManager(VMDestroyStage(), context.experiment_run_ulid, event=event):
             # Create experiment snapshot if requested
