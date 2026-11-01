@@ -339,7 +339,8 @@ class DomainXMLBuilder:
         self._add_disk()
         self._add_cdrom()
         self._add_network()
-        self._add_guest_agent_channel()
+        if getattr(self._config, 'guest_agent_channel', True):
+            self._add_guest_agent_channel()
         self._add_spice_channel()
         self._add_virtio_serial_controller()
         self._add_pci_controllers()
@@ -488,8 +489,7 @@ class DomainXMLBuilder:
     def _add_guest_agent_channel(self) -> None:
         """Add QEMU Guest Agent virtio-serial channel."""
         channel = ET.SubElement(self._devices, 'channel', type='unix')
-        channel_source = ET.SubElement(channel, 'source', mode='bind')
-        channel_source.set('path', self._config.guest_agent_socket_path)
+        ET.SubElement(channel, 'source', mode='bind', path=self._config.guest_agent_socket_path)
         ET.SubElement(channel, 'target', type='virtio', name='org.qemu.guest_agent.0')
         if not self._is_virt:
             ET.SubElement(channel, 'address', type='virtio-serial', controller='0', bus='0', port='1')

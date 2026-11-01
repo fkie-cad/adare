@@ -52,6 +52,24 @@ log = logging.getLogger(__name__)
 __all__ = ['ActionExecutor', 'ActionResult', 'MachineHandles']
 
 
+def _action_detail(action) -> str | None:
+    """A short, human-readable account of what an action does (for step markers)."""
+    for attr in ('command', 'text', 'key', 'variable', 'name'):
+        value = getattr(action, attr, None)
+        if isinstance(value, str) and value:
+            return f'{attr}={value[:120]}'
+    combo = getattr(action, 'combination', None)
+    if combo:
+        return 'combination=' + '+'.join(combo)
+    target = getattr(action, 'target', None)
+    if target is not None:
+        for attr in ('text', 'image', 'icon'):
+            value = getattr(target, attr, None)
+            if value:
+                return f'target.{attr}={str(value)[:120]}'
+    return None
+
+
 @dataclass
 class MachineHandles:
     """One machine's action-dispatch handles within a (possibly multi-machine) playbook run.
@@ -177,9 +195,11 @@ class ActionExecutor:
         self.test_actions = TestActionsExecutor(experiment_run_directory=experiment_run_directory, playbook=playbook)
 
         settings = getattr(playbook, 'settings', None)
-        self.clock = ClockRecorder(
-            experiment_run_directory, self.execution_context, enabled=getattr(settings, 'clock_log', True)
-        )
+        # Host-side backend (set by run_setup): step markers into the qemufile run directory.
+        self.hostside: Any | None = None
+        # The guest clock is read through QGA or the in-guest agent; the host-side backend has neither.
+        clock_enabled = getattr(settings, 'clock_log', True) and not getattr(self.client, 'is_hostside', False)
+        self.clock = ClockRecorder(experiment_run_directory, self.execution_context, enabled=clock_enabled)
 
     def _rebind_to_machine(self, handles: MachineHandles) -> None:
         """Point this executor and its sub-executors at one machine's handles.
@@ -218,6 +238,40 @@ class ActionExecutor:
         self.test_loader = test_loader  # Keep reference for backward compatibility
 
     async def execute_action(
+        self,
+        action: ActionType,
+        parent_event_id=None,
+        event_emitter=None,
+        variable_resolver=None,
+        action_context=None,
+    ) -> ActionResult:
+        """Execute one action; the host-side backend brackets it with step markers (qemufile run directory)."""
+        session = self.hostside
+        if session is None:
+            return await self._execute_action_impl(
+                action, parent_event_id, event_emitter, variable_resolver, action_context
+            )
+        step = (action_context or '').split('_', 1)[0] or None
+        kind = type(action).__name__
+        info = {
+            'context': action_context,
+            'description': getattr(action, 'description', '') or None,
+            'detail': _action_detail(action),
+        }
+        session.markers.marker('adare.step.start', step=step, action=kind, **info)
+        result = await self._execute_action_impl(
+            action, parent_event_id, event_emitter, variable_resolver, action_context
+        )
+        session.markers.marker(
+            'adare.step.end',
+            step=step,
+            action=kind,
+            success=bool(result.success),
+            message=(result.message or '')[:200] or None,
+        )
+        return result
+
+    async def _execute_action_impl(
         self,
         action: ActionType,
         parent_event_id: str = None,

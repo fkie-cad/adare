@@ -33,6 +33,8 @@ _THUMB_SIZE = (160, 120)
 _PIXEL_DELTA = 24
 # ...and a frame as changed when more than this share of its pixels did.
 _CHANGED_SHARE = 0.01
+# Gray levels below this count as black for content_share().
+_DARK_LEVEL = 24
 
 
 class BootScreenWatch:
@@ -55,6 +57,17 @@ class BootScreenWatch:
     def settled_for(self) -> float:
         """Seconds the screen has shown the same non-blank picture (0 if not)."""
         return time.monotonic() - self._settled_since if self._settled_since is not None else 0.0
+
+    def content_share(self) -> float:
+        """Share of the last frame's pixels that are not near-black (0 when there is no frame yet).
+
+        A booting guest shows text on black ("Display output is not active.") before its display
+        driver starts; that frame is still, but it is not a desktop.
+        """
+        if self._last_thumb is None:
+            return 0.0
+        histogram = self._last_thumb.histogram()
+        return float(1.0 - sum(histogram[:_DARK_LEVEL]) / sum(histogram))
 
     def save_last(self, path: Path) -> Path | None:
         """Write the latest frame as PNG to ``path``; None when there is none."""

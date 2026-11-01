@@ -35,7 +35,7 @@
     "return-value": 36,
     "str-bytes-safe": 2,
     "type-var": 2,
-    "union-attr": 196,
+    "union-attr": 194,
     "unused-coroutine": 1,
     "valid-type": 36,
     "var-annotated": 49

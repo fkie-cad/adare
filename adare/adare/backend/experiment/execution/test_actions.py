@@ -14,6 +14,22 @@ from .base import ActionResult, TestExecutionMode
 log = logging.getLogger(__name__)
 
 
+def _as_tool_result(test_result) -> dict:
+    """Shape a host-side ``TestResult`` like the agent's ``run_test`` reply, which is what
+    ``TestResultProcessor.process_test_result`` reads: ``{'status': 'success', 'result': {status, details}}``.
+
+    (Handing it ``{'status': <StatusEnum>, 'details': ...}`` made every host-evaluated test read as
+    UNKNOWN, i.e. failed, whatever the test function returned.)
+    """
+    return {
+        'status': 'success',
+        'result': {
+            'status': test_result.status,
+            'details': test_result.details if hasattr(test_result, 'details') else [],
+        },
+    }
+
+
 class TestActionsExecutor:
     """Handles execution of test actions with host/VM/host-mode routing."""
 
@@ -122,10 +138,7 @@ class TestActionsExecutor:
         from adare.backend.experiment.test_result_processor import TestResultProcessor
 
         expect_to_fail = resolved_test.get('expect_to_fail', False)
-        result_dict = {
-            'status': test_result.status,
-            'details': test_result.details if hasattr(test_result, 'details') else [],
-        }
+        result_dict = _as_tool_result(test_result)
         return TestResultProcessor.process_test_result(action.name, result_dict, expect_to_fail)
 
     async def _execute_host_mode_test(self, action, resolved_test) -> ActionResult:
@@ -154,10 +167,7 @@ class TestActionsExecutor:
         from adare.backend.experiment.test_result_processor import TestResultProcessor
 
         expect_to_fail = resolved_test.get('expect_to_fail', False)
-        result_dict = {
-            'status': test_result.status,
-            'details': test_result.details if hasattr(test_result, 'details') else [],
-        }
+        result_dict = _as_tool_result(test_result)
         return TestResultProcessor.process_test_result(action.name, result_dict, expect_to_fail)
 
     async def _execute_vm_side_test(self, action, resolved_test, websocket_client) -> ActionResult:
