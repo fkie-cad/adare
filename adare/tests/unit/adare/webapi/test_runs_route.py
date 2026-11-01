@@ -409,13 +409,6 @@ def test_get_run_artifact_traversal_to_a_parent_file_is_404(client, seeded):
     assert b'SECRET' not in response.content
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'get_run_artifact guards traversal with str(target).startswith(str(run_dir)) and no path separator, '
-        'so ../<run_dir name>-x/secret.txt (a sibling folder sharing the name prefix) is served'
-    ),
-)
 def test_get_run_artifact_traversal_to_a_sibling_with_the_same_name_prefix_is_404(client, seeded):
     sibling = seeded.run_dir.parent / f'{seeded.run_dir.name}-evil'
     sibling.mkdir()

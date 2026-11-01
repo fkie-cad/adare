@@ -129,27 +129,12 @@ def test_load_empty_playbook_file_is_not_a_server_error(workdir):
     assert response.status_code < 500
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'save_playbook joins the client-supplied filename onto playbooks/ without validation, so '
-        '`../escaped` writes <cwd>/escaped.yml outside the playbook directory (path traversal, arbitrary '
-        '.yml write relative to the server cwd)'
-    ),
-)
 def test_save_playbook_cannot_escape_the_playbook_directory_with_dotdot(client, workdir):
     client.post('/api/playbooks/save', json={'filename': '../escaped', 'actions': []})
 
     assert not (workdir / 'escaped.yml').exists()  # playbooks/../escaped.yml
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'an absolute `filename` replaces the playbooks/ prefix in `Path("playbooks") / filename`, so the '
-        'server writes anywhere the process can write'
-    ),
-)
 def test_save_playbook_cannot_write_to_an_absolute_path(client, workdir, tmp_path):
     target = tmp_path / 'outside' / 'abs.yml'
     target.parent.mkdir()
@@ -464,14 +449,6 @@ def test_spa_does_not_shadow_real_api_routes(client, dist):
     assert client.get('/api/sessions/nope/unknown-subroute').status_code in (200, 404)  # see xfail below
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'GET /{path:path} also matches unknown /api/... paths, so a typo or removed backend route answers '
-        '200 text/html (index.html) instead of a JSON 404; axios in api/client.ts then hands HTML to the hooks '
-        '(`data.data` undefined) and real backend 404s are invisible'
-    ),
-)
 @pytest.mark.parametrize('path', ['/api/does-not-exist', '/api/sessions/s1/unknown-subroute', '/api/playbooks/a/b'])
 def test_unknown_api_path_is_a_json_404_not_the_spa_index(client, dist, path):
     response = client.get(path)
@@ -494,14 +471,6 @@ def test_spa_blocks_parent_directory_traversal(client, dist):
         assert 'OUTSIDE' not in client.get(path).text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'the traversal guard is `str(file_path).startswith(str(_frontend_dist))` without a path separator, so a '
-        'sibling directory sharing the prefix (`dist-private` next to `dist`) is served: '
-        'GET /%2e%2e/dist-private/secret.txt returns its content'
-    ),
-)
 def test_spa_blocks_traversal_into_a_sibling_directory_with_the_same_prefix(client, dist):
     response = client.get('/%2e%2e/dist-private/secret.txt')
 
