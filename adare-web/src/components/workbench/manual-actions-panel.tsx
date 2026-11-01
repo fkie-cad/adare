@@ -14,29 +14,24 @@ import { toast } from '@/components/ui/toast'
 import { useActionTypes, useExecuteAction } from '@/api/hooks/use-actions'
 import { useExecutionStore } from '@/stores/execution-store'
 import { usePlaybookStore } from '@/stores/playbook-store'
-import type {
-  Action,
-  ActionTypeMetadata,
-  Target,
-  TargetType,
-  StrategyType,
-  MouseButton,
-  ScrollDirection,
+import {
+  TARGET_STRATEGIES,
+  makeAction,
+  pruneParams,
+  type Action,
+  type ActionParams,
+  type ActionTypeMetadata,
+  type ClickType,
+  type ScrollDirection,
+  type Target,
+  type TargetStrategyName,
 } from '@/types/action'
 
 const selectClass =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
-const STRUCTURED = new Set(['Click', 'Keyboard', 'Wait', 'Scroll', 'Command', 'Screenshot'])
-const STRATEGIES: StrategyType[] = [
-  'sweep',
-  'best_confidence',
-  'closest_to',
-  'leftmost',
-  'rightmost',
-  'topmost',
-  'bottommost',
-]
+// Actions with a dedicated form (parser keys); every other palette entry is edited as YAML.
+const STRUCTURED = new Set(['click', 'keyboard', 'idle', 'scroll', 'command', 'screenshot'])
 const CATEGORY_LABELS: Record<string, string> = {
   gui: 'GUI',
   control: 'Control flow',
@@ -44,7 +39,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   system: 'System',
 }
 
-type ActionDraft = { type: string; [key: string]: unknown }
+// `key` is the parser's action key; `params` its mapping (what ends up under `{key: ...}`).
+type ActionDraft = { key: string; params: ActionParams }
 
 interface Props {
   sessionId: string
@@ -68,30 +64,40 @@ export function ManualActionsPanel({ sessionId }: Props) {
   }, [actionTypes, setActionTypes])
 
   const selectPaletteItem = (meta: ActionTypeMetadata) => {
-    const seed: ActionDraft = { type: meta.type, ...(meta.default_params as object) }
-    setDraft(seed)
-    setRawText(stringify(seed))
+    const params = structuredClone(meta.default_params)
+    setDraft({ key: meta.type, params })
+    setRawText(stringify(makeAction(meta.type, params)))
   }
 
-  const structured = !!draft && STRUCTURED.has(draft.type)
+  const structured = !!draft && STRUCTURED.has(draft.key)
 
+  // The action exactly as the parser accepts it: `{<key>: {params}}`.
   const buildAction = (): Action | null => {
     if (!draft) return null
-    if (structured) return draft as unknown as Action
+    if (structured) return makeAction(draft.key, pruneParams(draft.params))
     try {
-      return parse(rawText) as Action
+      const parsed = parse(rawText)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Action) : null
     } catch {
       return null
     }
   }
 
-  const serializeYaml = (): string => (structured ? stringify(draft) : rawText)
+  const serializeYaml = (): string | null => {
+    const action = buildAction()
+    return action ? stringify(action) : null
+  }
 
   const handleExecute = () => {
     if (!draft) return
-    const id = addExecution(draft.type, typeof draft.description === 'string' ? draft.description : undefined)
+    const actionYaml = serializeYaml()
+    if (!actionYaml) {
+      toast.error('Invalid action', 'Could not parse the action YAML.')
+      return
+    }
+    const id = addExecution(draft.key, typeof draft.params.description === 'string' ? draft.params.description : undefined)
     executeAction.mutate(
-      { action_yaml: serializeYaml() },
+      { action_yaml: actionYaml },
       {
         onSuccess: (result) => {
           updateExecution(id, result.success ? 'success' : 'error', result)
@@ -113,17 +119,17 @@ export function ManualActionsPanel({ sessionId }: Props) {
       return
     }
     addAction(action)
-    toast.success('Added to playbook', draft?.type)
+    toast.success('Added to playbook', draft?.key)
   }
 
   const setField = (key: string, value: unknown) =>
-    setDraft((d) => (d ? { ...d, [key]: value } : d))
+    setDraft((d) => (d ? { ...d, params: { ...d.params, [key]: value } } : d))
 
-  const setTargetField = (patch: Partial<Target>) =>
+  const setTargetField = (patch: Partial<Target> & Record<string, unknown>) =>
     setDraft((d) => {
       if (!d) return d
-      const target = (d.target as Target | undefined) ?? { type: 'image' as TargetType }
-      return { ...d, target: { ...target, ...patch } }
+      const target = (d.params.target as Target | undefined) ?? {}
+      return { ...d, params: { ...d.params, target: { ...target, ...patch } } }
     })
 
   return (
@@ -153,7 +159,7 @@ export function ManualActionsPanel({ sessionId }: Props) {
                       {items.map((meta) => (
                         <Button
                           key={meta.type}
-                          variant={draft?.type === meta.type ? 'default' : 'outline'}
+                          variant={draft?.key === meta.type ? 'default' : 'outline'}
                           size="sm"
                           title={meta.description}
                           onClick={() => selectPaletteItem(meta)}
@@ -171,7 +177,7 @@ export function ManualActionsPanel({ sessionId }: Props) {
           {draft && (
             <div className="space-y-3 border-t border-border pt-4">
               <div className="flex items-center gap-2">
-                <Badge variant="secondary">{draft.type}</Badge>
+                <Badge variant="secondary">{draft.key}</Badge>
                 <span className="text-xs text-muted-foreground">Configure &amp; run</span>
               </div>
 
@@ -188,14 +194,16 @@ export function ManualActionsPanel({ sessionId }: Props) {
                 </FormField>
               )}
 
-              <FormField label="Description" htmlFor="action-desc" hint="Optional">
-                <Input
-                  id="action-desc"
-                  value={typeof draft.description === 'string' ? draft.description : ''}
-                  onChange={(e) => setField('description', e.target.value || undefined)}
-                  placeholder="Human-readable label"
-                />
-              </FormField>
+              {structured && (
+                <FormField label="Description" htmlFor="action-desc" hint="Optional">
+                  <Input
+                    id="action-desc"
+                    value={typeof draft.params.description === 'string' ? draft.params.description : ''}
+                    onChange={(e) => setField('description', e.target.value || undefined)}
+                    placeholder="Human-readable label"
+                  />
+                </FormField>
+              )}
 
               <div className="flex flex-wrap gap-2">
                 <Button onClick={handleExecute} disabled={!sessionId || executeAction.isPending}>
@@ -283,30 +291,43 @@ function formatMs(ms: number): string {
 interface FieldsProps {
   draft: ActionDraft
   setField: (key: string, value: unknown) => void
-  setTargetField: (patch: Partial<Target>) => void
+  setTargetField: (patch: Partial<Target> & Record<string, unknown>) => void
+}
+
+const numOrUndefined = (v: string) => (v === '' ? undefined : Number(v))
+
+function strategyValue(name: string): Record<string, unknown> {
+  return { [name]: name === 'SweepStrategy' ? { index: 1 } : {} }
 }
 
 function ActionFields({ draft, setField, setTargetField }: FieldsProps) {
-  const target = (draft.target as Target | undefined) ?? { type: 'image' }
+  const params = draft.params
+  const target = (params.target as (Target & { strategy?: Record<string, unknown> }) | undefined) ?? {}
+  const targetKind: 'text' | 'image' = target.image !== undefined && target.text === undefined ? 'image' : 'text'
   const str = (v: unknown) => (typeof v === 'string' ? v : '')
   const num = (v: unknown) => (typeof v === 'number' ? String(v) : '')
+  const strategyName = (Object.keys(target.strategy ?? {})[0] as TargetStrategyName | undefined) ?? ''
 
-  switch (draft.type) {
-    case 'Click':
+  switch (draft.key) {
+    case 'click':
       return (
         <>
           <FormField label="Target type" htmlFor="cl-target-type">
             <select
               id="cl-target-type"
               className={selectClass}
-              value={target.type}
-              onChange={(e) => setTargetField({ type: e.target.value as TargetType })}
+              value={targetKind}
+              onChange={(e) =>
+                e.target.value === 'image'
+                  ? setTargetField({ image: str(target.image), text: undefined })
+                  : setTargetField({ text: str(target.text), image: undefined })
+              }
             >
-              <option value="image">image</option>
               <option value="text">text</option>
+              <option value="image">image</option>
             </select>
           </FormField>
-          {target.type === 'image' ? (
+          {targetKind === 'image' ? (
             <FormField label="Image path" htmlFor="cl-image">
               <Input
                 id="cl-image"
@@ -325,80 +346,64 @@ function ActionFields({ draft, setField, setTargetField }: FieldsProps) {
               />
             </FormField>
           )}
-          <FormField label="Strategy" htmlFor="cl-strategy">
+          <FormField label="Strategy" htmlFor="cl-strategy" hint="Which match to pick when several are found">
             <select
               id="cl-strategy"
               className={selectClass}
-              value={str(draft.strategy) || 'sweep'}
-              onChange={(e) => setField('strategy', e.target.value as StrategyType)}
+              value={strategyName}
+              onChange={(e) =>
+                setTargetField({ strategy: e.target.value ? strategyValue(e.target.value) : undefined })
+              }
             >
-              {STRATEGIES.map((s) => (
+              <option value="">default</option>
+              {TARGET_STRATEGIES.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {s.replace(/Strategy$/, '')}
                 </option>
               ))}
             </select>
           </FormField>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Button" htmlFor="cl-button">
-              <select
-                id="cl-button"
-                className={selectClass}
-                value={str(draft.button) || 'left'}
-                onChange={(e) => setField('button', e.target.value as MouseButton)}
-              >
-                <option value="left">left</option>
-                <option value="right">right</option>
-                <option value="middle">middle</option>
-              </select>
-            </FormField>
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 pb-2.5 text-sm">
-                <Checkbox
-                  checked={draft.double_click === true}
-                  onChange={(e) => setField('double_click', e.target.checked)}
-                />
-                Double click
-              </label>
-            </div>
-            <FormField label="Offset X" htmlFor="cl-ox">
-              <Input
-                id="cl-ox"
-                type="number"
-                value={num(draft.offset_x)}
-                onChange={(e) => setField('offset_x', e.target.value === '' ? undefined : Number(e.target.value))}
-              />
-            </FormField>
-            <FormField label="Offset Y" htmlFor="cl-oy">
-              <Input
-                id="cl-oy"
-                type="number"
-                value={num(draft.offset_y)}
-                onChange={(e) => setField('offset_y', e.target.value === '' ? undefined : Number(e.target.value))}
-              />
-            </FormField>
-          </div>
+          <FormField label="Click type" htmlFor="cl-type">
+            <select
+              id="cl-type"
+              className={selectClass}
+              value={str(params.type) || 'left'}
+              onChange={(e) => setField('type', e.target.value as ClickType)}
+            >
+              <option value="left">left</option>
+              <option value="right">right</option>
+              <option value="double">double</option>
+            </select>
+          </FormField>
         </>
       )
 
-    case 'Keyboard':
+    case 'keyboard':
       return (
         <>
           <FormField label="Text" htmlFor="kb-text" hint="Type this literal string">
             <Input
               id="kb-text"
-              value={str(draft.text)}
+              value={str(params.text)}
               onChange={(e) => setField('text', e.target.value || undefined)}
               placeholder="hello world"
             />
           </FormField>
-          <FormField label="Keys" htmlFor="kb-keys" hint="Comma-separated, e.g. ctrl, c">
+          <FormField label="Key" htmlFor="kb-key" hint="Single key press, e.g. enter">
             <Input
-              id="kb-keys"
-              value={Array.isArray(draft.keys) ? (draft.keys as string[]).join(', ') : ''}
+              id="kb-key"
+              value={str(params.key)}
+              onChange={(e) => setField('key', e.target.value || undefined)}
+              placeholder="enter"
+            />
+          </FormField>
+          <FormField label="Combination" htmlFor="kb-combo" hint="Comma-separated, e.g. ctrl, c">
+            <Input
+              id="kb-combo"
+              value={Array.isArray(params.combination) ? (params.combination as string[]).join(', ') : ''}
               onChange={(e) =>
                 setField(
-                  'keys',
+                  'combination',
                   e.target.value.trim()
                     ? e.target.value.split(',').map((k) => k.trim()).filter(Boolean)
                     : undefined,
@@ -407,39 +412,30 @@ function ActionFields({ draft, setField, setTargetField }: FieldsProps) {
               placeholder="ctrl, c"
             />
           </FormField>
-          <FormField label="Wait (s)" htmlFor="kb-wait" hint="Delay after typing">
-            <Input
-              id="kb-wait"
-              type="number"
-              step="0.1"
-              value={num(draft.wait)}
-              onChange={(e) => setField('wait', e.target.value === '' ? undefined : Number(e.target.value))}
-            />
-          </FormField>
         </>
       )
 
-    case 'Wait':
+    case 'idle':
       return (
-        <FormField label="Seconds" htmlFor="wt-seconds">
+        <FormField label="Duration (s)" htmlFor="id-duration" required>
           <Input
-            id="wt-seconds"
+            id="id-duration"
             type="number"
             step="0.1"
-            value={num(draft.seconds)}
-            onChange={(e) => setField('seconds', e.target.value === '' ? undefined : Number(e.target.value))}
+            value={num(params.duration)}
+            onChange={(e) => setField('duration', numOrUndefined(e.target.value))}
           />
         </FormField>
       )
 
-    case 'Scroll':
+    case 'scroll':
       return (
         <>
-          <FormField label="Direction" htmlFor="sc-dir">
+          <FormField label="Direction" htmlFor="sc-dir" required>
             <select
               id="sc-dir"
               className={selectClass}
-              value={str(draft.direction) || 'down'}
+              value={str(params.direction) || 'down'}
               onChange={(e) => setField('direction', e.target.value as ScrollDirection)}
             >
               <option value="up">up</option>
@@ -448,25 +444,25 @@ function ActionFields({ draft, setField, setTargetField }: FieldsProps) {
               <option value="right">right</option>
             </select>
           </FormField>
-          <FormField label="Amount" htmlFor="sc-amount">
+          <FormField label="Amount" htmlFor="sc-amount" required>
             <Input
               id="sc-amount"
               type="number"
-              value={num(draft.amount)}
-              onChange={(e) => setField('amount', e.target.value === '' ? undefined : Number(e.target.value))}
+              value={num(params.amount)}
+              onChange={(e) => setField('amount', numOrUndefined(e.target.value))}
             />
           </FormField>
         </>
       )
 
-    case 'Command':
+    case 'command':
       return (
         <>
           <FormField label="Command" htmlFor="cmd-command" required>
             <Input
               id="cmd-command"
               className="font-mono text-xs"
-              value={str(draft.command)}
+              value={str(params.command)}
               onChange={(e) => setField('command', e.target.value)}
               placeholder="ls -la"
             />
@@ -475,33 +471,31 @@ function ActionFields({ draft, setField, setTargetField }: FieldsProps) {
             <div className="flex items-end">
               <label className="flex items-center gap-2 pb-2.5 text-sm">
                 <Checkbox
-                  checked={draft.wait_for_completion !== false}
-                  onChange={(e) => setField('wait_for_completion', e.target.checked)}
+                  checked={params.background === true}
+                  onChange={(e) => setField('background', e.target.checked || undefined)}
                 />
-                Wait for completion
+                Run in background
               </label>
             </div>
             <FormField label="Timeout (s)" htmlFor="cmd-timeout">
               <Input
                 id="cmd-timeout"
                 type="number"
-                value={num(draft.timeout_seconds)}
-                onChange={(e) =>
-                  setField('timeout_seconds', e.target.value === '' ? undefined : Number(e.target.value))
-                }
+                value={num(params.timeout)}
+                onChange={(e) => setField('timeout', numOrUndefined(e.target.value))}
               />
             </FormField>
           </div>
         </>
       )
 
-    case 'Screenshot':
+    case 'screenshot':
       return (
-        <FormField label="Filename" htmlFor="ss-filename" required>
+        <FormField label="Name" htmlFor="ss-name" hint="Optional file name">
           <Input
-            id="ss-filename"
-            value={str(draft.filename)}
-            onChange={(e) => setField('filename', e.target.value)}
+            id="ss-name"
+            value={str(params.name)}
+            onChange={(e) => setField('name', e.target.value || undefined)}
             placeholder="screen.png"
           />
         </FormField>

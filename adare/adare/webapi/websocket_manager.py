@@ -122,10 +122,11 @@ class WebSocketManager:
             {
                 "type": "action_complete",
                 "session_id": session_id,
+                # Shape of the frontend's ActionCompleteMessage (types/api.ts): the
+                # success flag lives inside ``result`` (an ActionResult), not beside it.
                 "data": {
                     "action_type": action_type,
-                    "success": success,
-                    "result": result,
+                    "result": {"success": success, **result},
                 },
             },
         )

@@ -145,6 +145,11 @@ class TestWebServiceDownloadEnvironment:
 class TestWebServiceSync:
     """Tests for WebService.sync()."""
 
+    @pytest.fixture(autouse=True)
+    def logged_in(self):
+        with patch("adare.web.login.is_logged_in", return_value=True):
+            yield
+
     def test_sync_success(self, service, sync_request):
         with patch("adare.backend.sync.sync"):
             result = service.sync(sync_request)
@@ -164,6 +169,17 @@ class TestWebServiceSync:
             result = service.sync(None)
 
         assert result.success is True
+
+    def test_sync_when_logged_out_fails_without_syncing(self, service, sync_request):
+        with (
+            patch("adare.web.login.is_logged_in", return_value=False),
+            patch("adare.backend.sync.sync") as backend_sync,
+        ):
+            result = service.sync(sync_request)
+
+        assert result.success is False
+        assert result.error.code == "NoUserLoggedIn"
+        backend_sync.assert_not_called()
 
 
 class TestWebServiceCheckExperiment:

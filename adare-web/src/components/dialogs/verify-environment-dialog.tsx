@@ -17,7 +17,8 @@ interface VerifyEnvironmentDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   environmentName: string | null
-  projectPath: string | null
+  // Optional: environments are global, so verification works without a project.
+  projectPath?: string | null
   onSkip?: () => void
 }
 
@@ -37,7 +38,7 @@ export function VerifyEnvironmentDialog({
     }
   }, [open, mutation])
 
-  if (!environmentName || !projectPath) {
+  if (!environmentName) {
     return null
   }
 
@@ -48,7 +49,7 @@ export function VerifyEnvironmentDialog({
 
   const handleRun = () => {
     mutation.mutate(
-      { name: environmentName, project_path: projectPath },
+      { name: environmentName, project_path: projectPath ?? undefined },
       {
         onSuccess: (data) => {
           onOpenChange(false)
@@ -64,7 +65,7 @@ export function VerifyEnvironmentDialog({
       <DialogContent>
         <div className="flex flex-col gap-4">
           <DialogHeader>
-            <DialogTitle>Environment created</DialogTitle>
+            <DialogTitle>Verify environment</DialogTitle>
             <DialogDescription>
               Want to run a quick verification? It exercises boot, agent install, command,
               and action dispatch — about 1–2 minutes.

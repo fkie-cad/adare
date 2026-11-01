@@ -240,12 +240,6 @@ def test_sync_failure_is_reported_in_the_envelope(client, uploads):
     assert response.json()['error']['solutions']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='backend.sync.sync() just logs "You need to be logged in to sync" and returns when nobody is logged in, '
-    'and WebService.sync() then reports {success: true, data: {synced: true, message: "Sync completed '
-    'successfully"}} although nothing was synced (adare/services/web_service.py:328)',
-)
 def test_sync_when_logged_out_does_not_claim_success(client, uploads):
     response = client.post('/api/web/sync')
 

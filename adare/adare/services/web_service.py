@@ -322,8 +322,17 @@ class WebService:
             Result[SyncResult] with sync status.
         """
         from adare.backend.sync import sync as backend_sync
+        from adare.web.login import is_logged_in
 
         try:
+            # backend_sync only logs and returns when nobody is logged in; reporting
+            # "Sync completed" for that would be a lie, so check here and fail instead.
+            if not is_logged_in(silent=True):
+                return Result.fail(
+                    code="NoUserLoggedIn",
+                    message="You need to be logged in to sync",
+                    solutions=['Log in first (`adare web login`)'],
+                )
             project_path = request.project_path if request else None
             backend_sync(project_path)
             return Result.ok(SyncResult(synced=True, message="Sync completed successfully"))

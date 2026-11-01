@@ -41,6 +41,7 @@ def _instances_by_name() -> dict[str, dict]:
         return {
             i.instance_name: {
                 'instance_id': i.id,
+                'vm_id': i.vm_id,
                 'status': i.status,
                 'vm_name': i.vm.name if i.vm else None,
                 'experiment_run_id': i.current_experiment_run_id,

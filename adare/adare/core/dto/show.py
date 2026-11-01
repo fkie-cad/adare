@@ -110,8 +110,10 @@ class RunDetail:
     result_status: str = ""
     published: bool = False
     fake: bool = False
-    os_info: str = ""
-    vm_box: str = ""
+    # None when the run's environment is unknown or has no VM / OsInfo.
+    os_info: str | None = None
+    vm_box: str | None = None
+    # One {name, status, passed, details} per test event of the run.
     test_results: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -239,6 +241,12 @@ class EnvironmentListItem:
     # disk_present is None when there is no local path to check (e.g. a URL-baked env).
     disk_path: str = ""
     disk_present: bool | None = None
+    # Human OS label for the web pages ("Ubuntu 24.04"), derived from the registered VM's
+    # OsInfo; see services/environment_source.os_label.
+    os: str = ""
+    # Recipe build inputs for a recipe environment ({profile, iso, iso_sha256, disk_size,
+    # ram_mb, cpus, ...}); None for a baked environment.
+    recipe: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
@@ -313,6 +321,9 @@ class EnvironmentDetail:
     # EnvironmentListItem for why the environment's own `file` is not a proxy for this.
     disk_path: str = ""
     disk_present: bool | None = None
+    # See EnvironmentListItem.
+    os: str = ""
+    recipe: dict[str, Any] | None = None
 
 
 @dataclass
@@ -335,6 +346,8 @@ class ExperimentListItem:
     created_at: datetime | None = None
     run_count: int = 0
     last_run: datetime | None = None
+    # Filesystem path of the owning project: what the mutation endpoints take as project_path.
+    project_path: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
@@ -380,6 +393,7 @@ class ExperimentDetail:
     created_at: datetime | None = None
     run_count: int = 0
     last_run: datetime | None = None
+    project_path: str = ""
     playbook_items: list[dict[str, Any]] = field(default_factory=list)
 
 

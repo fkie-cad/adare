@@ -241,7 +241,13 @@ export function CreateEnvironmentDialog({ open, onOpenChange, defaultProjectPath
   const handleCheckUrl = () => {
     if (!activeUrl || !activeUrlValid) return
     checkMutation.mutate(
-      { url: activeUrl, sha256: activeSha || undefined, kind: mode === 'baked' ? 'vm' : 'iso' },
+      {
+        url: activeUrl,
+        sha256: activeSha || undefined,
+        kind: mode === 'baked' ? 'vm' : 'iso',
+        // Extensionless share links are only valid with an explicit format; create sends it too.
+        ...(mode === 'baked' ? { vm_format: vmFormat } : {}),
+      },
       { onSuccess: (result) => setUrlCheck(result) },
     )
   }

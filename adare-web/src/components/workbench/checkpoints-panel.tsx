@@ -148,8 +148,7 @@ export function CheckpointsPanel({ sessionId }: Props) {
                       <p className="text-xs text-muted-foreground">{cp.description}</p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      {formatDateTime(cp.created_at)} · {cp.memory_size_mb}MB mem ·{' '}
-                      {cp.disk_size_mb}MB disk
+                      {formatDateTime(cp.created_at)} · {cp.file_size_mb.toFixed(1)}MB
                     </p>
                   </div>
                 ))}

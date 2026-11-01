@@ -1,172 +1,39 @@
 /**
- * TypeScript types for ADARE playbook actions
- * Mirrors backend action models
+ * TypeScript types for ADARE playbook actions.
+ *
+ * Single source of truth is the backend: `GET /api/actions/types` is generated from the
+ * playbook parser's action registry (adare/types/action_catalogue.py), so action names and
+ * fields come from there. The UI keeps actions in exactly the shape the parser accepts
+ * (`{<action_key>: {params}}`, e.g. `{click: {target: {text: 'OK'}}}`), so the same object can
+ * be stringified for execute-action (`action_yaml`) and sent as-is for playbook save/execute.
  */
 
-// Base types
-export type TargetType = 'image' | 'text'
-export type StrategyType = 'sweep' | 'best_confidence' | 'closest_to' | 'leftmost' | 'rightmost' | 'topmost' | 'bottommost'
-export type MouseButton = 'left' | 'right' | 'middle'
-export type ScrollDirection = 'up' | 'down' | 'left' | 'right'
+// Parser-shaped action: a single-key mapping from the action key to its parameters.
+export type ActionParams = Record<string, unknown>
+export type Action = Record<string, ActionParams>
+
+export type ActionCategory = 'gui' | 'control' | 'data' | 'system'
 
 export interface Target {
-  type: TargetType
-  image?: string  // Path to image file
-  text?: string   // Text to search for
+  image?: string // Path to image file
+  text?: string // Text to search for
 }
 
-export interface Strategy {
-  type: StrategyType
-  reference_image?: string  // For closest_to strategy
-}
+// Target strategies as the parser spells them: `strategy: {<ClassName>: {params}}`.
+export const TARGET_STRATEGIES = [
+  'SweepStrategy',
+  'BestConfidenceStrategy',
+  'TopLeftStrategy',
+  'TopRightStrategy',
+  'BottomLeftStrategy',
+  'BottomRightStrategy',
+  'LargestStrategy',
+  'SmallestStrategy',
+] as const
+export type TargetStrategyName = (typeof TARGET_STRATEGIES)[number]
 
-export interface WaitCondition {
-  type: 'image_appears' | 'image_disappears' | 'text_appears' | 'text_disappears' | 'timeout'
-  target?: Target
-  timeout_seconds?: number
-}
-
-// Action base interface
-export interface BaseAction {
-  type: string
-  description?: string
-  screenshot_before?: boolean
-  screenshot_after?: boolean
-}
-
-// GUI Actions
-export interface ClickAction extends BaseAction {
-  type: 'Click'
-  target: Target
-  strategy: StrategyType
-  button?: MouseButton
-  double_click?: boolean
-  offset_x?: number
-  offset_y?: number
-}
-
-export interface KeyboardAction extends BaseAction {
-  type: 'Keyboard'
-  text?: string
-  keys?: string[]
-  wait?: number
-}
-
-export interface ScrollAction extends BaseAction {
-  type: 'Scroll'
-  direction: ScrollDirection
-  amount?: number
-  target?: Target
-}
-
-export interface DragAction extends BaseAction {
-  type: 'Drag'
-  source: Target
-  destination: Target
-  strategy?: StrategyType
-}
-
-// Control Flow Actions
-export interface WaitAction extends BaseAction {
-  type: 'Wait'
-  seconds?: number
-  condition?: WaitCondition
-}
-
-export interface LoopAction extends BaseAction {
-  type: 'Loop'
-  iterations?: number
-  condition?: WaitCondition
-  actions: Action[]
-}
-
-export interface BlockAction extends BaseAction {
-  type: 'Block'
-  actions: Action[]
-  description?: string
-}
-
-export interface ConditionalAction extends BaseAction {
-  type: 'Conditional'
-  condition: WaitCondition
-  if_true: Action[]
-  if_false?: Action[]
-}
-
-// Data Actions
-export interface SetVarAction extends BaseAction {
-  type: 'SetVar'
-  name: string
-  value: any
-}
-
-export interface FileReadAction extends BaseAction {
-  type: 'FileRead'
-  filename: string
-  var_name: string
-}
-
-export interface FileWriteAction extends BaseAction {
-  type: 'FileWrite'
-  filename: string
-  content: string
-}
-
-export interface ScreenshotAction extends BaseAction {
-  type: 'Screenshot'
-  filename: string
-  region?: { x: number; y: number; width: number; height: number }
-}
-
-// System Actions
-export interface CommandAction extends BaseAction {
-  type: 'Command'
-  command: string
-  wait_for_completion?: boolean
-  timeout_seconds?: number
-}
-
-export interface TestAction extends BaseAction {
-  type: 'Test'
-  test_name: string
-  expected_result?: any
-}
-
-export interface CheckpointAction extends BaseAction {
-  type: 'Checkpoint'
-  name: string
-  description?: string
-}
-
-export interface RestoreCheckpointAction extends BaseAction {
-  type: 'RestoreCheckpoint'
-  name: string
-}
-
-export interface ResetAction extends BaseAction {
-  type: 'Reset'
-  reset_type: 'soft' | 'hard'
-}
-
-// Union type for all actions
-export type Action =
-  | ClickAction
-  | KeyboardAction
-  | ScrollAction
-  | DragAction
-  | WaitAction
-  | LoopAction
-  | BlockAction
-  | ConditionalAction
-  | SetVarAction
-  | FileReadAction
-  | FileWriteAction
-  | ScreenshotAction
-  | CommandAction
-  | TestAction
-  | CheckpointAction
-  | RestoreCheckpointAction
-  | ResetAction
+export type ClickType = 'left' | 'right' | 'double'
+export type ScrollDirection = 'up' | 'down' | 'left' | 'right'
 
 // Action execution result
 export interface ActionResult {
@@ -176,15 +43,42 @@ export interface ActionResult {
   screenshot_path?: string
   error_message?: string
   coordinates?: [number, number]
-  data?: any
+  data?: unknown
 }
 
-// Action type metadata (for palette)
+// Action type metadata (for palette), as served by /api/actions/types
 export interface ActionTypeMetadata {
+  /** The parser's action key (`click`, `idle`, `wait_until`, ...). */
   type: string
-  category: 'gui' | 'control' | 'data' | 'system'
+  category: ActionCategory
   display_name: string
   description: string
+  /** lucide icon name */
   icon: string
-  default_params: Partial<Action>
+  /** Seed parameters; `{[type]: default_params}` always parses. */
+  default_params: ActionParams
+  required_fields: string[]
+  optional_fields: string[]
+}
+
+/** Build a parser-shaped action from its key and parameters. */
+export function makeAction(key: string, params: ActionParams = {}): Action {
+  return { [key]: params }
+}
+
+/** The parser key of an action (its single top-level key). */
+export function actionKey(action: Action): string {
+  return Object.keys(action)[0] ?? ''
+}
+
+export function actionParams(action: Action): ActionParams {
+  const params = action[actionKey(action)]
+  return params && typeof params === 'object' ? params : {}
+}
+
+/** Drop undefined/empty-string params so cleared inputs don't reach the parser. */
+export function pruneParams(params: ActionParams): ActionParams {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== ''),
+  )
 }

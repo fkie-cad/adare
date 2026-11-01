@@ -26,6 +26,7 @@ export interface RunningVm {
   cpus: number | null
   // Present when the VM is a registered instance
   instance_id?: string
+  vm_id?: string // the registered VM (image) this instance belongs to; links to /vms/$vmId
   status?: string
   vm_name?: string | null
   experiment_run_id?: string | null

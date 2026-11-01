@@ -69,7 +69,7 @@ class TestRunDetail:
             project_name="proj",
         )
         assert detail.test_results == []
-        assert detail.os_info == ""
+        assert detail.os_info is None
 
 
 class TestRunRemoveResult:

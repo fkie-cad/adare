@@ -7,13 +7,14 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCap
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import { EnvironmentSyncBadge } from '@/components/environment-sync-badge'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CreateEnvironmentDialog } from '@/components/dialogs/create-environment-dialog'
 import { useEnvironments, useDeleteEnvironment, type Environment } from '@/api/hooks/use-environments'
 import { toast } from '@/components/ui/toast'
 
 const SKELETON_ROWS = 5
-const COLUMNS = 7
+const COLUMNS = 6
 
 function LoadingTable() {
   return (
@@ -24,7 +25,6 @@ function LoadingTable() {
           <TableHead>Type</TableHead>
           <TableHead>OS</TableHead>
           <TableHead>VM</TableHead>
-          <TableHead>Project</TableHead>
           <TableHead>Sync</TableHead>
           <TableHead className="w-24 text-right">Actions</TableHead>
         </TableRow>
@@ -42,12 +42,6 @@ function LoadingTable() {
       </TableBody>
     </Table>
   )
-}
-
-function SyncBadge({ synced }: { synced: unknown }) {
-  if (synced === true) return <Badge variant="success">Synced</Badge>
-  if (synced === false) return <Badge variant="warning">Unsynced</Badge>
-  return <>—</>
 }
 
 function EnvironmentTypeBadge({ env }: { env: Environment }) {
@@ -135,7 +129,6 @@ export default function EnvironmentsListPage() {
               <TableHead>Type</TableHead>
               <TableHead>OS</TableHead>
               <TableHead>VM</TableHead>
-              <TableHead>Project</TableHead>
               <TableHead>Sync</TableHead>
               <TableHead className="w-24 text-right">Actions</TableHead>
             </TableRow>
@@ -151,19 +144,12 @@ export default function EnvironmentsListPage() {
                 <TableCell>
                   <EnvironmentTypeBadge env={env} />
                 </TableCell>
-                <TableCell>{(env as any).os || '—'}</TableCell>
+                <TableCell>{env.os || '—'}</TableCell>
                 <TableCell className="max-w-xs">
                   <VmCell env={env} />
                 </TableCell>
                 <TableCell>
-                  {env.project_path ? (
-                    <span className="font-mono text-xs">{env.project_path}</span>
-                  ) : (
-                    '—'
-                  )}
-                </TableCell>
-                <TableCell>
-                  <SyncBadge synced={(env as any).synced} />
+                  <EnvironmentSyncBadge published={env.published} inRequest={env.in_request} />
                 </TableCell>
                 <TableCell className="text-right">
                   <Button

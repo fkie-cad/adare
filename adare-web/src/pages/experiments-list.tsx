@@ -53,9 +53,9 @@ function LoadingTable() {
   )
 }
 
+/** The project's filesystem path, which the mutation endpoints take as `project_path`. */
 function projectPathOf(exp: Experiment): string {
-  const p = (exp as { project_path?: string; project?: string })
-  return String(p.project_path ?? p.project ?? '')
+  return exp.project_path ?? ''
 }
 
 export default function ExperimentsListPage() {
@@ -94,7 +94,17 @@ export default function ExperimentsListPage() {
         request: { project_path: projectPathOf(exp) },
       },
       {
-        onSuccess: () => toast.success('Experiment valid', exp.name),
+        onSuccess: (result) => {
+          if (result.is_valid) {
+            toast.success('Experiment valid', exp.name)
+            return
+          }
+          const failed = result.checks.filter((c) => !c.passed && !c.is_warning)
+          toast.error(
+            `${exp.name}: ${result.failed_count} check${result.failed_count === 1 ? '' : 's'} failed`,
+            failed.map((c) => `${c.name}: ${c.message}`).join('\n'),
+          )
+        },
         onError: (err) =>
           toast.error(`Validation failed: ${exp.name}`, (err as Error)?.message),
       },
@@ -159,19 +169,26 @@ export default function ExperimentsListPage() {
           </TableHeader>
           <TableBody>
             {(data ?? []).map((exp) => {
-              const project = projectPathOf(exp) || '—'
+              const project = exp.project || '—'
               const tags: string[] = Array.isArray(exp.tags) ? exp.tags : []
-              const runCount = (exp as { run_count?: number }).run_count
+              const runCount = exp.run_count
               const envNames: string[] = exp.environment_names ?? []
               return (
-                <TableRow key={exp.name} className="hover:bg-muted/50">
+                <TableRow key={exp.dotnotation ?? `${exp.project}.${exp.name}`} className="hover:bg-muted/50">
                   <TableCell className="font-medium">
-                    <Link to="/experiments/$name" params={{ name: exp.name }} className="hover:underline">
+                    {/* Short names repeat across projects; the dotnotation is unique. */}
+                    <Link
+                      to="/experiments/$name"
+                      params={{ name: exp.dotnotation ?? exp.name }}
+                      className="hover:underline"
+                    >
                       {exp.name}
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <span className="font-mono text-xs">{project}</span>
+                    <span className="font-mono text-xs" title={exp.project_path}>
+                      {project}
+                    </span>
                   </TableCell>
                   <TableCell>
                     {envNames.length > 0 ? (

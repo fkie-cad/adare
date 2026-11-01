@@ -214,7 +214,7 @@ class TestVMServiceGetInstanceUsage:
 
         inst1 = MagicMock(status="active")
         inst1.vm.name = "vm-a"
-        inst2 = MagicMock(status="stopped")
+        inst2 = MagicMock(status="cleanup_pending")
         inst2.vm.name = "vm-a"
         mock_api.get_all_vm_instances.return_value = [inst1, inst2]
 
@@ -223,4 +223,4 @@ class TestVMServiceGetInstanceUsage:
         assert result.success is True
         assert result.data.total_instances == 2
         assert result.data.active_instances == 1
-        assert result.data.stopped_instances == 1
+        assert result.data.cleanup_pending_instances == 1

@@ -232,15 +232,6 @@ def test_list_reports_whether_the_backing_disk_exists(client, seed_env, disk, ex
     assert item['disk_path']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'show_service._parse_env_source promises "a single malformed file must never break the whole list" but '
-        'catches only (OSError, ValueError, DataStructuringError); a YAML syntax error is a yaml.YAMLError, '
-        'which escapes, so one bad environment file turns GET /api/environments into an HTTP 500 and the list '
-        'page shows nothing. (services/show_service.py:56)'
-    ),
-)
 def test_list_survives_an_unparseable_environment_file(global_db, seed_env):
     app = FastAPI()
     app.include_router(environments_router)
@@ -285,14 +276,6 @@ def test_list_failure_is_a_200_error_envelope(client):
 # --- frontend reads that the backend does not satisfy ------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'environments-list.tsx / environment-detail.tsx render `(env as any).os` ("OS" column) but '
-        'ShowService.list_environments sends only osinfo_os / osinfo_distribution / os_info, never `os`: '
-        'the OS column is always "—".'
-    ),
-)
 @pytest.mark.parametrize('route', ['/api/environments', '/api/environments/e'])
 def test_environment_carries_the_os_label_the_pages_render(client, seed_env, route):
     seed_env('e', os_name='Ubuntu', distribution='24.04')
@@ -301,30 +284,21 @@ def test_environment_carries_the_os_label_the_pages_render(client, seed_env, rou
     assert item.get('os'), f'no `os` key; backend sent {sorted(item)}'
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'the Sync badge reads a boolean `synced` (env.synced === true/false) but the backend sends '
-        '`published` / `in_request` only: the badge is always "—".'
-    ),
-)
 @pytest.mark.parametrize('route', ['/api/environments', '/api/environments/e'])
-@pytest.mark.parametrize('synced', [True, False])
-def test_environment_carries_the_boolean_sync_flag_the_badge_reads(client, seed_env, route, synced):
+@pytest.mark.parametrize(
+    ('synced', 'published', 'in_request'),
+    [(True, True, False), (False, False, True), (None, False, False)],
+    ids=['published', 'pending-request', 'local'],
+)
+def test_environment_carries_the_sync_flags_the_badge_reads(client, seed_env, route, synced, published, in_request):
+    """The Sync badge reads `published` / `in_request` (Published / Pending request / Local)."""
     seed_env('e', synced=synced)
     data = client.get(route).json()['data']
     item = data[0] if isinstance(data, list) else data
-    assert item.get('synced') is synced, f'no `synced` key; backend sent {sorted(item)}'
+    assert item['published'] is published
+    assert item['in_request'] is in_request
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'the frontend decides recipe-vs-baked from `env.recipe` ({profile, disk_size, ram_mb, cpus, ...}: '
-        'type badge on the list, "Recipe" row on the detail page) but the backend never sends `recipe`. '
-        'A recipe environment has no `vm`, so it is labelled "Legacy" in the list and the Recipe row never shows.'
-    ),
-)
 @pytest.mark.parametrize('route', ['/api/environments', '/api/environments/recipe-env'])
 def test_recipe_environment_carries_the_recipe_block_the_pages_render(client, seed_env, route):
     seed_env('recipe-env', yaml_text=RECIPE_YAML, disk='missing')
@@ -338,21 +312,42 @@ def test_recipe_environment_carries_the_recipe_block_the_pages_render(client, se
     assert recipe['cpus'] == 2
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'environment-detail.tsx enables the Verify button only when `env.project_path` is set and posts it as '
-        'the verify body; the backend sends `project: "Global"` and no `project_path` (environments are global), '
-        'so Verify is permanently disabled and the Project cell is always "—". The fix may belong in the frontend '
-        '(pass the active project) rather than here.'
-    ),
-)
 @pytest.mark.parametrize('route', ['/api/environments', '/api/environments/e'])
-def test_environment_carries_the_project_path_the_verify_button_needs(client, seed_env, route):
+def test_environment_is_global_and_carries_no_project_path(client, seed_env, route):
+    """Environments are global: verify needs no project, so the pages neither read nor need `project_path`."""
     seed_env('e')
     data = client.get(route).json()['data']
     item = data[0] if isinstance(data, list) else data
-    assert item.get('project_path'), f'no `project_path` key; backend sent {sorted(item)}'
+    assert item['project'] == 'Global'
+    assert 'project_path' not in item
+
+
+def test_get_environment_survives_an_unparseable_environment_file(client, seed_env):
+    seed_env('broken', yaml_text='vm: [unclosed')
+
+    body = client.get('/api/environments/broken').json()
+
+    assert body['success'] is True
+    assert body['data']['name'] == 'broken'
+    assert body['data']['vm'] == ''
+
+
+@pytest.mark.parametrize(
+    ('args', 'expected'),
+    [
+        (('Ubuntu', '24.04', '', 'linux 24.04'), 'Ubuntu 24.04'),
+        (('Windows', '', '11', 'windows 11'), 'Windows 11'),
+        (('', '', '', 'linux 24.04'), 'linux 24.04'),
+        (('Ubuntu', '', '', ''), 'Ubuntu'),
+        # Real VMs often carry the full product name plus a bare distribution: no repetition.
+        (('Ubuntu 25.10', 'ubuntu', '', ''), 'Ubuntu 25.10'),
+        (('Windows 11 (ARM64) Home', 'windows', '11', ''), 'Windows 11 (ARM64) Home'),
+    ],
+)
+def test_os_label_prefers_os_name_plus_release(args, expected):
+    from adare.services.environment_source import os_label
+
+    assert os_label(*args) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -727,10 +722,27 @@ def test_verify_run_start_failure_is_an_error_envelope(client, verify_service):
     )
 
 
-def test_verify_without_a_project_path_is_rejected_by_validation(client, verify_service):
-    response = client.post('/api/environments/env1/verify', json={})
-    assert response.status_code == 422
+def test_verify_without_a_project_path_runs_in_the_verify_scratch_directory(client, verify_service, tmp_path):
+    """Environments are global, so Verify needs no project: it falls back to the scratch dir (as the CLI does)."""
+    scratch = tmp_path / 'verify-runs'
+    with patch.object(ExperimentService, 'get_or_create_verify_scratch', return_value=Result.ok(scratch)):
+        response = client.post('/api/environments/env1/verify', json={})
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body['success'] is True
+    assert body['data']['run_ulid'] == verify_service.started.run_ulid
+    verify_service.setup.assert_called_once_with(scratch, 'env1')
+    verify_service.run.assert_awaited_once_with(scratch, 'verify_vm', 'env1')
+
+
+def test_verify_scratch_failure_is_an_error_envelope_and_never_starts_a_run(client, verify_service):
+    failure = Result.fail(code='ScratchError', message='cannot create scratch', solutions=[])
+    with patch.object(ExperimentService, 'get_or_create_verify_scratch', return_value=failure):
+        _assert_error_envelope(client.post('/api/environments/env1/verify', json={}), 'ScratchError')
+
     verify_service.setup.assert_not_called()
+    verify_service.run.assert_not_awaited()
 
 
 def test_verify_does_not_block_the_event_loop_while_the_setup_runs(client, verify_service):

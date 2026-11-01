@@ -5,6 +5,7 @@ These DTOs provide type-safe request/response objects for dev mode operations,
 enabling consistent interfaces across CLI, REST API, and Web UI.
 """
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -68,6 +69,25 @@ class DevResetRequest:
 
     session_id: str
     reset_type: str  # 'soft', 'hard'
+
+
+_CHECKPOINT_NAME_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}')
+
+
+def checkpoint_name_error(name: str) -> str | None:
+    """Return why ``name`` cannot be a checkpoint name, or ``None`` when it is fine.
+
+    Checkpoint names travel as URL path segments (restore/delete) and become snapshot names,
+    so they are limited to letters, digits, space, ``.``, ``_`` and ``-`` (at most 100
+    characters, starting with a letter or digit). In particular ``/`` is rejected: a name
+    containing it could be created but never addressed again.
+    """
+    if _CHECKPOINT_NAME_RE.fullmatch(name):
+        return None
+    return (
+        f"Invalid checkpoint name {name!r}: use 1-100 characters from letters, digits, space, '.', '_' and '-', "
+        "starting with a letter or digit (no '/' or other special characters)"
+    )
 
 
 @dataclass

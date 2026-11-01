@@ -77,7 +77,7 @@ class TestVmInstanceUsage:
             total_instances=5,
             active_instances=2,
             available_instances=2,
-            stopped_instances=1,
+            cleanup_pending_instances=1,
             instances_by_vm={"vm1": 3, "vm2": 2},
         )
         assert usage.total_instances == 5

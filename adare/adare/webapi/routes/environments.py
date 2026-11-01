@@ -78,9 +78,14 @@ class CheckUrlBody(BaseModel):
 
 
 class EnvironmentVerifyBody(BaseModel):
-    """Request body for verifying an environment."""
+    """Request body for verifying an environment.
 
-    project_path: str
+    ``project_path`` is optional: environments are global, so verification does not need a
+    project. Without one, the run goes to the freestanding verify scratch directory (same as
+    ``adare environment verify`` with no project).
+    """
+
+    project_path: str | None = None
 
 
 # ---- Helpers ----
@@ -324,9 +329,16 @@ async def verify_environment(name: str, body: EnvironmentVerifyBody):
     """Run the built-in ``verify_vm`` smoke test against this environment.
 
     Idempotently attaches the built-in verify experiment to the environment,
-    then starts a background run and returns immediately with its ULID.
+    then starts a background run and returns immediately with its ULID. Runs in
+    the given project, or in the verify scratch directory when none is given.
     """
-    project_path = Path(body.project_path)
+    if body.project_path:
+        project_path = Path(body.project_path)
+    else:
+        scratch_result = await asyncio.to_thread(_api().experiment.get_or_create_verify_scratch)
+        if not scratch_result.success:
+            return result_to_response(scratch_result)
+        project_path = scratch_result.data
 
     setup_result = await asyncio.to_thread(_api().experiment.ensure_verify_setup, project_path, name)
     if not setup_result.success:

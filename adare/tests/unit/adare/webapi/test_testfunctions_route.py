@@ -157,12 +157,6 @@ def test_list_filter_for_an_unknown_file_is_empty_not_an_error(client, seeded):
     assert response.json() == {'success': True, 'data': []}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='a testfunction that vanished from its source file is only flagged is_current=False (the row is kept for '
-    'experiment references), but get_testfunctions_structured does not filter on it, so the web list offers a '
-    'testfunction that no longer exists (adare/database/api/structured_data.py:176)',
-)
 def test_list_hides_testfunctions_no_longer_in_the_source(client, seeded):
     with TestfunctionDbApi() as api:
         vanished = api._session.query(TestFunction).filter_by(name='file_size').one()
@@ -227,3 +221,13 @@ def test_get_dotnotation_with_slashes_is_a_not_found_envelope_not_a_404(client, 
 
 def test_get_is_case_sensitive(client, seeded):
     _assert_failure(client.get('/api/testfunctions/Files.File_Exists').json(), 'TestfunctionNotFoundError')
+
+
+def test_get_hides_a_testfunction_that_vanished_from_its_source(client, seeded):
+    """Detail follows the list: a vanished testfunction (kept only for experiment references) is not found."""
+    with TestfunctionDbApi() as api:
+        api._session.query(TestFunction).filter_by(name='file_size').one().is_current = False
+
+    payload = client.get('/api/testfunctions/files.file_size').json()
+
+    _assert_failure(payload, 'TestfunctionNotFoundError')

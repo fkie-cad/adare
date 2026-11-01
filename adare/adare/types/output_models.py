@@ -108,6 +108,7 @@ class ExperimentInfo:
     environment_names: list[str] = attrs.Factory(list)
     published: bool = False
     in_request: bool = False
+    project_path: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""

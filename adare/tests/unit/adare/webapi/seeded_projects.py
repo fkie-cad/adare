@@ -123,6 +123,18 @@ def _add_run(
         session.add(run)
         session.flush()
         for abstract_test, status in results or []:
+            # Like a real run: a result-less `test_start` and a `test_complete` per test, one group.
+            group = _new_id()
+            session.add(
+                TestEvent(
+                    id=_new_id(),
+                    experiment_run_id=run.id,
+                    abstract_test_id=abstract_test.id,
+                    event_type_specific='test_start',
+                    event_group_id=group,
+                    timestamp=START,
+                )
+            )
             session.add(
                 TestEvent(
                     id=_new_id(),
@@ -130,6 +142,8 @@ def _add_run(
                     abstract_test_id=abstract_test.id,
                     success=status == StatusEnum.SUCCESS,
                     result=Result(status=str(int(status)), details=f'{abstract_test.name} details'),
+                    event_type_specific='test_complete',
+                    event_group_id=group,
                     timestamp=START,
                 )
             )

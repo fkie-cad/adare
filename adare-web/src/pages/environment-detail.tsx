@@ -8,16 +8,11 @@ import { Badge, statusToVariant } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
+import { EnvironmentSyncBadge } from '@/components/environment-sync-badge'
 import { VerifyEnvironmentDialog } from '@/components/dialogs/verify-environment-dialog'
 import { useEnvironment } from '@/api/hooks/use-environments'
 import { useRuns } from '@/api/hooks/use-runs'
 import { formatDateTime, formatDuration } from '@/lib/formatters'
-
-function SyncBadge({ synced }: { synced: unknown }) {
-  if (synced === true) return <Badge variant="success">Synced</Badge>
-  if (synced === false) return <Badge variant="warning">Unsynced</Badge>
-  return <>—</>
-}
 
 export default function EnvironmentDetailPage() {
   const { name } = useParams({ from: '/environments/$name' })
@@ -26,7 +21,6 @@ export default function EnvironmentDetailPage() {
   const [verifyOpen, setVerifyOpen] = useState(false)
 
   const env = environmentQuery.data
-  const projectPath = env?.project_path ? String(env.project_path) : ''
 
   return (
     <div className="p-6 space-y-6">
@@ -34,7 +28,7 @@ export default function EnvironmentDetailPage() {
         title={name}
         description="Environment details"
         actions={
-          <Button onClick={() => setVerifyOpen(true)} disabled={!projectPath}>
+          <Button onClick={() => setVerifyOpen(true)}>
             <CheckSquare size={14} />
             Verify
           </Button>
@@ -59,21 +53,17 @@ export default function EnvironmentDetailPage() {
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">OS</dt>
-                  <dd className="text-sm">{(env as { os?: string }).os || '—'}</dd>
+                  <dd className="text-sm">{env.os || '—'}</dd>
                 </div>
                 <div className="space-y-1">
                   <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sync</dt>
                   <dd className="text-sm">
-                    <SyncBadge synced={(env as { synced?: unknown }).synced} />
+                    <EnvironmentSyncBadge published={env.published} inRequest={env.in_request} />
                   </dd>
                 </div>
                 <div className="space-y-1">
                   <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">VM</dt>
                   <dd className="text-sm font-mono break-all">{env.vm || '—'}</dd>
-                </div>
-                <div className="space-y-1">
-                  <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Project</dt>
-                  <dd className="text-sm font-mono break-all">{projectPath || '—'}</dd>
                 </div>
                 {env.recipe && (
                   <div className="space-y-1 sm:col-span-2">
@@ -152,7 +142,7 @@ export default function EnvironmentDetailPage() {
                     </TableCell>
                     <TableCell>{formatDateTime((run as { start_time?: string }).start_time)}</TableCell>
                     <TableCell>{formatDuration((run as { duration_seconds?: number }).duration_seconds)}</TableCell>
-                    <TableCell>{(run as { overall_result?: string }).overall_result || '—'}</TableCell>
+                    <TableCell>{run.result_status || '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -165,7 +155,6 @@ export default function EnvironmentDetailPage() {
         open={verifyOpen}
         onOpenChange={setVerifyOpen}
         environmentName={name}
-        projectPath={projectPath || null}
       />
     </div>
   )

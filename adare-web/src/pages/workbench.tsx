@@ -56,7 +56,7 @@ export default function WorkbenchPage() {
               <TabsContent value="agent">
                 <RunAgentPanel
                   sessionId={sessionId}
-                  vmName={selectedSession?.vm_name}
+                  vmName={selectedSession?.vm_name ?? undefined}
                   vmRunning={selectedSession?.vm_running}
                 />
               </TabsContent>

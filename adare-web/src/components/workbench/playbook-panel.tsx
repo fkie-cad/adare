@@ -22,12 +22,15 @@ import { CreateExperimentDialog } from '@/components/dialogs/create-experiment-d
 import { stringify } from 'yaml'
 import { usePlaybookStore } from '@/stores/playbook-store'
 import { useSavePlaybook, useLoadPlaybook } from '@/api/hooks/use-playbook'
-import type { Action } from '@/types/action'
+import { actionKey, actionParams, type Action } from '@/types/action'
 import type { Experiment } from '@/api/hooks/use-experiments'
 
 function actionLabel(action: Action, index: number): string {
-  const desc = 'description' in action && action.description ? action.description : undefined
-  return desc ? `${action.type} — ${desc}` : `${action.type} #${index + 1}`
+  const key = actionKey(action)
+  const description = actionParams(action).description
+  return typeof description === 'string' && description
+    ? `${key} — ${description}`
+    : `${key} #${index + 1}`
 }
 
 export function PlaybookPanel() {

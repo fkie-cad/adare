@@ -21,6 +21,7 @@ from adare.core.dto.devmode import (
     DevCheckpointRestoreRequest,
     DevResetRequest,
     DevResetResult,
+    checkpoint_name_error,
 )
 from adare.core.result import Result
 
@@ -193,6 +194,11 @@ class CheckpointManagementMixin:
         Returns:
             Result[bool] with True on success
         """
+        name_error = checkpoint_name_error(request.name)
+        if name_error:
+            return Result.fail(
+                "INVALID_CHECKPOINT_NAME", name_error, ["Use letters, digits, spaces, '.', '_' or '-' only"]
+            )
         try:
             # CRITICAL: Execute entire flow in ONE asyncio.run() call
             # This keeps the WebSocket message_handler_task alive throughout execution
