@@ -8,7 +8,7 @@ started and libvirt is never called.
 
 Frontend expectations the backend does not meet are strict xfails: when the
 backend (or the frontend contract) is fixed they flip to XPASS and fail the suite
-until the marker is removed.
+until the marker is removed. (None are open at the moment.)
 """
 
 from datetime import datetime
@@ -150,6 +150,7 @@ def test_list_row_shape(client, ubuntu):
             'status': 'active',
             'websocket_port': 5901,
             'hypervisor': 'qemu',
+            'vm_id': ubuntu,
         }
     ]
 
@@ -189,18 +190,19 @@ def test_list_ids_are_ids_the_remove_and_snapshot_routes_resolve(client, ubuntu)
     assert [s['name'] for s in client.get(f'/api/vm-instances/{row["id"]}/snapshots').json()['data']] == ['checkpoint']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='vm-detail.tsx names each instance row (and the Watch live view) with instance.name, but '
-    'VmInstanceListItem only has instance_name/vm_name, so the row shows the ULID and the live view '
-    'is asked for a VM called <ulid>',
-)
 def test_list_rows_carry_the_name_vm_detail_shows_and_watches(client, ubuntu):
+    """vm-detail.tsx labels each row, and asks /api/vm-watch-url for the live view, by `instance_name`.
+
+    Rewritten from a `name` expectation: the page was wrong to read `instance.name`. The
+    instance name is the hypervisor domain name vm-watch-url resolves, and `vm_id` ties
+    the row back to the VM (image) page it is listed on.
+    """
     _add_instance(ubuntu, 'ubuntu2404_run_1')
 
     row = client.get('/api/vm-instances').json()['data'][0]
 
-    assert row['name'] == 'ubuntu2404_run_1'
+    assert row['instance_name'] == 'ubuntu2404_run_1'
+    assert row['vm_id'] == ubuntu
 
 
 # ---- GET /api/vm-instances/usage ----
@@ -213,7 +215,7 @@ def test_usage_empty(client):
             'total_instances': 0,
             'active_instances': 0,
             'available_instances': 0,
-            'stopped_instances': 0,
+            'cleanup_pending_instances': 0,
             'instances_by_vm': {},
         },
     }
@@ -230,6 +232,8 @@ def test_usage_counts_by_status_and_vm(client, ubuntu, debian):
     assert data['total_instances'] == 4
     assert data['active_instances'] == 1
     assert data['available_instances'] == 2
+    assert data['cleanup_pending_instances'] == 1
+    assert 'stopped_instances' not in data
     assert data['instances_by_vm'] == {'ubuntu2404': 2, 'debian12': 2}
 
 
@@ -316,7 +320,8 @@ def test_remove_cascades_to_the_instance_snapshots(client, ubuntu):
 
     assert client.delete(f'/api/vm-instances/{instance_id}').json()['success'] is True
 
-    assert client.get(f'/api/vm-instances/{instance_id}/snapshots').json() == {'success': True, 'data': []}
+    with VmApi() as api:
+        assert api.get_snapshots_for_instance(instance_id) == []
 
 
 def test_remove_refuses_a_running_instance(client, ubuntu, hypervisor_states):
@@ -370,18 +375,21 @@ def test_remove_all_is_not_captured_by_the_instance_id_route(client):
     assert client.delete('/api/vm-instances').json()['success'] is True
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='use-vms.ts useRemoveAllStoppedInstances types data.data as a number and vms-list.tsx toasts '
-    '"Removed ${count} stopped instances", but the backend returns a VmInstanceCleanupResult object, so '
-    'the toast reads "Removed [object Object] ..."',
-)
-def test_remove_all_data_is_the_removed_count_the_toast_prints(client, ubuntu):
-    _add_instance(ubuntu, 'u1')
+def test_remove_all_data_carries_the_removed_count_the_toast_prints(client, ubuntu):
+    """use-vms.ts types the data as a VmInstanceCleanupResult and vms-list.tsx toasts `removed_count`.
+
+    Rewritten from `data == 1`: the frontend was wrong to treat the object as a number.
+    """
+    instance_id = _add_instance(ubuntu, 'u1')
 
     data = client.delete('/api/vm-instances').json()['data']
 
-    assert data == 1
+    assert data == {
+        'removed_count': 1,
+        'removed_instances': [instance_id],
+        'failed_count': 0,
+        'failed_instances': [],
+    }
 
 
 # ---- GET /api/vm-instances/{instance_id}/snapshots ----
@@ -425,9 +433,11 @@ def test_snapshots_of_an_instance_without_any_are_empty(client, ubuntu):
     assert client.get(f'/api/vm-instances/{instance_id}/snapshots').json() == {'success': True, 'data': []}
 
 
-def test_snapshots_of_an_unknown_instance_are_empty_not_an_error(client):
-    """Unlike GET /{id}, the snapshot list does not check the instance exists."""
-    assert client.get(f'/api/vm-instances/{UNKNOWN_ID}/snapshots').json() == {'success': True, 'data': []}
+def test_snapshots_of_an_unknown_instance_are_not_found(client):
+    error = _error(client.get(f'/api/vm-instances/{UNKNOWN_ID}/snapshots').json())
+
+    assert error['code'] == 'VmInstanceNotFoundError'
+    assert UNKNOWN_ID in error['message']
 
 
 # ---- DELETE /api/vm-instances/{instance_id}/snapshots/{snapshot_name} ----
@@ -521,9 +531,11 @@ def test_delete_snapshot_of_a_qemu_instance_is_refused(client, ubuntu, vbox_tool
 
     error = _error(client.delete(f'/api/vm-instances/{instance_id}/snapshots/checkpoint').json())
 
-    # the service swallows the VMError ("VirtualBox-only") into the generic failure
-    assert error['code'] == 'SnapshotDeleteError'
+    assert error['code'] == 'SnapshotNotSupported'
+    assert 'VirtualBox-only' in error['message']
+    assert 'qemu' in error['message']
     assert error['solutions']
+    assert _snapshot_names(client, instance_id) == ['checkpoint']
 
 
 def test_delete_snapshot_of_an_unknown_instance_is_an_error_envelope(client):
@@ -535,12 +547,6 @@ def test_delete_snapshot_of_an_unknown_instance_is_an_error_envelope(client):
     assert UNKNOWN_ID in error['message']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='VMService.delete_snapshot builds SnapshotManager() before anything else, which raises '
-    'HypervisorException (not caught: it is not a VMError) when VBoxManage is not installed. A QEMU-only '
-    'host gets an HTTP 500 instead of the {success: false, error} envelope vm-detail.tsx expects.',
-)
 def test_delete_snapshot_without_virtualbox_installed_is_an_error_envelope(global_db, ubuntu):
     app = FastAPI()
     app.include_router(router)
@@ -552,3 +558,19 @@ def test_delete_snapshot_without_virtualbox_installed_is_an_error_envelope(globa
 
     assert response.status_code == 200
     assert response.json()['success'] is False
+
+
+def test_delete_snapshot_of_a_virtualbox_instance_without_vboxmanage_is_an_error_envelope(global_db):
+    """A VirtualBox instance on a host that lost VBoxManage: the HypervisorException becomes the envelope, not a 500."""
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app, raise_server_exceptions=False)
+    instance_id = _add_instance(_add_vm('win11', hypervisor='virtualbox'), 'win11_run_1', vbox_uuid='uuid-1')
+
+    with patch('adare.hypervisor.executable_manager.shutil.which', return_value=None):
+        response = client.delete(f'/api/vm-instances/{instance_id}/snapshots/checkpoint')
+
+    assert response.status_code == 200
+    error = _error(response.json())
+    assert error['code']
+    assert 'VBoxManage' in error['message'] or 'VirtualBox' in error['message']

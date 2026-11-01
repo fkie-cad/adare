@@ -86,7 +86,11 @@ export function SessionControls({
 
   const handleCleanup = () => {
     cleanupSessions.mutate(undefined, {
-      onSuccess: (count) => toast.success('Cleanup complete', `${count} stale session(s) removed`),
+      onSuccess: (result) =>
+        toast.success(
+          'Cleanup complete',
+          `${result.sessions_reconciled} stale session(s) marked stopped, ${result.sessions_left_running} still running`,
+        ),
       onError: (err) => toast.error('Cleanup failed', (err as Error)?.message),
     })
   }
@@ -106,7 +110,7 @@ export function SessionControls({
           </option>
           {sessions?.map((s) => (
             <option key={s.session_id} value={s.session_id}>
-              {s.experiment} · {s.environment} ({s.session_id.slice(0, 8)})
+              {s.experiment_name} · {s.environment_name} ({s.session_id.slice(0, 8)})
               {s.vm_running === false ? ' · stopped' : ''}
             </option>
           ))}

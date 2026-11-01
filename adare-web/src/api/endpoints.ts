@@ -4,7 +4,7 @@ export const endpoints = {
   sessionState: (id: string) => `/sessions/${id}/state`,
   sessionStart: '/sessions/start',
   sessionStop: (id: string) => `/sessions/${id}/stop`,
-  sessionReset: (id: string, type: string) => `/sessions/${id}/reset?type=${type}`,
+  sessionReset: (id: string, type: string) => `/sessions/${id}/reset?reset_type=${type}`,
   sessionCleanup: '/sessions/cleanup',
 
   // Checkpoints

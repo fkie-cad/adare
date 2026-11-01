@@ -18,6 +18,7 @@ Envelope: every route here that goes through ``result_to_response`` answers
 *failure with HTTP 200* (the frontend's ``api/client.ts`` interceptor therefore never sees it).
 """
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -274,22 +275,17 @@ def test_list_sessions_items_have_the_fields_the_workbench_dropdown_reads(real_c
     assert item['project_path'] == '/projects/demo'
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'session-controls.tsx renders `{s.experiment} · {s.environment}` (types/session.ts '
-        'DevSessionListItem) but DevSessionListItem sends experiment_name / environment_name, so '
-        'every option reads "undefined · undefined"'
-    ),
-)
 def test_list_sessions_items_use_the_keys_the_frontend_types_declare(real_client, real_service):
+    """session-controls.tsx renders ``s.experiment_name`` / ``s.environment_name`` (types/session.ts DevSessionListItem)."""
     _seed_session(real_service)
 
     with patch.object(real_service, '_session_vm_alive', return_value=False):
         (item,) = real_client.get('/api/sessions').json()['data']
 
-    assert item['experiment'] == 'exp-a'
-    assert item['environment'] == 'ubuntu-env'
+    assert item['experiment_name'] == 'exp-a'
+    assert item['environment_name'] == 'ubuntu-env'
+    assert 'experiment' not in item
+    assert 'environment' not in item
 
 
 def test_list_sessions_reconciles_stale_running_row_to_stopped(real_client, real_service):
@@ -330,20 +326,16 @@ def test_session_state_serialises_dev_session_info(client, devmode):
     assert data['vm_running'] is True
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'types/session.ts SessionState (use-sessions.ts useSessionState) is {variables, checkpoints, '
-        'execution_stats}; the route returns DevSessionInfo (current_variables, available_snapshots, '
-        'actions_executed). No component calls the hook yet, so nothing breaks today'
-    ),
-)
 def test_session_state_matches_the_frontend_session_state_type(client, devmode):
     devmode.get_state.return_value = Result.ok(_session_info())
 
     data = client.get(f'/api/sessions/{SESSION_ID}/state').json()['data']
 
-    assert {'variables', 'checkpoints', 'execution_stats'} <= data.keys()
+    # types/session.ts SessionState mirrors DevSessionInfo
+    assert {'session_id', 'current_variables', 'available_snapshots', 'actions_executed', 'vm_running'} <= data.keys()
+    (snapshot,) = data['available_snapshots']
+    assert {'snapshot_name', 'created_at', 'variable_state', 'checkpoint_id'} <= snapshot.keys()
+    assert not {'variables', 'checkpoints', 'execution_stats'} & data.keys()
 
 
 # --- POST /api/sessions/cleanup ---------------------------------------------------------
@@ -363,21 +355,15 @@ def test_cleanup_reconciles_dead_running_sessions(real_client, real_service):
     }
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'use-sessions.ts useCleanupSessions types `data` as a number and session-controls.tsx toasts '
-        '`${count} stale session(s) removed`; the route returns a DevCleanupResult object, so the toast '
-        'reads "[object Object] stale session(s) removed"'
-    ),
-)
-def test_cleanup_data_is_the_count_the_frontend_expects(real_client, real_service):
+def test_cleanup_data_has_the_counts_the_frontend_reads(real_client, real_service):
+    """use-sessions.ts useCleanupSessions types ``data`` as DevCleanupResult and the toast reads sessions_reconciled."""
     _seed_session(real_service, status='running')
 
     with patch.object(real_service, '_session_vm_alive', return_value=False):
         data = real_client.post('/api/sessions/cleanup').json()['data']
 
-    assert isinstance(data, int)
+    assert set(data) == {'sessions_reconciled', 'reconciled_session_ids', 'sessions_left_running'}
+    assert data['sessions_reconciled'] == 1
 
 
 def test_cleanup_passes_project_filter(client, devmode):
@@ -472,21 +458,21 @@ def test_execute_action_requires_action_yaml(client, devmode):
     devmode.execute_action.assert_not_called()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'manual-actions-panel.tsx builds `type: Click` / `type: Wait` style drafts from /api/actions/types '
-        '(`stringify({type: meta.type, ...})`) and posts them as action_yaml; the backend parser '
-        '(types/playbook.py structure_action) only knows lower-case action keys (`click:`, `idle:` ...) '
-        'and rejects "Unknown action", so the palette cannot execute anything'
-    ),
+@pytest.mark.parametrize(
+    'frontend_yaml',
+    [
+        # What manual-actions-panel.tsx posts as action_yaml: `stringify({[key]: params})`,
+        # with the strategy written as `{<StrategyClassName>: {...}}` (see strategyValue()).
+        'click:\n  target:\n    text: OK\n',
+        'click:\n  target:\n    image: ok.png\n    strategy:\n      SweepStrategy:\n        index: 1\n  type: double\n',
+        'idle:\n  duration: 2\n',
+        'keyboard:\n  text: hello\n',
+    ],
 )
-def test_frontend_palette_yaml_is_accepted_by_the_real_action_parser():
+def test_frontend_palette_yaml_is_accepted_by_the_real_action_parser(frontend_yaml):
     import yaml
 
     from adare.types.playbook import structure_action
-
-    frontend_yaml = 'type: Click\ntarget:\n  type: image\n  image: ok.png\nstrategy: sweep\n'
 
     structure_action(yaml.safe_load(frontend_yaml))
 
@@ -588,19 +574,23 @@ def test_reset_rejects_unknown_type(service_client, service_devmode):
     assert service_client.post(f'/api/sessions/{SESSION_ID}/reset', params={'reset_type': 'nuke'}).status_code == 422
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'api/endpoints.ts sessionReset builds `/sessions/{id}/reset?type=hard` (and the "Hard reset" '
-        'button confirms a destructive VM rewind), but the route reads the query param `reset_type`; '
-        '`type` is ignored so the default "soft" reset runs instead'
-    ),
-)
-def test_reset_honours_the_query_param_the_frontend_sends(service_client, service_devmode):
-    service_devmode.reset_soft.return_value = Result.ok(DevResetResult(True, 'soft', 0.1, 'soft done'))
+def test_reset_query_param_matches_the_one_the_frontend_sends():
+    """api/endpoints.ts sessionReset builds ``/sessions/{id}/reset?<param>=<type>``; the route must declare ``<param>``."""
+    endpoints = Path(__file__).resolve().parents[5] / 'adare-web' / 'src' / 'api' / 'endpoints.ts'
+    if not endpoints.is_file():
+        pytest.skip('adare-web sources not available')
+    match = re.search(r'sessionReset:[^\n]*/reset\?(\w+)=', endpoints.read_text())
+    assert match, 'sessionReset no longer builds a ?param= query'
+
+    operation = main.app.openapi()['paths']['/api/sessions/{session_id}/reset']['post']
+    assert match.group(1) in {p['name'] for p in operation['parameters'] if p['in'] == 'query'}
+
+
+def test_reset_hard_with_extra_cache_busting_params(service_client, service_devmode):
+    """The axios client appends ``_t=<ms>`` to every request; it must not disturb the reset type."""
     service_devmode.reset_hard.return_value = Result.ok(DevResetResult(True, 'hard', 3.0, 'hard done'))
 
-    service_client.post(f'/api/sessions/{SESSION_ID}/reset?type=hard&_t=1730000000000')
+    service_client.post(f'/api/sessions/{SESSION_ID}/reset?reset_type=hard&_t=1730000000000')
 
     service_devmode.reset_hard.assert_called_once()
     service_devmode.reset_soft.assert_not_called()
@@ -615,15 +605,6 @@ def test_reset_failure_is_http_200_envelope(service_client, service_devmode):
     assert response.json()['error']['message'] == 'vm unreachable'
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'main.py reset_session calls api.devmode.reset_soft/reset_hard, but the DevModeAPI facade (adare/api.py) '
-        'only defines reset_session (which itself calls a non-existent DevModeService.reset_session): '
-        'every POST /api/sessions/{id}/reset is an AttributeError -> HTTP 500, so the workbench Soft/Hard '
-        'reset buttons can never work. (The CLI `adare dev reset-*` calls the same missing methods.)'
-    ),
-)
 @pytest.mark.parametrize('reset_type', ['soft', 'hard'])
 def test_reset_works_through_the_real_facade(real_client, real_service, reset_type):
     _seed_session(real_service, status='running')
@@ -633,6 +614,32 @@ def test_reset_works_through_the_real_facade(real_client, real_service, reset_ty
     )
 
     assert response.status_code == 200
+    body = response.json()
+    # reached DevModeService.reset_soft/reset_hard (no VM here, so the session cannot be restored)
+    assert body['success'] is False
+    assert body['error']['code'] == 'SESSION_NOT_FOUND'
+
+
+@pytest.mark.parametrize('reset_type', ['soft', 'hard'])
+def test_facade_reset_delegates_to_the_service_method_of_the_same_name(reset_type):
+    """The facade is checked against the real DevModeService signature (autospec rejects missing methods)."""
+    service = create_autospec(DevModeService, instance=True)
+    request = DevResetRequest(session_id=SESSION_ID, reset_type=reset_type)
+
+    result = getattr(DevModeAPI(service=service), f'reset_{reset_type}')(request)
+
+    getattr(service, f'reset_{reset_type}').assert_called_once_with(request)
+    assert result is getattr(service, f'reset_{reset_type}').return_value
+
+
+def test_every_devmode_facade_method_exists_on_the_service():
+    """A facade method forwarding to a method the service lacks is an AttributeError at request time."""
+    facade_methods = [
+        name for name, member in vars(DevModeAPI).items() if callable(member) and not name.startswith('_')
+    ]
+
+    assert facade_methods
+    assert [name for name in facade_methods if not callable(getattr(DevModeService, name, None))] == []
 
 
 # --- checkpoints ------------------------------------------------------------------------
@@ -704,22 +711,15 @@ def test_list_checkpoints_has_the_fields_the_checkpoints_panel_reads(real_client
     assert cp['variable_count'] == 2
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'checkpoints-panel.tsx prints `{cp.memory_size_mb}MB mem · {cp.disk_size_mb}MB disk` (types/session.ts '
-        'CheckpointInfo) but DevCheckpointInfo sends a single file_size_mb, so the row reads '
-        '"undefinedMB mem · undefinedMB disk"'
-    ),
-)
-def test_list_checkpoints_sends_memory_and_disk_sizes(real_client, real_service):
+def test_list_checkpoints_sends_the_size_the_checkpoints_panel_reads(real_client, real_service):
+    """checkpoints-panel.tsx prints ``cp.file_size_mb`` (types/session.ts CheckpointInfo)."""
     _seed_session(real_service)
     _seed_checkpoint(real_service)
 
     (cp,) = real_client.get(f'/api/sessions/{SESSION_ID}/checkpoints').json()['data']
 
-    assert 'memory_size_mb' in cp
-    assert 'disk_size_mb' in cp
+    assert isinstance(cp['file_size_mb'], int | float)
+    assert not {'memory_size_mb', 'disk_size_mb'} & cp.keys()
 
 
 def test_list_checkpoints_empty_is_an_empty_list(real_client, real_service):
@@ -759,20 +759,31 @@ def test_restore_and_delete_failures_are_http_200_envelopes(client, devmode, met
     assert response.json()['error']['code'] == 'CHECKPOINT_NOT_FOUND'
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'create_checkpoint accepts any name, but a name containing "/" can never be restored or deleted: '
-        'the path parameter {checkpoint_name} does not match slashes, so the request falls through to the '
-        'SPA catch-all (api/endpoints.ts does not encode the name either)'
-    ),
-)
-def test_checkpoint_with_slash_in_name_can_be_restored(client, devmode):
-    devmode.restore_checkpoint.return_value = Result.ok(True)
+@pytest.mark.parametrize('name', ['a/b', '../x', 'a\\b', '', ' lead', 'x' * 101, 'semi;colon', 'new\nline'])
+def test_create_checkpoint_rejects_names_that_could_not_be_addressed_again(client, devmode, ws, name):
+    """A name with "/" could be created but never restored/deleted (path param); reject it up front."""
+    body = client.post(f'/api/sessions/{SESSION_ID}/checkpoints', json={'name': name}).json()
 
-    client.post(f'/api/sessions/{SESSION_ID}/checkpoints/a%2Fb/restore')
+    assert body['success'] is False
+    assert body['error']['code'] == 'INVALID_CHECKPOINT_NAME'
+    assert 'Invalid checkpoint name' in body['error']['message']
+    devmode.create_checkpoint.assert_not_called()
+    ws.send_checkpoint_created.assert_not_awaited()
 
-    devmode.restore_checkpoint.assert_called_once()
+
+@pytest.mark.parametrize('name', ['cp1', 'before-install', 'my cp', 'v1.2_final', 'batch_base', 'x' * 100])
+def test_create_checkpoint_accepts_ordinary_names(client, devmode, name):
+    devmode.create_checkpoint.return_value = Result.ok(True)
+
+    assert client.post(f'/api/sessions/{SESSION_ID}/checkpoints', json={'name': name}).json()['success'] is True
+
+
+def test_service_create_checkpoint_rejects_unsafe_names_too(real_service):
+    """The CLI reaches the service directly, so the rule lives there as well."""
+    result = real_service.create_checkpoint(DevCheckpointCreateRequest(session_id=SESSION_ID, name='a/b'))
+
+    assert result.success is False
+    assert result.error.code == 'INVALID_CHECKPOINT_NAME'
 
 
 # --- unknown session: every session route answers the same envelope ---------------------
@@ -812,7 +823,7 @@ def test_unknown_session_gets_a_session_not_found_envelope_with_http_200(real_cl
 
 @pytest.mark.parametrize('reset_type', ['soft', 'hard'])
 def test_unknown_session_reset_envelope_when_reaching_the_service(real_service_client, reset_type):
-    """Reset on an unknown session (service reached directly; the facade lacks the method, see xfail above)."""
+    """Reset on an unknown session (service reached directly)."""
     payload = real_service_client.post('/api/sessions/nope/reset', params={'reset_type': reset_type}).json()
 
     assert payload['success'] is False

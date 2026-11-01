@@ -76,7 +76,7 @@ def _api():
 @router.get("")
 def list_experiments(tags: str | None = Query(None, description="Comma-separated tags to filter by")):
     """List all experiments, optionally filtered by tags."""
-    tag_list = [t.strip() for t in tags.split(",")] if tags else None
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
     result = _api().show.list_experiments(tags=tag_list)
     return result_to_response(result)
 
@@ -161,7 +161,17 @@ def validate_experiment(name: str, body: ExperimentValidateBody):
         environment=body.environment,
     )
     result = _api().experiment.validate(dto)
-    return result_to_response(result)
+    response = result_to_response(result)
+    if result.success and result.data is not None:
+        # The verdict properties are dropped by the generic serializer; the UI needs them
+        # because a validation with failed checks is still a successful call.
+        response["data"].update(
+            is_valid=result.data.is_valid,
+            passed_count=result.data.passed_count,
+            failed_count=result.data.failed_count,
+            warning_count=result.data.warning_count,
+        )
+    return response
 
 
 @router.post("/{name}/environments")

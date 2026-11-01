@@ -5,12 +5,35 @@ import { unwrap, type ApiResponse } from '@/types/api'
 
 export interface Experiment {
   name: string
-  project_path?: string
+  /** `Project.experiment`; unique across projects, unlike `name`. */
+  dotnotation?: string
+  /** Project name. */
   project?: string
+  /** Filesystem path of the project: what the mutation endpoints take as `project_path`. */
+  project_path?: string
   tags?: string[]
   environment_ids?: string[]
   environment_names?: string[]
+  run_count?: number
+  last_run?: string | null
   [key: string]: unknown
+}
+
+export interface ValidationCheck {
+  name: string
+  passed: boolean
+  message: string
+  is_warning?: boolean
+}
+
+/** Validation is a successful call even when checks failed; `is_valid` is the verdict. */
+export interface ExperimentValidateResult {
+  name: string
+  checks: ValidationCheck[]
+  is_valid: boolean
+  passed_count: number
+  failed_count: number
+  warning_count: number
 }
 
 export interface ExperimentEnvModifyRequest {
@@ -126,11 +149,11 @@ export function useRemoveExperiment() {
 export function useValidateExperiment() {
   return useMutation({
     mutationFn: async ({ name, request }: { name: string; request: ValidateExperimentRequest }) => {
-      const { data } = await api.post<ApiResponse<unknown>>(
+      const { data } = await api.post<ApiResponse<ExperimentValidateResult>>(
         endpoints.experimentValidate(name),
         request,
       )
-      return data.data
+      return data.data!
     },
   })
 }

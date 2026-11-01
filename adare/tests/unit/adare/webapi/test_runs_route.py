@@ -23,7 +23,7 @@ from adare.core.result import Result
 from adare.webapi.routes.experiments import router as experiments_router
 from adare.webapi.routes.runs import _classify_artifact, router
 
-from .seeded_projects import seeded_fixture  # noqa: F401  (pytest fixture, registered as `seeded`)
+from .seeded_projects import _age, seeded_fixture  # noqa: F401  (pytest fixture, registered as `seeded`)
 
 pytestmark = pytest.mark.unit
 
@@ -103,28 +103,6 @@ def test_list_runs_experiment_name_is_the_project_dotnotation(client, seeded):
 def test_list_runs_result_status_comes_from_the_test_results(client, seeded):
     """The run has one passing and one failing TestEvent, so its verdict is FAILED."""
     assert _rows_by_ulid(client)[seeded.run_id]['result_status'] == 'FAILED'
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'runs-list.tsx and experiment-detail.tsx render run.overall_result, but the backend '
-        'sends the verdict as result_status (RunListItem), so the Result column is always "—"'
-    ),
-)
-def test_list_runs_row_has_overall_result_the_tables_render(client, seeded):
-    assert _rows_by_ulid(client)[seeded.run_id].get('overall_result') == 'FAILED'
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'runs-list.tsx deletes with projectPath = row.project_path, but run rows only carry '
-        'project_name, so the delete request never has a project_path'
-    ),
-)
-def test_list_runs_row_has_project_path_the_delete_button_sends(client, seeded):
-    assert _rows_by_ulid(client)[seeded.run_id].get('project_path') == str(seeded.alpha)
 
 
 def test_list_runs_filter_by_project(client, seeded):
@@ -226,6 +204,27 @@ def test_get_run_experiment_link_resolves_to_the_runs_own_experiment(client, see
         assert linked['data']['ulid'] == exp_id == run['experiment_ulid']
 
 
+def test_get_run_test_results_carry_name_status_and_details(client, seeded):
+    results = client.get(f'/api/runs/{seeded.run_id}').json()['data']['test_results']
+
+    assert results == [
+        {'name': 'file_exists', 'status': 'SUCCESS', 'passed': True, 'details': 'file_exists details'},
+        {'name': 'file_hash', 'status': 'FAILED', 'passed': False, 'details': 'file_hash details'},
+    ]
+
+
+def test_get_run_without_test_events_has_no_test_results(client, seeded):
+    assert client.get(f'/api/runs/{seeded.beta_run_id}').json()['data']['test_results'] == []
+
+
+def test_get_run_os_info_and_vm_box_are_null_when_the_environment_is_unknown(client, seeded):
+    with patch('adare.services.show_run_extras._environment_vm', return_value=(None, None)):
+        run = client.get(f'/api/runs/{seeded.run_id}').json()['data']
+
+    assert run['os_info'] is None
+    assert run['vm_box'] is None
+
+
 def test_get_run_unknown_ulid_is_reported_in_the_envelope(client):
     response = client.get(f'/api/runs/{UNKNOWN_ULID}')
 
@@ -235,13 +234,6 @@ def test_get_run_unknown_ulid_is_reported_in_the_envelope(client):
     assert response.json()['error']['solutions']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'ShowService.get_run (show_service.py ~L218) builds RunDetail without test_results although the '
-        'run has TestEvents with Results, so the Test Results tab always says "No test results"'
-    ),
-)
 def test_get_run_fills_test_results_from_the_runs_test_events(client, seeded):
     run = client.get(f'/api/runs/{seeded.run_id}').json()['data']
 
@@ -253,13 +245,6 @@ def test_get_run_fills_test_results_from_the_runs_test_events(client, seeded):
     assert 'file_hash details' in dumped
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'ShowService.get_run never sets os_info / vm_box on RunDetail, so the run page Overview '
-        'shows "—" for OS and VM box although the run environment has a Vm with OsInfo'
-    ),
-)
 def test_get_run_fills_os_info_and_vm_box_from_the_runs_environment(client, seeded):
     run = client.get(f'/api/runs/{seeded.run_id}').json()['data']
 
@@ -330,22 +315,9 @@ def test_list_run_artifacts_of_an_unknown_run_is_an_empty_list(client):
         ('results.json', 'other'),
         ('screenshots/001.png', 'other'),
         ('archive.zip', 'other'),
-        pytest.param(
-            'screenshots/dialog.png',
-            'other',
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason='_classify_artifact treats any name containing "log" as a log, so dialog.png lands on the Logs tab',
-            ),
-        ),
-        pytest.param(
-            'catalog.json',
-            'other',
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason='_classify_artifact treats any name containing "log" as a log, so catalog.json lands on the Logs tab',
-            ),
-        ),
+        ('screenshots/dialog.png', 'other'),
+        ('catalog.json', 'other'),
+        ('logs/catalog.txt', 'other'),
     ],
 )
 def test_classify_artifact(rel_path, kind):
@@ -473,6 +445,25 @@ def test_remove_run_with_project_path_deletes_row_and_folder(client, seeded):
     assert seeded.beta_run_id in _rows_by_ulid(client)
 
 
+def test_remove_run_by_ulid_alone_finds_the_project_of_another_run(client, seeded):
+    beta_dir = seeded.beta / 'run' / 'exp' / '2026-01-03_00-00-00'
+    _age(beta_dir)
+
+    body = client.delete(f'/api/runs/{seeded.beta_run_id}').json()
+
+    assert body['success'] is True
+    assert body['data']['removed'] is True
+    assert set(_rows_by_ulid(client)) == {seeded.run_id}
+    assert seeded.run_dir.exists()
+
+
+def test_remove_run_by_unknown_ulid_alone_is_run_not_found(client):
+    response = client.delete(f'/api/runs/{UNKNOWN_ULID}')
+
+    assert response.status_code == 200
+    _assert_failure_envelope(response.json(), 'RunNotFoundError')
+
+
 def test_remove_run_keep_files_keeps_the_folder(client, seeded):
     response = client.delete(
         f'/api/runs/{seeded.run_id}', params={'project_path': str(seeded.alpha), 'keep_files': 'true'}
@@ -491,14 +482,6 @@ def test_remove_run_unknown_ulid_is_reported_in_the_envelope(client, seeded):
     assert response.json()['error']['code']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'runs-list.tsx calls DELETE /api/runs/{ulid} with no project_path (run rows have none) and the server '
-        'then looks for a project in its own working directory (NoProjectFoundError), so the UI delete button '
-        'fails; useRemoveRun also ignores success:false, so it reports "Run removed" anyway'
-    ),
-)
 def test_remove_run_by_ulid_alone_as_the_frontend_calls_it(client, seeded):
     response = client.delete(f'/api/runs/{seeded.run_id}')
 

@@ -61,8 +61,8 @@ function RunningVmsCard({ vms }: { vms: RunningVm[] }) {
                 {vms.map((vm) => (
                   <TableRow key={vm.pid}>
                     <TableCell className="max-w-[280px] truncate font-mono text-xs" title={vm.name}>
-                      {vm.instance_id ? (
-                        <Link to="/vms/$instanceId" params={{ instanceId: vm.instance_id }} className="hover:underline">
+                      {vm.vm_id ? (
+                        <Link to="/vms/$vmId" params={{ vmId: vm.vm_id }} className="hover:underline">
                           {vm.name}
                         </Link>
                       ) : (

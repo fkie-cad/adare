@@ -8,7 +8,7 @@ called.
 
 Frontend expectations that the backend does not meet are encoded as strict xfails:
 when the backend (or the frontend contract) is fixed they flip to XPASS and fail
-the suite until the marker is removed.
+the suite until the marker is removed. (None are open at the moment.)
 """
 
 import os
@@ -174,6 +174,7 @@ def test_list_row_shape(client, vms_dir):
             'hypervisor': 'qemu',
             'os_platform': 'linux',
             'instance_count': 2,
+            'path': str(vms_dir / 'ubuntu2404.qcow2'),
         }
     ]
 
@@ -201,11 +202,6 @@ def test_list_ids_are_vm_ids_the_detail_route_resolves(client, vms_dir):
         assert detail['data']['name'] == row['name']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='vms-list.tsx renders vm.path in its "Path" column, but VmListItem has no `path` '
-    '(only file_hash), so the column is always an em dash',
-)
 def test_list_rows_carry_the_path_vms_list_renders(client, vms_dir):
     _add_vm('ubuntu2404', vms_dir / 'ubuntu2404.qcow2')
 
@@ -274,26 +270,21 @@ def test_get_rejects_an_instance_id(client, ubuntu):
     assert _error(client.get(f'/api/local-vms/{instance_id}').json())['code'] == 'VMNotFoundError'
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='vm-detail.tsx reads vmQuery.data.path for the page description, but VmInfo only has `file_path`',
-)
-def test_get_carries_the_path_vm_detail_renders(client, vms_dir):
+def test_get_carries_the_file_path_vm_detail_renders(client, vms_dir):
+    """vm-detail.tsx reads `file_path` (the VmInfo field) for the page description.
+
+    Rewritten from a `path` expectation: the frontend was the side that was wrong, so
+    the detail DTO keeps `file_path` and the page now reads it.
+    """
     disk = vms_dir / 'ubuntu2404.qcow2'
     vm_id = _add_vm('ubuntu2404', disk)
 
-    assert client.get(f'/api/local-vms/{vm_id}').json()['data']['path'] == str(disk)
+    assert client.get(f'/api/local-vms/{vm_id}').json()['data']['file_path'] == str(disk)
 
 
 # ---- the System page link (system.tsx:65 -> vm-detail.tsx) ----
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='system.tsx links running VMs to /vms/$instanceId with vm.instance_id (a VmInstance id), but '
-    'vm-detail.tsx resolves that param via GET /api/local-vms/{id}, which only knows VM ids, so the page '
-    'shows VMNotFoundError. /api/system/resources exposes no vm_id to link with.',
-)
 def test_system_running_vm_link_id_resolves_to_a_vm(client, ubuntu):
     _add_instance(ubuntu, 'ubuntu2404_run_1', status='active', port=5901)
     host = HostSnapshot(
@@ -314,8 +305,9 @@ def test_system_running_vm_link_id_resolves_to_a_vm(client, ubuntu):
     running = resources['data']['vms'][0]
     # Sanity: the system page does get a registered-instance id for this process
     assert running['instance_id']
-    # The id the page can link a VM detail with: prefer a VM id, else what it links with today
-    link_id = running.get('vm_id') or running['instance_id']
+    # system.tsx links /vms/<vm_id>; vm-detail.tsx resolves that as a VM (image) id
+    assert running['vm_id'] == ubuntu
+    link_id = running['vm_id']
 
     detail = client.get(f'/api/local-vms/{link_id}').json()
 

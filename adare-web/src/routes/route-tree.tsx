@@ -89,7 +89,7 @@ const vmsRoute = createRoute({
 
 const vmDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/vms/$instanceId',
+  path: '/vms/$vmId',
   component: VmDetailPage,
 })
 

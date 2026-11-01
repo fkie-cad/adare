@@ -34,7 +34,8 @@ def _classify_artifact(rel_path: str) -> str:
         return "video"
     if name.startswith("report"):
         return "report"
-    if suffix == ".log" or "log" in name:
+    # By extension only: a substring test would file dialog.png / catalog.json under Logs.
+    if suffix == ".log":
         return "log"
     return "other"
 
@@ -81,7 +82,11 @@ def get_run(ulid: str):
 
 @router.delete("/{ulid}")
 def remove_run(ulid: str, project_path: str | None = Query(None), keep_files: bool = Query(False)):
-    """Remove a run by ULID: its database rows and (unless ``keep_files``) its run folder."""
+    """Remove a run by ULID: its database rows and (unless ``keep_files``) its run folder.
+
+    ``project_path`` is optional: without it the run's project is found by ULID across the
+    registered projects, the same way ``GET /api/runs/{ulid}`` does.
+    """
     from adare.core.dto.show import RunRemoveRequest
 
     dto = RunRemoveRequest(

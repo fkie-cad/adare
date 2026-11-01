@@ -9,22 +9,9 @@ import { Badge, statusToVariant } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { useRuns, useRemoveRun } from '@/api/hooks/use-runs'
+import { useRuns, useRemoveRun, type Run } from '@/api/hooks/use-runs'
 import { formatDateTime, formatDuration } from '@/lib/formatters'
 import { toast } from '@/components/ui/toast'
-
-// Narrower view of the RunInfo shape returned by the backend
-interface RunRow {
-  ulid: string
-  project_path?: string
-  experiment_name?: string
-  environment_name?: string
-  start_time?: string
-  duration_seconds?: number
-  status?: string
-  overall_result?: string
-  published?: boolean
-}
 
 const SKELETON_ROWS = 5
 const COLUMNS = 8
@@ -65,7 +52,7 @@ export default function RunsListPage() {
   const search = useSearch({ from: '/runs' }) as { focus?: string }
   const focusUlid = search.focus
   const [highlightUlid, setHighlightUlid] = useState<string | undefined>(focusUlid)
-  const [deleteTarget, setDeleteTarget] = useState<RunRow | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Run | null>(null)
 
   useEffect(() => {
     setHighlightUlid(focusUlid)
@@ -77,7 +64,7 @@ export default function RunsListPage() {
   const handleDelete = () => {
     if (!deleteTarget) return
     removeMutation.mutate(
-      { ulid: deleteTarget.ulid, projectPath: deleteTarget.project_path },
+      { ulid: deleteTarget.ulid },
       {
         onSuccess: () => {
           toast.success('Run removed', deleteTarget.ulid)
@@ -120,7 +107,7 @@ export default function RunsListPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {((data ?? []) as unknown as RunRow[]).map((run) => (
+            {(data ?? []).map((run) => (
               <TableRow
                 key={run.ulid}
                 className={cn(
@@ -163,7 +150,7 @@ export default function RunsListPage() {
                 </TableCell>
                 <TableCell>{formatDateTime(run.start_time)}</TableCell>
                 <TableCell>{formatDuration(run.duration_seconds)}</TableCell>
-                <TableCell>{run.overall_result || '—'}</TableCell>
+                <TableCell>{run.result_status || '—'}</TableCell>
                 <TableCell>
                   <Badge variant={run.published ? 'success' : 'outline'}>
                     {run.published ? 'Yes' : 'No'}

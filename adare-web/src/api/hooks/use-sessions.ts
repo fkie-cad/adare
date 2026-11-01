@@ -2,7 +2,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { endpoints } from '@/api/endpoints'
 import type { ApiResponse } from '@/types/api'
-import type { DevSessionListItem, DevSessionInfo, SessionState, StartSessionRequest } from '@/types/session'
+import type {
+  CleanupResult,
+  DevSessionListItem,
+  DevSessionInfo,
+  SessionState,
+  StartSessionRequest,
+} from '@/types/session'
 
 export function useSessions() {
   return useQuery({
@@ -59,8 +65,8 @@ export function useCleanupSessions() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async () => {
-      const { data } = await api.post<ApiResponse<number>>(endpoints.sessionCleanup)
-      return data.data ?? 0
+      const { data } = await api.post<ApiResponse<CleanupResult>>(endpoints.sessionCleanup)
+      return data.data ?? { sessions_reconciled: 0, reconciled_session_ids: [], sessions_left_running: 0 }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   })

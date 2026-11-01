@@ -77,6 +77,7 @@ class VmListItem:
     hypervisor: str
     os_platform: str | None = None
     instance_count: int = 0
+    path: str = ""  # the VM disk/image file, as VmInfo.file_path
 
 
 # =============================================================================
@@ -126,6 +127,7 @@ class VmInstanceListItem:
     status: str
     websocket_port: int | None
     hypervisor: str = "virtualbox"
+    vm_id: str | None = None  # the VM (image) this is an instance of
 
 
 @dataclass
@@ -135,7 +137,7 @@ class VmInstanceUsage:
     total_instances: int
     active_instances: int
     available_instances: int
-    stopped_instances: int
+    cleanup_pending_instances: int  # stopped/failed runs waiting for `vm clear`-style cleanup
     instances_by_vm: dict = field(default_factory=dict)  # vm_name -> count
 
 

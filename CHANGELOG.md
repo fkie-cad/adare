@@ -431,6 +431,29 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Web API / web UI contract sweep (every route now has contract tests in
+  `tests/unit/adare/webapi`, asserting the fields adare-web reads):
+  - Security: `/api/playbooks/save` only accepts a bare file name; run-artifact and
+    static-file serving no longer admit same-prefix sibling directories; unknown
+    `/api/...` paths are JSON 404s instead of the SPA page.
+  - The web client rejects HTTP-200 `success: false` responses, so refused actions
+    show the server's error instead of a success toast.
+  - Runs: Test results tab lists each test once with its status; OS / VM box,
+    result column, run-to-environment (now the run's own environment, also for the
+    environment filter) and delete-by-ULID work.
+  - Experiments: real `project_path`, `run_count`/`last_run`, tag filter across
+    projects, list links by dotnotation, validate reports the verdict.
+  - VMs: running-VM links from the System page, Path column, instance names,
+    remove-stopped toast; snapshot delete on a QEMU host returns an error, not a 500.
+    `VmInstanceUsage.stopped_instances` (always 0) is now `cleanup_pending_instances`.
+  - Environments: OS label, sync and recipe badges, Verify without a project, one
+    malformed YAML no longer breaks the list, Check URL sends `vm_format`.
+  - Projects: get by path and delete by name no longer 500; vanished testfunctions are
+    hidden; `/api/web/sync` fails when nobody is logged in.
+  - Develop sessions: soft/hard reset work (web UI and `adare dev reset`), session
+    labels, checkpoint sizes, cleanup counts; unsafe checkpoint names are rejected.
+  - Action palette: `/api/actions/types` is generated from the playbook parser's
+    action classes, and the workbench emits actions the parser accepts.
 - Web UI: experiment pages opened from the Runs list or an Environment page showed
   `["experiment", …] data is undefined`. Those links pass the `Project.experiment`
   dotnotation, which `GET /api/experiments/{name}` now resolves (short names still

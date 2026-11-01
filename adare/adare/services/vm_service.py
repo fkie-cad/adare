@@ -130,6 +130,7 @@ class VMService:
                             hypervisor=vm.hypervisor or "virtualbox",
                             os_platform=os_platform,
                             instance_count=instance_count,
+                            path=vm.file or "",
                         )
                     )
 
@@ -340,6 +341,7 @@ class VMService:
                             status=instance.status,
                             websocket_port=instance.websocket_port,
                             hypervisor=hypervisor,
+                            vm_id=instance.vm_id,
                         )
                     )
 
@@ -363,14 +365,7 @@ class VMService:
                 instance = api.get_vm_instance_by_id(instance_id)
 
                 if not instance:
-                    return Result.fail(
-                        code="VmInstanceNotFoundError",
-                        message=f'VM instance with ID {instance_id} not found',
-                        solutions=[
-                            'Use `adare vm list` to see available instances',
-                            'Check if the instance ID is correct',
-                        ],
-                    )
+                    return self._instance_not_found(instance_id)
 
                 vm_name = instance.vm.name if instance.vm else "Unknown"
                 hypervisor = instance.vm.hypervisor if instance.vm else "virtualbox"
@@ -454,7 +449,7 @@ class VMService:
                 total = len(instances)
                 active = sum(1 for i in instances if i.status == 'active')
                 available = sum(1 for i in instances if i.status == 'available')
-                stopped = sum(1 for i in instances if i.status == 'stopped')
+                cleanup_pending = sum(1 for i in instances if i.status == 'cleanup_pending')
 
                 # Count by VM
                 by_vm = {}
@@ -467,7 +462,7 @@ class VMService:
                         total_instances=total,
                         active_instances=active,
                         available_instances=available,
-                        stopped_instances=stopped,
+                        cleanup_pending_instances=cleanup_pending,
                         instances_by_vm=by_vm,
                     )
                 )
@@ -492,6 +487,8 @@ class VMService:
         try:
             with VmApi() as api:
                 if instance_id:
+                    if not api.get_vm_instance_by_id(instance_id):
+                        return self._instance_not_found(instance_id)
                     snapshots = api.get_snapshots_for_instance(instance_id)
                 else:
                     # Get all snapshots by iterating through instances
@@ -532,21 +529,30 @@ class VMService:
         Returns:
             Result[None] on success, or error information on failure.
         """
-        try:
-            from adare.backend.vm.snapshot_manager import SnapshotManager
+        from adare.backend.vm.snapshot_manager import SnapshotManager
+        from adare.hypervisor.exceptions import HypervisorException
 
+        try:
             with VmApi() as api:
                 instance = api.get_vm_instance_by_id(instance_id)
                 if not instance:
-                    return Result.fail(
-                        code="VmInstanceNotFoundError",
-                        message=f'VM instance with ID {instance_id} not found',
-                        solutions=[
-                            'Use `adare vm list` to see available instances',
-                        ],
-                    )
+                    return self._instance_not_found(instance_id)
+                hypervisor = instance.vm.hypervisor if instance.vm else 'virtualbox'
+                instance_name = instance.instance_name
 
-            # Base snapshots are protected (VMError); QEMU run instances have none.
+            # Snapshots are VirtualBox-only. Checked first so a QEMU-only host (no VBoxManage)
+            # gets this answer rather than a VirtualBox startup failure.
+            if hypervisor != 'virtualbox':
+                return Result.fail(
+                    code="SnapshotNotSupported",
+                    message=(
+                        f'Snapshots are VirtualBox-only; "{instance_name}" is a {hypervisor} instance '
+                        f'and has no snapshot "{snapshot_name}" to delete'
+                    ),
+                    solutions=['QEMU runs boot a throwaway overlay and keep no snapshots'],
+                )
+
+            # Base snapshots are protected (VMError).
             if not SnapshotManager().delete_instance_snapshot(instance, snapshot_name):
                 return Result.fail(
                     code="SnapshotDeleteError",
@@ -558,10 +564,19 @@ class VMService:
                 )
             return Result.ok(None)
 
-        except VMNotFoundError as e:
+        except (VMNotFoundError, VMError, HypervisorException) as e:
             return Result.from_exception(e)
-        except VMError as e:
-            return Result.from_exception(e)
+
+    @staticmethod
+    def _instance_not_found(instance_id: str) -> Result:
+        return Result.fail(
+            code="VmInstanceNotFoundError",
+            message=f'VM instance with ID {instance_id} not found',
+            solutions=[
+                'Use `adare vm list` to see available instances',
+                'Check if the instance ID is correct',
+            ],
+        )
 
     # =========================================================================
     # VM Testing

@@ -147,24 +147,10 @@ def test_list_experiments_tags_filter_with_an_unknown_tag_is_empty(client):
     assert client.get('/api/experiments?tags=no-such-tag').json() == {'success': True, 'data': []}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'ShowService.list_experiments filters with TagApi() (the working-directory project database, not the '
-        'per-project databases it just aggregated), so ?tags=forensics returns nothing although Alpha.exp has that tag'
-    ),
-)
 def test_list_experiments_tags_filter_returns_the_tagged_experiment(client):
     assert set(_list(client, '?tags=forensics')) == {'Alpha.exp'}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'ShowService.get_experiments_structured never computes run_count / last_run (always 0 / None), so the '
-        'Experiments table "Runs" column is 0 for an experiment that has a run'
-    ),
-)
 def test_list_experiments_run_count_and_last_run_reflect_the_runs(client):
     rows = _list(client)
 
@@ -173,19 +159,35 @@ def test_list_experiments_run_count_and_last_run_reflect_the_runs(client):
     assert rows['Alpha.other']['run_count'] == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'experiments list/detail payloads carry only `project` (the project NAME) and no `project_path`; the frontend '
-        'falls back to `project` and sends it as project_path to delete/validate/clone/link/run, where it is parsed '
-        'as a relative path (Path("Alpha"))'
-    ),
-)
 def test_list_experiments_row_exposes_the_project_path_mutations_need(client, seeded):
     row = _list(client)['Alpha.exp']
 
     project_path = row.get('project_path') or row['project']  # experiments-list.tsx projectPathOf()
     assert Path(project_path) == seeded.alpha
+
+
+def test_list_experiments_tags_filter_needs_every_requested_tag(client):
+    assert set(_list(client, '?tags=forensics,forensics')) == {'Alpha.exp'}
+    assert _list(client, '?tags=forensics,no-such-tag') == {}
+
+
+def test_list_experiments_tags_filter_ignores_empty_entries(client):
+    assert set(_list(client, '?tags=forensics,')) == {'Alpha.exp'}
+
+
+def test_list_experiments_run_count_is_per_experiment_across_projects(client):
+    rows = _list(client)
+
+    assert rows['Beta.exp']['run_count'] == 1
+    assert rows['Beta.exp']['last_run'] == '2026-01-02T03:04:05'
+    assert rows['Alpha.other']['last_run'] is None
+
+
+def test_list_experiments_project_path_is_the_experiments_own_project(client, seeded):
+    rows = _list(client)
+
+    assert Path(rows['Alpha.other']['project_path']) == seeded.alpha
+    assert Path(rows['Beta.exp']['project_path']) == seeded.beta
 
 
 def test_list_experiments_database_failure_is_reported_in_the_envelope(client):
@@ -239,21 +241,8 @@ def test_get_experiment_detail_agrees_with_its_list_row(client):
         assert detail[key] == row[key], key
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'experiments-list.tsx links each row to /experiments/<short name>, which the backend resolves to the first '
-        'experiment with that name, so the Beta.exp row opens Alpha.exp (short names repeat across projects)'
-    ),
-)
-def test_every_list_row_opens_itself_through_the_link_the_list_page_builds(client):
-    for row in _list(client).values():
-        opened = client.get(f'/api/experiments/{row["name"]}').json()['data']
-
-        assert opened['ulid'] == row['ulid'], row['dotnotation']
-
-
 def test_every_list_row_opens_itself_through_its_dotnotation(client):
+    """experiments-list.tsx links each row by dotnotation: short names repeat across projects."""
     for row in _list(client).values():
         opened = client.get(f'/api/experiments/{row["dotnotation"]}').json()['data']
 
@@ -270,18 +259,10 @@ def test_get_experiment_not_found_is_reported_in_the_envelope(client):
         assert response.json()['error']['solutions']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='see test_list_experiments_run_count_and_last_run_reflect_the_runs: detail run_count is always 0',
-)
 def test_get_experiment_detail_run_count_reflects_the_runs(client):
     assert client.get('/api/experiments/Alpha.exp').json()['data']['run_count'] == 1
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='see test_list_experiments_row_exposes_the_project_path_mutations_need: detail has no project_path',
-)
 def test_get_experiment_detail_exposes_the_project_path_run_and_link_need(client, seeded):
     data = client.get('/api/experiments/Alpha.exp').json()['data']
 
@@ -501,14 +482,6 @@ def test_validate_experiment_environment_is_optional(client):
     assert api.experiment.validate.call_args.args[0].environment is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'a validation with failed checks is still Result.ok, and ExperimentValidateResult.is_valid / failed_count are '
-        'properties that serialize_value drops, so the payload has no verdict: experiments-list.tsx toasts '
-        '"Experiment valid" for any success:true response, even when checks failed'
-    ),
-)
 def test_validate_experiment_payload_carries_a_verdict_for_failed_checks(client):
     failing = ExperimentValidateResult(
         name='exp', checks=[ValidationCheckResult(name='tests', passed=False, message='missing test')]
@@ -523,6 +496,38 @@ def test_validate_experiment_payload_carries_a_verdict_for_failed_checks(client)
     )
 
     assert body['data']['is_valid'] is False
+
+
+def test_validate_experiment_payload_verdict_for_passing_and_warning_checks(client):
+    ok = ExperimentValidateResult(
+        name='exp',
+        checks=[
+            ValidationCheckResult(name='playbook', passed=True, message='ok'),
+            ValidationCheckResult(name='style', passed=False, message='meh', is_warning=True),
+        ],
+    )
+
+    data = _request(
+        client, _mock_api(validate=Result.ok(ok)), 'POST', '/api/experiments/exp/validate', json={'project_path': '/p'}
+    )['data']
+
+    assert (data['is_valid'], data['failed_count'], data['passed_count'], data['warning_count']) == (True, 0, 1, 1)
+
+
+def test_validate_experiment_payload_counts_failed_checks(client):
+    failing = ExperimentValidateResult(
+        name='exp', checks=[ValidationCheckResult(name='tests', passed=False, message='missing test')]
+    )
+
+    data = _request(
+        client,
+        _mock_api(validate=Result.ok(failing)),
+        'POST',
+        '/api/experiments/exp/validate',
+        json={'project_path': '/p'},
+    )['data']
+
+    assert data['failed_count'] == 1
 
 
 def test_validate_experiment_failure_is_reported_in_the_envelope(client):

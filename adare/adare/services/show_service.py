@@ -29,43 +29,10 @@ from adare.core.dto.show import (
     TestfunctionListItem,
 )
 from adare.core.result import Result
+from adare.services.environment_source import os_label, parse_env_source
+from adare.services.show_run_extras import find_run_project_path, load_run_extras, project_paths_by_name
 
 log = logging.getLogger(__name__)
-
-
-def _parse_env_source(file: str | None) -> tuple[str, str, str, str, str]:
-    """Read (vm, vm_type, vm_sha256, source_profile, source_iso_sha256) from an
-    environment YAML file.
-
-    Best-effort: a missing/unparseable file yields empty strings so the list
-    still renders. Recipe environments have no baked ``vm`` and return empties.
-    The last two are optional, informational install-profile provenance (see
-    ``EnvironmentMetadata.source_profile``) and are empty for most environments.
-    """
-    empty = ("", "", "", "", "")
-    if not file:
-        return empty
-    env_path = Path(file)
-    if not env_path.exists():
-        return empty
-    try:
-        from adare.exceptions import DataStructuringError
-        from adare.types.environment import parse_environment_file
-
-        metadata = parse_environment_file(env_path)
-    except (OSError, ValueError, DataStructuringError) as e:
-        # A single malformed file must never break the whole list.
-        log.warning(f"Could not parse environment source from {env_path}: {e}")
-        return empty
-    if metadata is None:
-        return empty
-    return (
-        metadata.vm or "",
-        metadata.vm_type or "",
-        metadata.vm_sha256 or "",
-        metadata.source_profile or "",
-        metadata.source_iso_sha256 or "",
-    )
 
 
 class ShowService:
@@ -216,6 +183,7 @@ class ShowService:
                     solutions=['Use `adare runs list` to find valid run ULIDs'],
                 )
 
+            extras = load_run_extras(self._query_across_projects, run.ulid, run.project_name, run.environment_ulid)
             detail = RunDetail(
                 ulid=run.ulid,
                 experiment_name=run.experiment_name,
@@ -230,6 +198,9 @@ class ShowService:
                 result_status=run.overall_result,
                 published=run.published,
                 fake=run.fake,
+                os_info=extras.os_info,
+                vm_box=extras.vm_box,
+                test_results=extras.test_results,
             )
 
             return Result.ok(detail)
@@ -302,13 +273,21 @@ class ShowService:
                     solutions=['Use `adare runs list` to find the ULID of the run to remove'],
                 )
 
-            # Get project path for database context
-            project_path = request.project_path or determine_projectdirectory(None)
+            # Project for the database context: the caller's, else whichever registered
+            # project holds the run (a ULID is globally unique), else the working directory's.
+            project_path = (
+                request.project_path
+                or find_run_project_path(self._query_across_projects, request.ulid)
+                or determine_projectdirectory(None)
+            )
             if not project_path:
                 return Result.fail(
-                    code="NoProjectFoundError",
-                    message="No project found in current directory or parent directories",
-                    solutions=['Run this command from within a project directory'],
+                    code="RunNotFoundError",
+                    message=f"Run with ULID {request.ulid} not found in any project",
+                    solutions=[
+                        'Use `adare runs list` to find valid run ULIDs',
+                        'Run this command from within a project directory',
+                    ],
                 )
 
             with ExperimentApi(project_path) as api:
@@ -477,7 +456,7 @@ class ShowService:
 
             items = []
             for env in environments:
-                vm, vm_type, vm_sha256, _source_profile, _source_iso_sha256 = _parse_env_source(env.file)
+                source = parse_env_source(env.file)
                 disk_path = vm_files.get(env.vm_id) or ''
                 # Only a local path can be stat'ed; a URL-baked env has nothing to check
                 # here, which is reported as unknown rather than as missing.
@@ -501,11 +480,13 @@ class ShowService:
                         in_request=env.in_request,
                         created_at=env.created_at,
                         file=env.file,
-                        vm=vm,
-                        vm_type=vm_type,
-                        vm_sha256=vm_sha256,
+                        vm=source.vm,
+                        vm_type=source.vm_type,
+                        vm_sha256=source.vm_sha256,
                         disk_path=disk_path,
                         disk_present=disk_present,
+                        os=os_label(env.osinfo_os, env.osinfo_distribution, env.osinfo_version, env.os_info),
+                        recipe=source.recipe,
                     )
                 )
 
@@ -544,7 +525,7 @@ class ShowService:
                     solutions=['Use `adare env list` to list available environments'],
                 )
 
-            vm, vm_type, vm_sha256, source_profile, source_iso_sha256 = _parse_env_source(env.file)
+            source = parse_env_source(env.file)
 
             # Same disk check as list_environments, so `env info` cannot report an
             # environment as healthy when the qcow2 a run would boot has been pruned.
@@ -576,13 +557,15 @@ class ShowService:
                 in_request=env.in_request,
                 created_at=env.created_at,
                 file=env.file,
-                vm=vm,
-                vm_type=vm_type,
-                vm_sha256=vm_sha256,
-                source_profile=source_profile,
-                source_iso_sha256=source_iso_sha256,
+                vm=source.vm,
+                vm_type=source.vm_type,
+                vm_sha256=source.vm_sha256,
+                source_profile=source.source_profile,
+                source_iso_sha256=source.source_iso_sha256,
                 disk_path=disk_path,
                 disk_present=disk_present,
+                os=os_label(env.osinfo_os, env.osinfo_distribution, env.osinfo_version, env.os_info),
+                recipe=source.recipe,
             )
 
             return Result.ok(detail)
@@ -612,9 +595,17 @@ class ShowService:
             Result[List[ExperimentListItem]] with list of experiments.
         """
         try:
+            wanted_tags = set(tags or [])
+            # Tags live in each project's database, so filter on the rows aggregated from them
+            # (all requested tags must be present).
             experiments = self._query_across_projects(
-                lambda api, name: api.get_experiments_structured(project_name=name)
+                lambda api, name: [
+                    exp
+                    for exp in api.get_experiments_structured(project_name=name)
+                    if wanted_tags <= set(exp.tags or [])
+                ]
             )
+            project_paths = project_paths_by_name()
 
             items = [
                 ExperimentListItem(
@@ -634,21 +625,10 @@ class ShowService:
                     created_at=exp.created_at,
                     run_count=exp.run_count,
                     last_run=exp.last_run,
+                    project_path=project_paths.get(exp.project, ""),
                 )
                 for exp in experiments
             ]
-
-            if tags:
-                from adare.database.api.tag import TagApi
-
-                with TagApi() as tag_api:
-                    result = tag_api.get_entities_by_tags(
-                        tag_names=tags,
-                        entity_type='experiments',
-                        match_all=True,
-                    )
-                matching_ids = {exp.id for exp in result.get('experiments', [])}
-                items = [item for item in items if item.ulid in matching_ids]
 
             return Result.ok(items)
 
@@ -718,6 +698,7 @@ class ShowService:
                 created_at=exp.created_at,
                 run_count=exp.run_count,
                 last_run=exp.last_run,
+                project_path=project_paths_by_name().get(exp.project, ""),
             )
 
             return Result.ok(detail)

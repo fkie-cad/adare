@@ -116,10 +116,6 @@ def test_load_playbook_without_sections_defaults_them(client, workdir):
     assert client.get('/api/playbooks/bare').json()['data'] == {'actions': [], 'settings': {}}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='an empty playbook file makes yaml.safe_load return None and `.get` raises AttributeError -> HTTP 500',
-)
 def test_load_empty_playbook_file_is_not_a_server_error(workdir):
     (workdir / 'playbooks').mkdir()
     (workdir / 'playbooks' / 'empty.yml').write_text('')
@@ -167,28 +163,24 @@ def test_save_then_load_through_the_real_parser_is_lossless_for_backend_shaped_a
     assert playbook.actions[0].duration == 2
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'playbook-panel.tsx saves actions as the palette builds them (`{type: "Click", target: ...}`, types/action.ts) '
-        'but types/playbook.py parse_playbook only accepts `{click: {...}}` style actions, so a playbook saved '
-        'from the workbench cannot be parsed by ADARE (CLI run / experiment load)'
-    ),
-)
 def test_playbook_saved_with_frontend_shaped_actions_is_parseable(client, workdir):
+    """The workbench serialises actions in the parser's ``{<action_key>: {params}}`` shape (types/action.ts)."""
     from adare.types.playbook import parse_playbook
 
-    frontend_action = {'type': 'Click', 'target': {'type': 'text', 'text': 'OK'}, 'strategy': 'sweep'}
+    frontend_action = {'click': {'target': {'text': 'OK'}, 'type': 'double', 'description': 'confirm'}}
     client.post('/api/playbooks/save', json={'filename': 'ui', 'actions': [frontend_action]})
 
-    parse_playbook(workdir / 'playbooks' / 'ui.yml')
+    playbook = parse_playbook(workdir / 'playbooks' / 'ui.yml')
+
+    assert playbook.actions[0].type == 'double'
+    assert playbook.actions[0].description == 'confirm'
 
 
 # --- /api/actions/types -----------------------------------------------------------------
 
 
-def _action_type_entries(data):
-    return list(data.values()) if isinstance(data, dict) else list(data)
+def _action_types(client):
+    return client.get('/api/actions/types').json()['data']
 
 
 def test_action_types_use_the_standard_envelope(client):
@@ -201,78 +193,69 @@ def test_action_types_use_the_standard_envelope(client):
 
 
 def test_action_types_cover_the_actions_manual_panel_marks_structured(client):
-    """manual-actions-panel.tsx STRUCTURED = Click, Keyboard, Wait, Scroll, Command, Screenshot."""
-    data = client.get('/api/actions/types').json()['data']
-    names = set(data) if isinstance(data, dict) else {e.get('type') for e in data}
+    """manual-actions-panel.tsx STRUCTURED = click, keyboard, idle, scroll, command, screenshot (parser keys)."""
+    names = {e['type'] for e in _action_types(client)}
 
-    assert {'Click', 'Keyboard', 'Wait', 'Scroll', 'Command', 'Screenshot'} <= names
+    assert {'click', 'keyboard', 'idle', 'scroll', 'command', 'screenshot'} <= names
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'use-actions.ts types the payload as ActionTypeMetadata[] and the palette calls '
-        '`groupByCategory(actionTypes)` (`items.reduce`) -- the route returns an object keyed by name, '
-        'so the manual-actions palette cannot render'
-    ),
-)
 def test_action_types_payload_is_a_list_like_the_frontend_expects(client):
-    assert isinstance(client.get('/api/actions/types').json()['data'], list)
+    assert isinstance(_action_types(client), list)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'types/action.ts ActionTypeMetadata is {type, category: gui|control|data|system, display_name, '
-        'description, icon, default_params}; the route entries carry category "GUI"/"Control Flow"/..., '
-        'required_fields/optional_fields and no type/display_name/icon/default_params'
-    ),
-)
 def test_action_types_entries_have_the_palette_fields(client):
-    entries = _action_type_entries(client.get('/api/actions/types').json()['data'])
-
-    for entry in entries:
+    for entry in _action_types(client):
         assert {'type', 'category', 'display_name', 'description', 'icon', 'default_params'} <= entry.keys()
         assert entry['category'] in {'gui', 'control', 'data', 'system'}
+        assert isinstance(entry['default_params'], dict)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'the palette advertises Wait, WaitFor, SetVariable, FileRead, FileWrite and RegistryRead, none of which '
-        'is an action ADARE can parse (types/playbook.py _ACTION_CLASSES has idle, wait_until, save_variable, ...)'
-    ),
-)
 def test_every_advertised_action_type_exists_in_the_playbook_parser(client):
+    """``type`` is the parser's own action key, and the catalogue is exactly the parser's registry."""
     from adare.types.playbook import _ACTION_CLASSES
 
-    names = set(client.get('/api/actions/types').json()['data'])
+    names = [e['type'] for e in _action_types(client)]
 
-    assert {n for n in names if n.lower() not in _ACTION_CLASSES} == set()
+    assert set(names) == set(_ACTION_CLASSES)
+    assert len(names) == len(set(names))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'advertised fields are not the real ones: Loop "count" (real: times), Screenshot "filename" (real: name), '
-        'Test "function" (real: name), Scroll "clicks" (real: amount), Click "strategy"/"button"/"click_count" '
-        '(not fields of ClickAction)'
-    ),
-)
 def test_advertised_fields_exist_on_the_real_action_classes(client):
     import attrs
 
     from adare.types.playbook import _ACTION_CLASSES
 
     wrong = []
-    for name, meta in client.get('/api/actions/types').json()['data'].items():
-        cls = _ACTION_CLASSES.get(name.lower())
-        if cls is None:
-            continue
-        fields = {f.name for f in attrs.fields(cls)}
-        wrong += [f'{name}.{f}' for f in meta['required_fields'] + meta['optional_fields'] if f not in fields]
+    for meta in _action_types(client):
+        fields = {f.name for f in attrs.fields(_ACTION_CLASSES[meta['type']])}
+        wrong += [f"{meta['type']}.{f}" for f in meta['required_fields'] + meta['optional_fields'] if f not in fields]
+        wrong += [f"{meta['type']}.{f}" for f in meta['default_params'] if f not in fields]
+        required = {f.name for f in attrs.fields(_ACTION_CLASSES[meta['type']]) if f.default is attrs.NOTHING}
+        assert set(meta['required_fields']) == required
 
     assert wrong == []
+
+
+def test_every_catalogue_entry_default_params_round_trip_through_the_parser(client, workdir):
+    """The palette seeds ``{<type>: default_params}``: what the workbench saves must be a parseable playbook."""
+    from adare.types.playbook import parse_playbook, structure_action
+
+    entries = _action_types(client)
+    for entry in entries:
+        structure_action({entry['type']: entry['default_params']})  # execute-action path (action_yaml)
+
+    ui_actions = [{e['type']: e['default_params']} for e in entries]
+    client.post('/api/playbooks/save', json={'filename': 'palette', 'actions': ui_actions})  # playbook save path
+
+    assert len(parse_playbook(workdir / 'playbooks' / 'palette.yml').actions) == len(entries)
+
+
+def test_action_types_catalogue_has_an_entry_for_every_registry_class_without_presentation_gaps():
+    """A new action class must get palette presentation (category/icon/default_params), not a generic fallback."""
+    from adare.types.action_catalogue import _PRESENTATION
+    from adare.types.playbook import _ACTION_CLASSES
+
+    assert set(_PRESENTATION) == set(_ACTION_CLASSES)
 
 
 # --- /api/health ------------------------------------------------------------------------
@@ -380,14 +363,6 @@ def test_websocket_events_are_scoped_to_their_session(client):
         assert other.receive_json() == {'type': 'pong'}  # nothing else was queued before the pong
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'types/api.ts ActionCompleteMessage is data: {action_type, result: ActionResult} with the success flag '
-        'inside `result`; ws_manager.send_action_complete puts `success` beside `result` and the route '
-        'passes a result without `success`. No component subscribes to action_complete yet'
-    ),
-)
 def test_action_complete_frame_matches_the_frontend_message_type(client):
     from adare.core.dto.devmode import DevActionResult
 
