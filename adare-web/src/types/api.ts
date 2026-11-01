@@ -23,10 +23,9 @@ export interface ApiError {
 // object shape — consumers should handle both.
 //
 // NOTE ON STATUS CODES: a failure arrives as **HTTP 200** with `success: false`,
-// not a 4xx. axios therefore resolves, and the response interceptor in
-// `api/client.ts` never sees it. A hook that does `return data.data!` will silently
-// resolve a rejection as a success — check `data.success === false` first. See
-// `useCreateEnvironment` in `api/hooks/use-environments.ts` for the pattern.
+// not a 4xx. The response interceptor in `api/client.ts` turns that into a
+// rejected promise, so a hook's `queryFn`/`mutationFn` only ever sees successes.
+// `assertOk`/`unwrap` below remain as belt and braces for payload checks.
 export interface ApiResponse<T> {
   success: boolean
   data?: T
@@ -56,12 +55,8 @@ export function apiErrorMessage(error: unknown): string | null {
 /**
  * Throw if the server rejected the request; otherwise do nothing.
  *
- * Use this in every hook whose route funnels through `result_to_response`. A
- * rejection arrives as **HTTP 200** with `success: false`, so axios resolves and
- * the response interceptor in `api/client.ts` never sees it — a hook that does
- * `return data.data!` resolves a rejection as a success, firing the success toast
- * and hiding the reason. `?? []` is just as bad in a different way: it turns a
- * failed list call into a convincing "nothing here yet".
+ * The axios client already rejects `success: false` envelopes, so this is a
+ * second line of defence for responses that bypass it (tests, raw fetches).
  *
  * For a route that returns no payload (a DELETE), this is the whole check.
  */

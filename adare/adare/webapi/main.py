@@ -475,7 +475,12 @@ def save_playbook(request: PlaybookSaveRequest):
     playbooks_dir = Path("playbooks")
     playbooks_dir.mkdir(exist_ok=True)
 
-    file_path = playbooks_dir / request.filename
+    # A bare file name only: no directories, no absolute paths, no `..`, so a
+    # request can never write outside the playbooks directory.
+    name = Path(request.filename)
+    if name.is_absolute() or name.name != request.filename or name.name in ("", ".", ".."):
+        raise HTTPException(status_code=400, detail="filename must be a plain file name without directories")
+    file_path = playbooks_dir / name
     if not file_path.suffix:
         file_path = file_path.with_suffix(".yml")
 
@@ -722,9 +727,14 @@ def spa_fallback(path: str):
     """Serve static files from the built frontend, with SPA index.html fallback."""
     if not _frontend_dist.is_dir():
         raise HTTPException(status_code=404, detail="Frontend not built. Run: pnpm build")
-    file_path = (_frontend_dist / path).resolve()
-    # Prevent path traversal
-    if not str(file_path).startswith(str(_frontend_dist)):
+    # Unknown API paths must stay JSON 404s; serving index.html for them would
+    # hide backend 404s from the frontend.
+    if path == "api" or path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not Found")
+    dist = _frontend_dist.resolve()
+    file_path = (dist / path).resolve()
+    # Prevent path traversal (a string-prefix check would admit `dist-private/`).
+    if not file_path.is_relative_to(dist):
         raise HTTPException(status_code=404)
     if file_path.is_file():
         return FileResponse(file_path)
