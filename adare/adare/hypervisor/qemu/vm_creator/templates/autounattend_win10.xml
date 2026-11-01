@@ -84,12 +84,13 @@
 
       <UserData>
         <AcceptEula>true</AcceptEula>
-        {% if proc_arch == 'arm64' %}
+        <!-- Generic Pro (KMS client) key: picks the edition on multi-edition ISOs, where
+             Setup otherwise stops with "Windows cannot read the <ProductKey> setting from
+             the unattend answer file". Does not activate. -->
         <ProductKey>
           <Key>W269N-WFGWX-YVC9B-4J6C9-T83GX</Key>
           <WillShowUI>OnError</WillShowUI>
         </ProductKey>
-        {% endif %}
       </UserData>
     </component>
 
@@ -100,49 +101,12 @@
                language="neutral"
                versionScope="nonSxS">
       <DriverPaths>
-        <!-- viostor (critical) - D through J -->
+        <!-- viostor, put on the Autounattend floppy by windows_creator. A: is the
+             only fixed letter; the current Setup aborts (0x80070103 - 0x40031) on
+             listed paths that do not exist, so no guessing D: through J:.
+             Network and other drivers come from the virtio guest tools at first logon. -->
         <PathAndCredentials wcm:action="add" wcm:keyValue="1">
-          <Path>D:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="2">
-          <Path>E:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="3">
-          <Path>F:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="4">
-          <Path>G:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="5">
-          <Path>H:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="6">
-          <Path>I:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="7">
-          <Path>J:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <!-- NetKVM - D through J -->
-        <PathAndCredentials wcm:action="add" wcm:keyValue="8">
-          <Path>D:\NetKVM\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="9">
-          <Path>E:\NetKVM\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="10">
-          <Path>F:\NetKVM\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="11">
-          <Path>G:\NetKVM\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="12">
-          <Path>H:\NetKVM\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="13">
-          <Path>I:\NetKVM\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="14">
-          <Path>J:\NetKVM\w10\{{ driver_arch }}</Path>
+          <Path>A:\</Path>
         </PathAndCredentials>
         <!-- viogpudo intentionally excluded from WinPE DriverPaths.
              Loading the GPU driver during WinPE causes black screen issues

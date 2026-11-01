@@ -65,10 +65,11 @@ class TestAutounattendFloppy:
         files = write.call_args.args[1]
         assert sorted(files) == ['Autounattend.xml', 'viostor.cat', 'viostor.inf', 'viostor.sys']
 
-    def test_win11_loads_drivers_from_the_floppy_only(self):
+    @pytest.mark.parametrize('template', ['autounattend_win10.xml', 'autounattend_win11.xml'])
+    def test_loads_drivers_from_the_floppy_only(self, template):
         # Current Setup aborts with 0x80070103 on listed paths that do not exist,
         # so the answer file must not guess drive letters.
-        xml = _render_autounattend('autounattend_win11.xml', setup_level=SetupLevel.FULL)
+        xml = _render_autounattend(template, setup_level=SetupLevel.FULL)
 
         driver_paths = re.search(r'<DriverPaths>(.*?)</DriverPaths>', xml, re.S).group(1)
         assert re.findall(r'<Path>(.*?)</Path>', driver_paths) == ['A:\\']
@@ -98,9 +99,11 @@ class TestAutounattendFloppy:
         orders = [int(order) for order in re.findall(r'<Order>(\d+)</Order>', first_logon)]
         assert orders == list(range(1, len(orders) + 1))
 
-    def test_win11_selects_an_edition(self):
-        # Multi-edition ISOs otherwise stop at the product key / edition screen.
-        xml = _render_autounattend('autounattend_win11.xml', setup_level=SetupLevel.FULL)
+    @pytest.mark.parametrize('template', ['autounattend_win10.xml', 'autounattend_win11.xml'])
+    def test_selects_an_edition(self, template):
+        # Multi-edition ISOs otherwise stop at the product key / edition screen
+        # (Win10 22H2: "Windows cannot read the <ProductKey> setting").
+        xml = _render_autounattend(template, setup_level=SetupLevel.FULL)
 
         assert re.search(r'<UserData>.*<ProductKey>\s*<Key>[\w-]+</Key>', xml, re.S)
 
@@ -127,6 +130,13 @@ class TestSetupErrorWatch:
             watch()
 
         assert (tmp_path / 'win_setup-error.png').is_file()
+
+    def test_an_unreadable_answer_file_setting_stops_the_install(self, tmp_path):
+        error = 'Windows cannot read the <ProductKey> setting from the unattend answer file.'
+        watch, screendump, ocr = self._watch(tmp_path, ['Windows Setup', error, 'OK', 'Setup is starting'])
+
+        with screendump, ocr, pytest.raises(WindowsVMCreationError, match='<ProductKey>'):
+            watch()
 
     def test_a_working_setup_passes(self, tmp_path):
         watch, screendump, ocr = self._watch(tmp_path, ["We're getting a few things ready", 'Next'])
