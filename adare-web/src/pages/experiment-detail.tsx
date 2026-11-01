@@ -25,8 +25,9 @@ import { useRuns } from '@/api/hooks/use-runs'
 import { formatDateTime, formatDuration } from '@/lib/formatters'
 import { toast } from '@/components/ui/toast'
 
-function projectPathOf(exp: { project_path?: string; project?: string } | undefined): string {
-  return String(exp?.project_path ?? exp?.project ?? '')
+/** The project's filesystem path (not its name): run/validate/link all take it as `project_path`. */
+function projectPathOf(exp: { project_path?: string } | undefined): string {
+  return exp?.project_path ?? ''
 }
 
 function RunExperimentDialog({
@@ -155,7 +156,7 @@ export default function ExperimentDetailPage() {
                 Develop
               </Link>
             </Button>
-            <Button onClick={() => setRunOpen(true)} disabled={envNames.length === 0}>
+            <Button onClick={() => setRunOpen(true)} disabled={envNames.length === 0 || !projectPath}>
               <Play size={14} />
               Run
             </Button>
@@ -181,7 +182,8 @@ export default function ExperimentDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Project</p>
-                  <p className="text-sm font-mono">{projectPath || '—'}</p>
+                  <p className="text-sm">{exp.project || '—'}</p>
+                  {projectPath && <p className="text-xs font-mono text-muted-foreground">{projectPath}</p>}
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tags</p>
@@ -247,18 +249,16 @@ export default function ExperimentDetailPage() {
               </TableHeader>
               <TableBody>
                 {(runsQuery.data ?? []).map((run) => (
-                  <TableRow key={String(run.ulid)} className="hover:bg-muted/50">
+                  <TableRow key={run.ulid} className="hover:bg-muted/50">
                     <TableCell>
-                      <Link to="/runs/$ulid" params={{ ulid: String(run.ulid) }} className="inline-flex">
-                        <Badge variant={statusToVariant((run as { status?: string }).status ?? null)}>
-                          {(run as { status?: string }).status ?? '—'}
-                        </Badge>
+                      <Link to="/runs/$ulid" params={{ ulid: run.ulid }} className="inline-flex">
+                        <Badge variant={statusToVariant(run.status ?? null)}>{run.status ?? '—'}</Badge>
                       </Link>
                     </TableCell>
-                    <TableCell>{(run as { environment_name?: string }).environment_name || '—'}</TableCell>
-                    <TableCell>{formatDateTime((run as { start_time?: string }).start_time)}</TableCell>
-                    <TableCell>{formatDuration((run as { duration_seconds?: number }).duration_seconds)}</TableCell>
-                    <TableCell>{(run as { overall_result?: string }).overall_result || '—'}</TableCell>
+                    <TableCell>{run.environment_name || '—'}</TableCell>
+                    <TableCell>{formatDateTime(run.start_time)}</TableCell>
+                    <TableCell>{formatDuration(run.duration_seconds)}</TableCell>
+                    <TableCell>{run.result_status || '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

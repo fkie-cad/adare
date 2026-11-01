@@ -8,12 +8,20 @@ import type { ApiResponse } from '@/types/api'
  * resolving a running VM's live VirtualSpice display URL (watch / embed).
  */
 
-// Shape of a locally-registered VM record. The backend returns whatever
-// `AdareAPI().vm` yields — we keep this permissive and let callers narrow.
+// A locally-registered VM: a row of GET /api/local-vms (VmListItem) or, with
+// the detail-only fields, GET /api/local-vms/{id} (VmInfo).
 export interface LocalVm {
   id: string
   name?: string
+  description?: string
+  hypervisor?: string
+  os_platform?: string | null
+  instance_count?: number
+  file_hash?: string
+  /** List rows: the VM disk/image file. */
   path?: string
+  /** Detail only: the VM disk/image file. */
+  file_path?: string
   [key: string]: unknown
 }
 
@@ -52,7 +60,9 @@ export function useDeleteLocalVm() {
 export interface VmInstance {
   id: string
   vm_id?: string
-  name?: string
+  vm_name?: string
+  /** Hypervisor domain name (what the live view resolves), unique per instance. */
+  instance_name?: string
   status?: 'active' | 'available' | 'stopped' | string
   websocket_port?: number
   [key: string]: unknown
@@ -112,12 +122,20 @@ export function useRemoveVmInstance() {
   })
 }
 
+/** Result of DELETE /api/vm-instances (VmInstanceCleanupResult). */
+export interface VmInstanceCleanupResult {
+  removed_count: number
+  removed_instances: string[]
+  failed_count: number
+  failed_instances: string[]
+}
+
 export function useRemoveAllStoppedInstances() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async () => {
-      const { data } = await api.delete<ApiResponse<number>>(endpoints.vmInstances)
-      return data.data ?? 0
+      const { data } = await api.delete<ApiResponse<VmInstanceCleanupResult>>(endpoints.vmInstances)
+      return data.data!
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vm-instances'] }),
   })

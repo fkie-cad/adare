@@ -51,9 +51,13 @@ class DevModeAPI:
         """Cleanup stale sessions."""
         return self._service.cleanup_stale_sessions(request)
 
-    def reset_session(self, request):
-        """Reset session (soft or hard)."""
-        return self._service.reset_session(request)
+    def reset_soft(self, request):
+        """Soft reset: restore the initial external snapshot without an OS boot (QEMU) / reset variables (VirtualBox)."""
+        return self._service.reset_soft(request)
+
+    def reset_hard(self, request):
+        """Hard reset: stop the VM, restore its initial snapshot, restart it and reconnect."""
+        return self._service.reset_hard(request)
 
     def execute_action(self, request):
         """Execute a single action."""

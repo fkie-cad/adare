@@ -60,7 +60,11 @@ export default function VmsListPage() {
 
   const handleCleanup = () => {
     cleanupMutation.mutate(undefined, {
-      onSuccess: (count) => toast.success('Cleanup complete', `Removed ${count} stopped instance${count === 1 ? '' : 's'}`),
+      onSuccess: ({ removed_count: count, failed_count: failed }) =>
+        toast.success(
+          'Cleanup complete',
+          `Removed ${count} stopped instance${count === 1 ? '' : 's'}${failed ? `, ${failed} failed` : ''}`,
+        ),
       onError: (err) => toast.error('Cleanup failed', (err as Error)?.message),
     })
   }
@@ -102,7 +106,7 @@ export default function VmsListPage() {
             {(data ?? []).map((vm) => (
               <TableRow key={vm.id} className="hover:bg-muted/50">
                 <TableCell className="font-medium">
-                  <Link to="/vms/$instanceId" params={{ instanceId: vm.id }} className="hover:underline">
+                  <Link to="/vms/$vmId" params={{ vmId: vm.id }} className="hover:underline">
                     {vm.name || vm.id}
                   </Link>
                 </TableCell>

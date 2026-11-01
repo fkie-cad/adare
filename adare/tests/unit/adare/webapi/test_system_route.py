@@ -46,6 +46,9 @@ def test_resources(client):
     assert data['cpu'] == {'count': 8, 'percent': 12.5, 'load_average': [0.5, 0.4, 0.3]}
     assert data['disks'][0]['percent'] == 40.0
     assert data['vms'][0]['name'] == 'ubuntu_exp_A'
+    # an unregistered QEMU process has no instance row, so nothing to link a VM page with
+    assert 'vm_id' not in data['vms'][0]
+    assert 'instance_id' not in data['vms'][0]
     assert data['vm_totals'] == {'count': 1, 'rss_bytes': 3 * GIB, 'cpu_percent': 55.0}
 
 

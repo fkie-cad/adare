@@ -3,17 +3,15 @@ import { FolderKanban, Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CreateProjectDialog } from '@/components/dialogs/create-project-dialog'
 import { useProjects, useDeleteProject, type Project } from '@/api/hooks/use-projects'
-import { formatDateTime } from '@/lib/formatters'
 import { toast } from '@/components/ui/toast'
 
 const SKELETON_ROWS = 5
-const COLUMNS = 5
+const COLUMNS = 4
 
 function LoadingTable() {
   return (
@@ -23,7 +21,6 @@ function LoadingTable() {
           <TableHead>Name</TableHead>
           <TableHead>Path</TableHead>
           <TableHead>Description</TableHead>
-          <TableHead>Created</TableHead>
           <TableHead className="w-24 text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
@@ -95,7 +92,6 @@ export default function ProjectsListPage() {
               <TableHead>Name</TableHead>
               <TableHead>Path</TableHead>
               <TableHead>Description</TableHead>
-              <TableHead>Created</TableHead>
               <TableHead className="w-24 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -103,18 +99,12 @@ export default function ProjectsListPage() {
             {(data ?? []).map((project) => (
               <TableRow key={project.path} className="hover:bg-muted/50">
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{project.name}</span>
-                    {(project as any).is_current === true && (
-                      <Badge variant="secondary">Current</Badge>
-                    )}
-                  </div>
+                  <span className="font-medium">{project.name}</span>
                 </TableCell>
                 <TableCell>
                   <span className="font-mono text-xs">{project.path}</span>
                 </TableCell>
                 <TableCell>{project.description || '—'}</TableCell>
-                <TableCell>{formatDateTime((project as any).created_at)}</TableCell>
                 <TableCell className="text-right">
                   <Button
                     variant="ghost"

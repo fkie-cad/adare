@@ -46,7 +46,7 @@ def list_projects():
 @router.get("/{path:path}")
 def get_project(path: str):
     """Get a project by its filesystem path."""
-    result = _api().project.get_by_path(path)
+    result = _api().project.get_by_path(Path(path))
     return result_to_response(result)
 
 
@@ -66,19 +66,21 @@ def create_project(body: ProjectCreateBody):
 
 @router.delete("/{name}")
 def remove_project(name: str, path: str | None = None):
-    """Remove a project by name.
+    """Remove a project by name (or by ``?path=``).
 
-    The underlying service requires the project path. If *path* is not supplied
-    as a query parameter, we attempt to resolve it from the project name first.
+    The underlying service needs the project path. When *path* is not supplied it is
+    resolved from the registered project with that *name*; an unknown name is a 404.
     """
     from adare.core.dto.project import ProjectRemoveRequest
 
     if path is None:
-        # Look up the project to get its path
-        get_result = _api().project.get_by_path(name)
-        if not get_result.success:
+        listed = _api().project.list_all()
+        if not listed.success:
+            return result_to_response(listed)
+        match = next((p for p in listed.data if p.name == name), None)
+        if match is None:
             raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
-        path = str(get_result.data.path) if hasattr(get_result.data, "path") else name
+        path = str(match.path)
 
     dto = ProjectRemoveRequest(path=Path(path))
     result = _api().project.remove(dto)

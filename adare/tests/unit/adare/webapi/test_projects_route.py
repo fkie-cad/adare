@@ -114,17 +114,14 @@ def test_list_description_defaults_to_empty_string(client, tmp_path):
     assert project['description'] == ''
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="projects-list.tsx renders a 'Created' column from `created_at`, but ProjectListItem / the project "
-    'table carry no timestamp, so the column is always blank (adare/core/dto/project.py:ProjectListItem)',
-)
-def test_list_includes_created_at_for_the_created_column(client, tmp_path):
+def test_list_carries_only_the_fields_projects_list_renders(client, tmp_path):
+    """projects-list.tsx shows name / path / description; the registry stores no timestamp, so no `created_at`."""
     _create(client, tmp_path, 'alpha')
 
     project = client.get('/api/projects').json()['data'][0]
 
-    assert project.get('created_at')
+    assert {'id', 'name', 'path', 'description'} <= set(project)
+    assert 'created_at' not in project
 
 
 # --- POST /api/projects ---
@@ -202,12 +199,6 @@ def test_get_passes_an_absolute_path_through_verbatim(client, tmp_path):
     assert Path(received) == project_path
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='GET /api/projects/{path} answers HTTP 500: the route passes the raw str to ProjectService.get_by_path, '
-    "which needs a Path (ProjectDbApi.get_project_by_path calls path.as_posix()) -> AttributeError: 'str' object "
-    "has no attribute 'as_posix' (adare/webapi/routes/projects.py:46)",
-)
 def test_get_returns_the_project_the_list_returned(client, tmp_path):
     """A project from the list can be fetched with the id the frontend passes (its absolute path)."""
     _create(client, tmp_path, 'alpha', description='first project')
@@ -224,11 +215,6 @@ def test_get_returns_the_project_the_list_returned(client, tmp_path):
     assert payload['data']['description'] == 'first project'
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='an unknown project path should be the ProjectNotFoundError envelope, but the route crashes with HTTP 500 '
-    '(str passed where the service needs a Path, adare/webapi/routes/projects.py:46)',
-)
 def test_get_unknown_path_is_a_not_found_envelope(client, tmp_path):
     response = client.get(f'/api/projects/{tmp_path / "nope"}')
 
@@ -269,12 +255,6 @@ def test_delete_leaves_other_projects_alone(client, tmp_path):
     assert (tmp_path / 'keep').is_dir()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='DELETE /api/projects/{name} without ?path= is documented to resolve the path from the name, but it calls '
-    'get_by_path(name) with a str -> HTTP 500 AttributeError (and a name is not a path, so the lookup could '
-    'never match anyway) (adare/webapi/routes/projects.py:75)',
-)
 def test_delete_by_name_alone_removes_the_project(client, tmp_path):
     _create(client, tmp_path, 'alpha')
 
@@ -285,10 +265,16 @@ def test_delete_by_name_alone_removes_the_project(client, tmp_path):
     assert client.get('/api/projects').json()['data'] == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='DELETE of an unknown project name without ?path= should be the documented HTTP 404, but the route '
-    'crashes with HTTP 500 first (adare/webapi/routes/projects.py:75)',
-)
 def test_delete_unknown_name_alone_is_a_404(client):
     assert client.delete('/api/projects/ghost').status_code == 404
+
+
+def test_delete_by_name_alone_leaves_other_projects_alone(client, tmp_path):
+    keep = _create(client, tmp_path, 'keep')
+    _create(client, tmp_path, 'drop')
+
+    client.delete('/api/projects/drop')
+
+    assert [p['path'] for p in client.get('/api/projects').json()['data']] == [keep['path']]
+    assert (tmp_path / 'keep').is_dir()
+    assert not (tmp_path / 'drop').exists()

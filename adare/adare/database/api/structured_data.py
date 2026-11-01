@@ -2,6 +2,7 @@
 # configure logging
 import logging
 
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload
 
 from adare.database.api.base import EnhancedDatabaseApi
@@ -12,6 +13,7 @@ from adare.database.models.global_models import Environment, Project, TestFuncti
 from adare.database.models.project_models import (
     Experiment,
     ExperimentRun,
+    TestEvent,
 )
 from adare.database.utils.display_helpers import (
     get_current_project_name,
@@ -23,6 +25,7 @@ from adare.database.utils.display_helpers import (
 )
 from adare.database.utils.error_handling import DataRetrievalError, safe_query_all, safe_query_first
 from adare.types.output_models import EnvironmentInfo, ExperimentInfo, ProjectInfo, RunInfo, TestFunctionInfo
+from adarelib.constants import StatusEnum
 
 log = logging.getLogger(__name__)
 
@@ -95,6 +98,13 @@ class StructuredDataApi(EnhancedDatabaseApi):
         """Get all experiments as structured ExperimentInfo objects."""
         # Use eager loading to prevent N+1 queries
         experiments = safe_query_all(self._session.query(Experiment).options(selectinload(Experiment.tags)))
+        # One grouped query for every experiment's run count and latest start time.
+        run_stats = {
+            experiment_id: (count, last_run)
+            for experiment_id, count, last_run in self._session.query(
+                ExperimentRun.experiment_id, func.count(ExperimentRun.id), func.max(ExperimentRun.start_time)
+            ).group_by(ExperimentRun.experiment_id)
+        }
         result = []
         dangling_env_refs: list[tuple[str, str]] = []  # (experiment_name, env_id)
 
@@ -129,6 +139,7 @@ class StructuredDataApi(EnhancedDatabaseApi):
             primary_env = resolved_env_names[0] if resolved_env_names else ""
             tags = safe_get_tags(exp)
             published, in_request = safe_get_sync_status(exp)
+            run_count, last_run = run_stats.get(exp.id, (0, None))
 
             exp_info = ExperimentInfo(
                 name=exp.name,
@@ -143,6 +154,8 @@ class StructuredDataApi(EnhancedDatabaseApi):
                 description=exp.description or "",
                 tags=tags,
                 created_at=exp.created_at,
+                run_count=run_count,
+                last_run=last_run,
                 published=published,
                 in_request=in_request,
             )
@@ -161,9 +174,14 @@ class StructuredDataApi(EnhancedDatabaseApi):
         return result
 
     def get_testfunctions_structured(
-        self, include_parameters: bool = True, testfunction_file: str = None
+        self, include_parameters: bool = True, testfunction_file: str = None, current_only: bool = True
     ) -> list[TestFunctionInfo]:
-        """Get all testfunctions as structured TestFunctionInfo objects."""
+        """Get all testfunctions as structured TestFunctionInfo objects.
+
+        A testfunction that vanished from its source file is kept in the database
+        (``is_current = False``) so experiment references never dangle; it is not a
+        testfunction anyone can use, so it is hidden unless ``current_only=False``.
+        """
         # Validate testfunction_file parameter if provided
         if testfunction_file and not isinstance(testfunction_file, str):
             raise DataRetrievalError("testfunction_file must be a string")
@@ -174,6 +192,8 @@ class StructuredDataApi(EnhancedDatabaseApi):
             query_options.append(selectinload(TestFunction.parameters))
 
         query = self._session.query(TestFunction).options(*query_options)
+        if current_only:
+            query = query.filter(TestFunction.is_current.is_(True))
 
         # Apply file filtering if specified
         if testfunction_file:
@@ -275,6 +295,7 @@ class StructuredDataApi(EnhancedDatabaseApi):
         result_statuses = load_result_statuses(self._session, runs)
         result = []
         dangling_run_ids: list[str] = []
+        env_cache: dict[str, object] = {}
 
         # Get current project name from context (experiments are stored per-project)
         current_project_name = project_name or get_current_project_name() or ""
@@ -291,7 +312,7 @@ class StructuredDataApi(EnhancedDatabaseApi):
                     dangling_run_ids.append(run.id)
                 result.append(self.__build_unlinked_run_info(run, current_project_name))
                 continue
-            env = experiment.environments[0] if experiment.environments else None
+            env = self._run_environment(run, experiment, env_cache)
 
             # Calculate duration
             duration_seconds = 0.0
@@ -331,6 +352,27 @@ class StructuredDataApi(EnhancedDatabaseApi):
 
         return result
 
+    @staticmethod
+    def _run_environment(run, experiment, env_cache: dict[str, object]):
+        """The environment this run actually ran on.
+
+        A run records its exact environment (`environment_id`); the experiment may
+        list several, so its first one is only a fallback for runs that predate the
+        column. Lookups are memoised per call: many runs share one environment.
+        """
+        if run.environment_id:
+            if run.environment_id not in env_cache:
+                from adare.database.reference_manager import reference_manager
+
+                try:
+                    env_cache[run.environment_id] = reference_manager.get_environment_object(run.environment_id)
+                except (AttributeError, KeyError, DataRetrievalError):
+                    env_cache[run.environment_id] = None
+            env = env_cache[run.environment_id]
+            if env is not None:
+                return env
+        return experiment.environments[0] if experiment.environments else None
+
     def get_run_files(self, ulid: str) -> dict | None:
         """Resolve a run's on-disk directory and known artifact file paths.
 
@@ -353,6 +395,69 @@ class StructuredDataApi(EnhancedDatabaseApi):
             "system_info_file": files.system_info_file_path if files else None,
             "zip_file": files.zip_file_path if files else None,
         }
+
+    def get_run_detail_extras(self, ulid: str) -> dict | None:
+        """What the run page shows beyond a run row: the environment the run used and its test results.
+
+        ``None`` if no run with this ULID exists in this project's database. ``test_results`` has one
+        ``{name, status, passed, details}`` per TestEvent in execution order, with ``status`` the
+        StatusEnum name of the stored Result (or derived from the event's success flag without one).
+        """
+        run = safe_query_first(self._session.query(ExperimentRun).filter(ExperimentRun.id == ulid))
+        if run is None:
+            return None
+
+        events = safe_query_all(
+            self._session.query(TestEvent)
+            .options(joinedload(TestEvent.abstract_test), joinedload(TestEvent.result))
+            .filter(TestEvent.experiment_run_id == ulid)
+            .order_by(TestEvent.timestamp)
+        )
+        # A test logs a `test_start` event (no Result) and a `test_complete` event in the same
+        # event group. Report each test once: its completion, or the start alone when the test
+        # never completed (e.g. the run aborted), which then reads as status NONE.
+        completed_groups = {
+            e.event_group_id for e in events if e.event_type_specific != 'test_start' and e.event_group_id
+        }
+        events = [
+            e for e in events if not (e.event_type_specific == 'test_start' and e.event_group_id in completed_groups)
+        ]
+        test_results = []
+        for event in events:
+            status = None
+            if event.result is not None and event.result.status_id is not None:
+                try:
+                    status = StatusEnum(int(event.result.status_id)).name
+                except ValueError:
+                    status = str(event.result.status_id)
+            if status is None:
+                status = {True: StatusEnum.SUCCESS.name, False: StatusEnum.FAILED.name}.get(
+                    event.success, StatusEnum.NONE.name
+                )
+            test_results.append(
+                {
+                    'name': event.abstract_test.name if event.abstract_test else 'unknown',
+                    'status': status,
+                    'passed': status in (StatusEnum.SUCCESS.name, StatusEnum.WARNING.name),
+                    'details': (event.result.details if event.result else None) or event.error or '',
+                }
+            )
+        return {'environment_id': run.environment_id, 'test_results': test_results}
+
+    def get_environment_vm_summary(self, environment_id: str) -> tuple[str | None, str] | None:
+        """``(os_info, vm_name)`` of a (global) environment; ``os_info`` is ``None`` without OsInfo.
+
+        ``None`` if the environment is unknown or has no VM.
+        """
+        env = safe_query_first(
+            self._session.query(Environment)
+            .options(joinedload(Environment.vm).joinedload(Vm.osinfo))
+            .filter(Environment.id == environment_id)
+        )
+        if env is None or env.vm is None:
+            return None
+        os_info = safe_get_os_info(env.vm)[0] if env.vm.osinfo is not None else None
+        return os_info, env.vm.name
 
     def __build_unlinked_run_info(self, run: ExperimentRun, current_project_name: str) -> RunInfo:
         """Build a RunInfo for a run not linked to an experiment.
