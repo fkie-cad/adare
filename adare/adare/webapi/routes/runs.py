@@ -124,8 +124,9 @@ def get_run_artifact(ulid: str, artifact_path: str):
 
     resolved_dir = run_dir.resolve()
     target = (run_dir / artifact_path).resolve()
-    # Path-traversal guard: the resolved file must stay under the run dir.
-    if not str(target).startswith(str(resolved_dir)):
+    # Path-traversal guard: the resolved file must stay under the run dir. A plain
+    # string-prefix check would also admit a sibling such as `<run-dir>-evil/`.
+    if not target.is_relative_to(resolved_dir):
         raise HTTPException(status_code=404)
     if not target.is_file():
         raise HTTPException(status_code=404, detail="artifact not found")
