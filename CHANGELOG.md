@@ -449,6 +449,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- Playbook `tests:` entries now reject unknown keys (e.g. a `paramter:` typo) at parse time,
+  with a `did you mean: parameter?` hint, instead of silently dropping the key and failing
+  at the end of the run with `NotAnAttrsClassError`. Validation errors from `parse_playbook`
+  are now a readable path-qualified `ValueError` rather than a bare cattrs `ClassValidationError`.
 - Runs list (`/api/runs`, `adare runs list`, web Runs page) is newest first across all
   projects instead of project by project in database order, so running runs are on top.
   The web Runs page sorts by any column (click a header), counts active runs, and
