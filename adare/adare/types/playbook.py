@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import difflib
 from pathlib import Path
 from typing import Any
 
 import attrs
 import cattrs
 import yaml
+from cattrs.gen import make_dict_structure_fn
 
 # Re-exported: callers import these from adare.types.playbook.
 from adare.types.targets import (
@@ -529,7 +531,10 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
 
     converter = build_playbook_converter()
 
-    playbook = converter.structure(data, Playbook)
+    try:
+        playbook = converter.structure(data, Playbook)
+    except cattrs.BaseValidationError as e:
+        raise ValueError(_describe_validation_error(e)) from e
 
     # Validate playbook (variable definitions, etc.)
     from adare.types.playbook_validators import validate_playbook
@@ -537,6 +542,23 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
     validate_playbook(playbook)
 
     return playbook
+
+
+def _format_leaf_error(exc: BaseException, type_: type | None) -> str:
+    """Keep our own explicit messages (unknown field, unknown action); defer the rest to cattrs."""
+    if isinstance(exc, ValueError):
+        return str(exc)
+    return cattrs.v.format_exception(exc, type_)
+
+
+def _describe_validation_error(error: cattrs.BaseValidationError) -> str:
+    """Flatten a nested cattrs error into path-qualified lines that say what is wrong.
+
+    ``str()`` of the cattrs error is only "While structuring Playbook (N sub-exceptions)",
+    and ``transform_error``'s default wording drops our "did you mean" hint.
+    """
+    lines = cattrs.transform_error(error, format_exception=_format_leaf_error)
+    return 'Invalid playbook:\n  ' + '\n  '.join(lines)
 
 
 def build_playbook_converter() -> cattrs.Converter:
@@ -819,32 +841,49 @@ _STRICT_CLASSES = (
     Offset,
     TextMatchConfig,
     MachineSpec,
+    Test,
 )
+
+
+# Strict classes that are also checked when nested inside another structured class (the
+# inner converter below). Actions nested under ``Playbook`` are deliberately NOT here:
+# turning that on rejects playbooks that parse today (see test_playbook_test_strict.py).
+_NESTED_STRICT_CLASSES = (Test,)
 
 
 def _register_strict_hooks(converter):
     """Register hooks that reject unknown fields, then structure the class normally.
 
-    They structure through a second converter with the same union hooks: calling
-    ``converter`` itself would re-enter the strict hook.
+    The class is built by cattrs' generated dict-structure function bound to ``inner``,
+    a second converter with the same union hooks: calling ``converter`` itself would
+    re-enter the strict hook.
     """
     inner = cattrs.Converter()
     _register_union_hooks(inner)
 
     def strict_hook_for(cls):
         expected_fields = {field.name for field in attrs.fields(cls)}
+        generated: list[Any] = []  # built on first use: cattrs resolves field hooks when it generates
 
         def strict_structure_hook(obj, _):
             if isinstance(obj, dict):
                 extra_fields = set(obj.keys()) - expected_fields
                 if extra_fields:
+                    hints = []
+                    for extra in sorted(extra_fields):
+                        hints.extend(difflib.get_close_matches(extra, sorted(expected_fields), n=1))
+                    hint = f" (did you mean: {', '.join(hints)}?)" if hints else ''
                     raise ValueError(
-                        f"Unexpected field(s) in {cls.__name__}: {', '.join(sorted(extra_fields))}. "
+                        f"Unexpected field(s) in {cls.__name__}: {', '.join(sorted(extra_fields))}{hint}. "
                         f"Expected fields: {', '.join(sorted(expected_fields))}"
                     )
-            return inner.structure(obj, cls)
+            if not generated:
+                generated.append(make_dict_structure_fn(cls, inner))
+            return generated[0](obj, cls)
 
         return strict_structure_hook
 
     for cls in _STRICT_CLASSES:
         converter.register_structure_hook(cls, strict_hook_for(cls))
+    for cls in _NESTED_STRICT_CLASSES:
+        inner.register_structure_hook(cls, strict_hook_for(cls))
