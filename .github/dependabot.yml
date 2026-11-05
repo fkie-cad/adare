@@ -3,6 +3,9 @@ updates:
   - package-ecosystem: uv
     directory: /
     target-branch: dev
+    # Only uv.lock moves; pyproject minimums stay. Raising them broke the guest
+    # packages (adarevm/adarelib run on Python 3.10; e.g. pillow 13 needs 3.11).
+    versioning-strategy: lockfile-only
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

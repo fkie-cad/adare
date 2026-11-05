@@ -268,6 +268,14 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   commands as suggestions, instead of filling the disk mid-run.
 
 ### Changed
+- Locked dependencies upgraded to clear the 68 pip-audit advisories (authlib 1.9.5,
+  certifi 2026.10.23, dnspython 2.9.2, fastmcp 3.4.11, filelock 4.2.9, joserfc 1.8.0,
+  mcp 1.30.0, opentelemetry-api 1.45.2, pillow 13.0.0, setuptools 84.2.1). The guest
+  packages' minimums are unchanged (guests stay on Python 3.10).
+- `paddlepaddle` (cv-server `paddle` extra) now comes from PyPI (same 3.2.2 wheels, now
+  hash-pinned in `uv.lock`) instead of paddlepaddle.org.cn, whose index answers GitHub
+  with 403 and made every Dependabot `uv` update fail. Dependabot now updates `uv.lock`
+  only (`versioning-strategy: lockfile-only`).
 - **OCR engine: RapidOCR is the new default.** New cv-servers use the pinned profile
   `rapidocr-v5m-latin`: RapidOCR on onnxruntime (CPU on Linux, Windows and macOS),
   PP-OCRv5 mobile detection + mobile Latin recognition, model files verified by sha256
