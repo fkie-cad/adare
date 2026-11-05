@@ -249,6 +249,7 @@ mode alike) compare the playbook's hash with the loaded one:
     * ``--backend [agent|hostside]`` - Guest backend: ``agent`` (default, in-guest ``adarevm``) or ``hostside`` (no process of ours in the guest; QEMU Linux guests; see :doc:`/guide/hostside-backend`). Also ``ADARE_BACKEND`` and the playbook setting ``settings.backend``
     * ``--diff/--no-diff``, ``--diff-mode [auto|guest|host]`` - Filesystem diff (overrides the playbook setting)
     * ``--export-disk-image``, ``--capture-pcap``, ``--export-memory-dump`` - Forensic artifacts (overrides the playbook setting)
+    * ``--filter-pcap/--no-filter-pcap`` - Remove ADARE's own traffic (agent WebSocket, SMB share) from the captured pcap after the run (default on; ``--no-filter-pcap`` keeps the raw capture; overrides ``settings.filter_pcap``)
     * ``--no-runlog`` - Do not save the adare log to the run directory
     * ``--allow-emulation`` - Allow QEMU TCG software emulation for a foreign guest architecture (slow)
 
