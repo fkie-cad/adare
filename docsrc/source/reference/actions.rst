@@ -95,6 +95,11 @@ Configure experiment-wide behavior:
                                      # artifacts/disk/ (e.g. for Autopsy ingestion)
      capture_pcap: false            # Capture outside-world traffic (QEMU only) to
                                      # artifacts/pcap/ via host-side filter-dump
+     filter_pcap: true              # After the run, remove ADARE's own traffic
+                                     # (agent WebSocket, SMB share) from that pcap;
+                                     # rules, counts and the raw capture's sha256
+                                     # go to <machine>.pcap.filter.json.
+                                     # false keeps the raw capture
      export_memory_dump: false      # Live-dump guest RAM (QEMU only) to
                                      # artifacts/memory/ via QMP dump-guest-memory,
                                      # e.g. for Volatility3 ingestion
