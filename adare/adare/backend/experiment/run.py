@@ -186,6 +186,7 @@ async def experiment_run(
     diff_mode: str = 'auto',
     export_disk_image: bool = None,
     capture_pcap: bool = None,
+    filter_pcap: bool | None = None,
     export_memory_dump: bool = None,
     allow_emulation: bool = False,
     file_log_level: int = logging.INFO,
@@ -301,6 +302,9 @@ async def experiment_run(
     if capture_pcap is not None:
         config.capture_pcap = capture_pcap
         log.info(f"pcap capture CLI override: {'enabled' if capture_pcap else 'disabled'}")
+    if filter_pcap is not None:
+        config.filter_pcap = filter_pcap
+        log.info(f"pcap ADARE-traffic filter CLI override: {'enabled' if filter_pcap else 'disabled'}")
     if export_memory_dump is not None:
         config.export_memory_dump = export_memory_dump
         log.info(f"Memory dump CLI override: {'enabled' if export_memory_dump else 'disabled'}")
@@ -661,6 +665,10 @@ async def experiment_run(
                     # Safety net: stop VM if retrieve_artifacts didn't already (idempotent)
                     await step_runner.run_cleanup_step(
                         vm_manager.stop_vm, experiment_run_context, post_interrupt=True, force=force_shutdown
+                    )
+                    # QEMU has closed the pcap now: drop ADARE's own packets from it
+                    await step_runner.run_cleanup_step(
+                        vm_manager.perform_pcap_filter, experiment_run_context, post_interrupt=True
                     )
                     # Perform host-side diff AFTER VM stopped, BEFORE overlay cleanup
                     await step_runner.run_cleanup_step(

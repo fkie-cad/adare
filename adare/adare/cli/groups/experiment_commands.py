@@ -117,6 +117,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         help='Capture outside-world VM traffic to artifacts/pcap/ (QEMU only; overrides playbook setting; off by default)',
     )
     @click.option(
+        '--filter-pcap/--no-filter-pcap',
+        default=None,
+        help="Remove ADARE's own traffic (agent WebSocket, SMB share) from the captured pcap after the run "
+        '(overrides playbook setting filter_pcap; on by default; --no-filter-pcap keeps the raw capture)',
+    )
+    @click.option(
         '--export-memory-dump/--no-export-memory-dump',
         default=None,
         help='Live-dump guest RAM via QMP dump-guest-memory to artifacts/memory/, e.g. for Volatility ingestion (QEMU only; overrides playbook setting; off by default)',
@@ -146,6 +152,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         diff_mode,
         export_disk_image,
         capture_pcap,
+        filter_pcap,
         export_memory_dump,
         allow_emulation,
         project,
@@ -185,6 +192,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             diff_mode=diff_mode,
             export_disk_image=export_disk_image,
             capture_pcap=capture_pcap,
+            filter_pcap=filter_pcap,
             export_memory_dump=export_memory_dump,
             allow_emulation=allow_emulation,
             project=project,
