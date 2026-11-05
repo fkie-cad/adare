@@ -429,6 +429,45 @@ class VMLifecycleManager:
 
         return 'auto'
 
+    async def perform_pcap_filter(self, context: ExperimentRunCtx, post_interrupt: bool = False):
+        """Drop ADARE's own traffic (agent WebSocket, SMB share) from the run's pcap files.
+
+        Runs AFTER VM shutdown, when QEMU has closed the filter-dump file. On by
+        default; ``--no-filter-pcap`` / ``settings.filter_pcap: false`` keeps the raw
+        capture. See :mod:`adare.hypervisor.qemu.pcap_filter`.
+        """
+        # QEMU VMs only (VirtualBox has no filter-dump capture); getattr: context.vm is typed VirtualBoxVM | None
+        vm_config = getattr(getattr(context, "vm", None), "config", None)
+        if self.hypervisor_type != "qemu" or vm_config is None:
+            return
+        pcap_paths = getattr(vm_config, "pcap_paths", None) or {}
+        if not pcap_paths:
+            return
+        if not self._is_pcap_filter_enabled(context):
+            log.info("pcap filter disabled - keeping the raw capture")
+            return
+
+        from adare.hypervisor.qemu.pcap_filter import filter_pcap_file, rules_for_vm_config
+
+        rules = rules_for_vm_config(vm_config)
+        for netdev_id, pcap_path in pcap_paths.items():
+            path = Path(pcap_path)
+            if not path.is_file():
+                log.warning(f"pcap filter: no capture file for {netdev_id} at {path}")
+                continue
+            try:
+                await asyncio.to_thread(filter_pcap_file, path, rules)
+            except OSError as e:
+                log.warning(f"pcap filter failed for {path} (raw capture kept): {e}", exc_info=True)
+
+    def _is_pcap_filter_enabled(self, context: ExperimentRunCtx) -> bool:
+        """CLI override first, then playbook settings (default: on)."""
+        override = getattr(context.config, 'filter_pcap', None)
+        if override is not None:
+            return bool(override)
+        settings = getattr(context.playbook, 'settings', None) if context.playbook else None
+        return bool(getattr(settings, 'filter_pcap', True)) if settings else True
+
     async def perform_disk_export(self, context: ExperimentRunCtx, post_interrupt: bool = False):
         """
         Export the VM's overlay disk as a self-contained raw image for forensic

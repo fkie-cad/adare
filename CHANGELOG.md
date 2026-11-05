@@ -28,6 +28,13 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- pcap captures (`--capture-pcap`) no longer contain ADARE's own traffic: after the VM
+  stops, packets of the adarevm WebSocket (the `adarevm` hostfwd, guest port 18765, incl.
+  every `pull`) and of the SLIRP SMB share (`10.0.2.4`) are removed; every other record is
+  copied byte for byte. This was typically >90% of a capture (one T2F run: 20.3 MB ->
+  61 KB). `<machine>.pcap.filter.json` next to the pcap records the rules, the packet
+  counts and the sha256 of the raw and the filtered capture. On by default; keep the raw
+  capture with `--no-filter-pcap` or `settings.filter_pcap: false`.
 - Web UI **Live** page (sidebar *VMs → Live*, `/live`): lists the running VM instances
   (refreshed every 5 s) and shows the selected one's display view-only and/or its logs
   as they are written (`tail -f` style, one tab per `logs/*.log` of the run holding the
