@@ -442,6 +442,7 @@ def exec_experiment_run(arguments):
                     diff_mode=getattr(arguments, 'diff_mode', 'auto'),
                     export_disk_image=getattr(arguments, 'export_disk_image', None),
                     capture_pcap=getattr(arguments, 'capture_pcap', None),
+                    filter_pcap=getattr(arguments, 'filter_pcap', None),
                     export_memory_dump=getattr(arguments, 'export_memory_dump', None),
                     allow_emulation=getattr(arguments, 'allow_emulation', False),
                 )
@@ -553,6 +554,7 @@ def exec_experiment_run(arguments):
                 diff_mode=getattr(arguments, 'diff_mode', 'auto'),
                 export_disk_image=getattr(arguments, 'export_disk_image', None),
                 capture_pcap=getattr(arguments, 'capture_pcap', None),
+                filter_pcap=getattr(arguments, 'filter_pcap', None),
                 export_memory_dump=getattr(arguments, 'export_memory_dump', None),
                 allow_emulation=getattr(arguments, 'allow_emulation', False),
             )

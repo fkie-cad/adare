@@ -50,6 +50,7 @@ class Settings:
         False  # Export the VM's overlay disk as a merged raw image (artifacts/disk/), e.g. for Autopsy ingestion
     )
     capture_pcap: bool = False  # Capture the VM's outside-world traffic to artifacts/pcap/ via QEMU filter-dump
+    filter_pcap: bool = True  # Drop ADARE's own traffic (agent WebSocket, SMB share) from the pcap after the run
     export_memory_dump: bool = (
         False  # Live-dump guest RAM via QMP dump-guest-memory (artifacts/memory/), e.g. for Volatility ingestion
     )
