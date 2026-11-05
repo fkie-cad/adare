@@ -40,14 +40,6 @@ dev = [
     "ruff>=0.5.0",
 ]
 
-[[tool.uv.index]]
-name = "paddlepaddle"
-url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
-explicit = true
-
-[tool.uv.sources]
-paddlepaddle = { index = "paddlepaddle" }
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
