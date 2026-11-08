@@ -24,7 +24,7 @@ dependencies = [
 # Legacy OCR profile (paddle-legacy), kept until existing experiments are A/B-validated.
 paddle = [
     "paddleocr>=3.1.0",
-    "paddlepaddle==3.2.2",
+    "paddlepaddle==3.3.1",
 ]
 
 [project.scripts]
