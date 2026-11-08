@@ -22,6 +22,17 @@ log = logging.getLogger(__name__)
 # rebuilds from the WAL when the copy is opened.
 SIDECAR_SUFFIXES = ('-wal', '-journal')
 
+# The rows read are reported in every result after the query ran; longer
+# reports are cut so a large SELECT cannot flood the run record.
+MAX_RESULT_DETAIL_CHARS = 2000
+
+
+def _result_detail(result: list) -> str:
+    text = str(result)
+    if len(text) > MAX_RESULT_DETAIL_CHARS:
+        text = text[:MAX_RESULT_DETAIL_CHARS] + f'... (truncated, {len(result)} rows)'
+    return f'query result: {text}'
+
 
 def _sha256(path: str) -> str:
     digest = hashlib.sha256()
@@ -79,13 +90,18 @@ def query_result(ctx: TestContext, dst: str, query: str, expected_rows: int = No
     deleted). The original file is never opened: ``dst`` and any ``-wal``/``-journal``
     sidecar are copied to a temp dir and the copy is queried, so uncheckpointed changes are
     seen and the evidence is not modified. Details report ``queried snapshot: <file> sha256=...``
-    per copied file. With neither expectation set, it passes whenever the query runs.
+    per copied file and, once the query ran, the rows read (``query result: [...]``, also on
+    success). With neither expectation set, it passes whenever the query runs.
+
+    A test fails only when the query ran and its result does not match. When it cannot be
+    evaluated (missing database, SQL error) it ends with an error, so ``expect_to_fail``
+    never turns an unreadable database into a pass.
 
     Args:
         dst: Guest path to the database; a glob must match exactly one file (otherwise an
-            error). A missing file fails the test.
+            error). A missing file is an error.
         query: SQL to execute, e.g. ``SELECT url FROM urls WHERE url LIKE '%example%'``. A
-            SQL error fails the test.
+            SQL error (syntax, unknown table, unreadable database) is an error.
         expected_rows: Exact number of rows the query must return; ``None`` skips the check.
             Use ``0`` to assert a row is gone.
         expected_result: Exact expected rows as a list of ``{column: value}`` mappings, in
@@ -104,7 +120,7 @@ def query_result(ctx: TestContext, dst: str, query: str, expected_rows: int = No
             [f'database file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
         )
     if not os.path.isfile(dst_resolved):
-        return TestResult.failed([f'database file {dst_resolved} does not exist'])
+        return TestResult.error([f'database file {dst_resolved} does not exist'])
 
     log.debug(f'dst database {dst_resolved} will be used for test query_result')
 
@@ -121,14 +137,16 @@ def query_result(ctx: TestContext, dst: str, query: str, expected_rows: int = No
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(query).fetchall()
         except sqlite3.Error as e:
-            return TestResult.failed([f"SQLite error executing query: {query} - {e}"] + snapshot_details)
+            return TestResult.error([f"SQLite error executing query: {query} - {e}"] + snapshot_details)
 
     # Convert to list of dicts for easier comparison
     result = [dict(row) for row in rows]
 
     # Check expected row count
     if expected_rows is not None and len(result) != expected_rows:
-        return TestResult.failed([f'expected {expected_rows} rows, got {len(result)}'] + snapshot_details)
+        return TestResult.failed(
+            [f'expected {expected_rows} rows, got {len(result)}', _result_detail(result)] + snapshot_details
+        )
 
     # Check expected result content
     if expected_result is not None:
@@ -138,11 +156,14 @@ def query_result(ctx: TestContext, dst: str, query: str, expected_rows: int = No
             # For complex result comparison with placeholders, convert to string and use placeholder system
             success, message = ctx.handle_placeholders_comparison(str(result), expected_str)
             if not success:
-                return TestResult.failed([f'query result placeholder comparison failed: {message}'] + snapshot_details)
+                return TestResult.failed(
+                    [f'query result placeholder comparison failed: {message}', _result_detail(result)]
+                    + snapshot_details
+                )
         elif result != expected_result:
             return TestResult.failed([f'query result does not match expected result. Got: {result}'] + snapshot_details)
 
-    return TestResult.success([f'query returned {len(result)} rows'] + snapshot_details)
+    return TestResult.success([f'query returned {len(result)} rows', _result_detail(result)] + snapshot_details)
 
 
 # Host mode pulls these next to dst. Set on the class rather than via a decorator
