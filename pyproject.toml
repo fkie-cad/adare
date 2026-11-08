@@ -43,7 +43,7 @@ test = [
 # would shift the quality-baseline.json counts. Bump deliberately, then
 # `make lint-baseline`.
 lint = [
-    "ruff==0.15.11",
+    "ruff==0.17.3",
     "mypy==2.4.0",
 ]
 dev = [

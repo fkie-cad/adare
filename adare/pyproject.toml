@@ -96,7 +96,7 @@ test = [
 # Mirrors the workspace lint group (keep the pins identical) so the CI lint job and
 # `make lint` can install it with `--package adare`.
 lint = [
-    "ruff==0.15.11",
+    "ruff==0.17.3",
     "mypy==2.4.0",
 ]
 
