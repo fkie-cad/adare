@@ -28,10 +28,11 @@ actions:
           text: "{{ window_text }}"
       timeout: 30.0
       description: Wait until the application window is visible
+  - test: app_window_visible
 
 tests:
   - name: app_window_visible
-    function: visual.text_on_screen
+    function: visual.exists
     description: A label unique to the running app must be visible
     parameter:
       text: "{{ window_text }}"

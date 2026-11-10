@@ -67,3 +67,79 @@ actions: [{test: a}, {test: b}]
 def test_unparsable_or_empty_yaml_yields_nothing():
     assert _check('tests: [unclosed') == ([], [])
     assert _check('actions: []') == ([], [])
+
+
+# ----------------------------------------------------------------------------- controls:
+
+
+def _controls(tests_yaml, actions_yaml):
+    return _check(f'tests:\n{tests_yaml}\nactions:\n{actions_yaml}')[0]
+
+
+def test_valid_controls_have_no_errors():
+    errors = _controls(
+        '  - {name: before, function: standard.file_exists, parameter: {dst: /x}}\n'
+        '  - {name: gone, function: standard.file_exists, parameter: {dst: /x}, controls: [before]}',
+        '  - test: before\n  - test: gone',
+    )
+    assert errors == []
+
+
+def test_unknown_control_is_an_error():
+    errors = _controls(
+        '  - {name: before, function: standard.file_exists, parameter: {dst: /x}}\n'
+        '  - {name: gone, function: standard.file_exists, parameter: {dst: /x}, controls: [befor]}',
+        '  - test: before\n  - test: gone',
+    )
+    assert any('control "befor" is not in `tests:`' in e and 'did you mean: before' in e for e in errors)
+
+
+def test_control_running_after_its_test_is_an_error():
+    errors = _controls(
+        '  - {name: before, function: standard.file_exists, parameter: {dst: /x}}\n'
+        '  - {name: gone, function: standard.file_exists, parameter: {dst: /x}, controls: [before]}',
+        '  - test: gone\n  - test: before',
+    )
+    assert any('runs after the test it controls' in e for e in errors)
+
+
+def test_control_that_never_runs_is_an_error():
+    errors = _controls(
+        '  - {name: before, function: standard.file_exists, parameter: {dst: /x}}\n'
+        '  - {name: gone, function: standard.file_exists, parameter: {dst: /x}, controls: [before]}',
+        '  - test: gone',
+    )
+    assert any('never runs' in e for e in errors)
+
+
+def test_cyclic_controls_are_an_error():
+    errors = _controls(
+        '  - {name: a, function: standard.file_exists, parameter: {dst: /x}, controls: [b]}\n'
+        '  - {name: b, function: standard.file_exists, parameter: {dst: /x}, controls: [a]}',
+        '  - test: a\n  - test: b',
+    )
+    assert any('cycle' in e for e in errors)
+
+
+def test_self_control_is_an_error():
+    errors = _controls(
+        '  - {name: a, function: standard.file_exists, parameter: {dst: /x}, controls: [a]}', '  - test: a'
+    )
+    assert any('its own control' in e for e in errors)
+
+
+# ----------------------------------------------------------------------------- shipped idioms
+
+
+@pytest.mark.parametrize('name', ['delete_file_and_verify', 'open_app_and_verify'])
+def test_idiom_templates_parse_and_validate(name):
+    from pathlib import Path
+
+    from adare.backend.testfunction.catalog import load_catalog
+    from adare.types.playbook import parse_playbook
+
+    path = Path(__file__).resolve().parents[4] / 'templates' / 'idioms' / f'{name}.play.yaml'
+    playbook = parse_playbook(path)
+    assert any(type(a).__name__ == 'ActionTestAction' for a in playbook.actions)
+    errors, warnings = check_playbook_tests(path.read_text(), load_catalog())
+    assert errors == [] and warnings == []

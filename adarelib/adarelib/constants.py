@@ -17,6 +17,9 @@ class StatusEnum(IntEnum):
     TEST_MISSING = 12
     TEST_FAILED = 13
     PAUSE = 14
+    # A negative (absence) test passed, but ADARE could not show that the actions
+    # before it took effect, so "absent" may only mean "the action never happened".
+    INCONCLUSIVE = 15
 
     @staticmethod
     def from_string(status_string: str):
@@ -41,6 +44,8 @@ class StatusEnum(IntEnum):
             return StatusEnum.TEST_MISSING
         if status_string == 'test_failed':
             return StatusEnum.TEST_FAILED
+        if status_string == 'inconclusive':
+            return StatusEnum.INCONCLUSIVE
         return StatusEnum.NONE
 
     @staticmethod
@@ -69,6 +74,8 @@ class StatusEnum(IntEnum):
             icon = ':no_entry_sign:'
         elif value == StatusEnum.PAUSE:
             icon = ':pause_button:'
+        elif value == StatusEnum.INCONCLUSIVE:
+            icon = ':grey_question:'
         from rich.text import Text
 
         return f'[{colorname}]{Text.from_markup(icon)}[/{colorname}]' if colorname else Text.from_markup(icon)
@@ -95,6 +102,8 @@ class StatusEnum(IntEnum):
             return 'red'
         if value == StatusEnum.PAUSE:
             return 'yellow'
+        if value == StatusEnum.INCONCLUSIVE:
+            return 'magenta'
         return ''
 
 

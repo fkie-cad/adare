@@ -224,7 +224,11 @@ def _make_test_class(
 
 
 def testfunction(
-    name: str, description: str, category: HostModeCategory = HostModeCategory.AGENT_ONLY, execute_on_host: bool = False
+    name: str,
+    description: str,
+    category: HostModeCategory = HostModeCategory.AGENT_ONLY,
+    execute_on_host: bool = False,
+    negative: bool = False,
 ):
     """
     Decorator that turns a plain function into a BasicTest subclass.
@@ -245,6 +249,9 @@ def testfunction(
             ctx.fail_if(not files, f'no files match {dst}')
             return [f'{len(files)} file(s) found', f'files: {", ".join(files)}']
 
+    ``negative=True`` declares that a pass asserts an absence (deleted, never written, not
+    shown): the host then reports an unproven pass as INCONCLUSIVE (see BasicTest.negative).
+
     Returns:
         The decorated function, with a generated BasicTest subclass attached
         as `_test_class` attribute and registered as a module-level name.
@@ -257,6 +264,7 @@ def testfunction(
 
         param_cls = _make_parameter_class(func.__name__, param_specs)
         test_cls = _make_test_class(func.__name__, name, description, category, execute_on_host, param_cls, func)
+        test_cls.negative = negative  # a pass asserts an absence (see BasicTest.negative)
 
         # Register the generated class in the caller's module so TestfunctionLoader
         # can discover it via dir(module) + isclass() + issubclass(cls, BasicTest).

@@ -14,6 +14,53 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
+#: Per-pixel grey-level difference below which a pixel counts as unchanged (compression noise)
+PIXEL_NOISE_THRESHOLD = 25
+
+
+def decode_base64_image(image_base64: str):
+    """Decode a base64 PNG/JPEG/WebP screenshot into a BGR numpy array.
+
+    Raises:
+        ImportError: If opencv-python or numpy are not installed
+        ValueError: If the data is not a decodable image
+    """
+    if cv2 is None or np is None:
+        raise ImportError("opencv-python and numpy are required for image comparison")
+    try:
+        raw = base64.b64decode(image_base64)
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Invalid base64 image data: {e}") from e
+    image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if image is None:
+        raise ValueError("Failed to decode image data")
+    return image
+
+
+def count_changed_pixels(before, after, region: tuple[int, int, int, int] | None = None) -> int:
+    """Number of pixels inside ``region`` (x, y, w, h) that differ between two decoded images.
+
+    Only the region is compared, so change elsewhere (a taskbar clock, an animation) does
+    not count. Differently sized frames (resolution change) count as fully changed.
+    """
+    if before.shape != after.shape:
+        h, w = before.shape[:2]
+        return (region[2] * region[3]) if region else w * h
+    if region is not None:
+        x, y, w, h = region
+        before = before[y : y + h, x : x + w]
+        after = after[y : y + h, x : x + w]
+    gray = cv2.cvtColor(cv2.absdiff(before, after), cv2.COLOR_BGR2GRAY)
+    return int(np.count_nonzero(gray > PIXEL_NOISE_THRESHOLD))
+
+
+def encode_webp(image, quality: int = 80) -> bytes:
+    """Encode a decoded image as WebP (evidence screenshots)."""
+    ok, buffer = cv2.imencode('.webp', image, [cv2.IMWRITE_WEBP_QUALITY, quality])
+    if not ok:
+        raise ValueError("WebP encoding failed")
+    return buffer.tobytes()
+
 
 def calculate_pixel_change(img1_base64: str, img2_base64: str) -> float:
     """

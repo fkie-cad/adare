@@ -420,6 +420,9 @@ class ActionExecutor:
             if bracket and not is_test:
                 await self.clock.probe('after', action_type, description, target_key, self.client, self.vm)
 
+            # Evidence for negative tests: skipped / unchanged / failed GUI actions (nested ones too)
+            self.test_actions.effect_ledger.record_action(resolved_action, result)
+
             # Post-execution debug screenshot (if enabled and action was successful)
             if self.debug_screenshots and result and result.success:
                 # Only capture for GUI-modifying actions (exclude non-GUI actions)

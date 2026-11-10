@@ -138,6 +138,7 @@ Documentation Structure
    guide/environments
    guide/experiments
    guide/test-driven-analysis
+   guide/negative-results
    guide/diff-analysis
    guide/icon-library
    guide/vm-image-creation

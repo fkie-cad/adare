@@ -105,6 +105,10 @@ Configure experiment-wide behavior:
                                      # e.g. for Volatility3 ingestion
      clock_log: true                # Sample the guest clock before/after every action
                                     # into clock.jsonl (offset to host, jumps, timezone)
+     effect_check: warn             # Check each GUI action changed the screen near its
+                                    # input: off | warn (record; negative tests become
+                                    # INCONCLUSIVE) | strict (fail the step)
+                                    # see guide/negative-results
 
      # GUI automation mode (QEMU only)
      gui_execution_mode: 'auto'     # 'auto' (choose best), 'agent' (VM-based),

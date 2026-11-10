@@ -33,6 +33,12 @@ _CROP_H = 90
 # click only fires once its image target is actually present on screen.
 _CLICK_WAIT_TIMEOUT = 30.0
 
+# How long a replay waits for a generated ``verify:`` / step-boundary image to appear.
+_VERIFY_TIMEOUT = 5.0
+_STEP_DONE_TIMEOUT = 30.0
+# Recorded kinds whose effect gets a generated ``verify:``
+_VERIFIABLE = ('click', 'keyboard')
+
 
 def _slugify(text: str, *, max_len: int = 32) -> str:
     slug = re.sub(r'[^a-z0-9]+', '_', (text or '').lower()).strip('_')
@@ -323,6 +329,67 @@ class PlaybookRecorder:
             test_action['description'] = description
         self._actions.append({'test': test_action})
         self._meta.append({'step': idx, 'kind': 'test', 'name': name, 'describe': description})
+
+    # -- generated checks ---------------------------------------------------
+
+    def attach_effect(self, before_png: bytes, after_png: bytes, confirm_png: bytes | None = None) -> bool:
+        """Give the last recorded click/keyboard step a ``verify:`` from the screen it produced.
+
+        The changed region between ``before_png`` (the screen the step was recorded on) and
+        ``after_png`` is cropped and emitted as ``verify: {exists: {image: ...}}``, so replay
+        proves the step had the effect it had while recording. ``confirm_png`` (a frame a
+        moment later) rules out regions still changing. Returns whether a verify was added.
+        """
+        from .effect_verify import derive_effect_crop
+
+        if not self._actions or next(iter(self._actions[-1])) not in _VERIFIABLE:
+            return False
+        kind = next(iter(self._actions[-1]))
+        body = self._actions[-1][kind]
+        meta = self._meta[-1] if self._meta else {}
+        if 'verify' in body:
+            return False
+        crop, reason = derive_effect_crop(before_png, after_png, confirm_png)
+        if crop is None:
+            meta['verify_skipped'] = reason
+            log.debug('No generated verify for step %s: %s', meta.get('step'), reason)
+            return False
+        filename = f'step_{meta.get("step", self._step):03d}_effect.png'
+        (self.img_dir / filename).write_bytes(crop.png)
+        body['verify'] = {'exists': {'image': filename}}
+        body['verify_timeout'] = _VERIFY_TIMEOUT
+        meta.update(verify_image=filename, verify_box=crop.box, verify_generated=True)
+        return True
+
+    def record_step_done(
+        self, before_png: bytes, after_png: bytes, confirm_png: bytes | None = None, success: str = ''
+    ) -> bool:
+        """Mark a verified sub-goal boundary with a ``wait_until`` on the screen it reached.
+
+        ``success`` is the planner's "done when ..." statement: it becomes the description,
+        and the condition is the region that changed over the sub-goal (an image crop), so a
+        replay waits until the same state is reached. Returns whether a gate was added.
+        """
+        from .effect_verify import derive_effect_crop
+
+        crop, reason = derive_effect_crop(before_png, after_png, confirm_png)
+        idx = self._next_index()
+        if crop is None:
+            self._meta.append({'step': idx, 'kind': 'step_done', 'success': success, 'verify_skipped': reason})
+            return False
+        filename = f'step_{idx:03d}_done.png'
+        (self.img_dir / filename).write_bytes(crop.png)
+        self._actions.append(
+            {
+                'wait_until': {
+                    'condition': {'exists': {'image': filename}},
+                    'timeout': _STEP_DONE_TIMEOUT,
+                    'description': f'step done: {success}'[:200],
+                }
+            }
+        )
+        self._meta.append({'step': idx, 'kind': 'step_done', 'success': success, 'image': filename, 'box': crop.box})
+        return True
 
     # -- variables & tests --------------------------------------------------
 

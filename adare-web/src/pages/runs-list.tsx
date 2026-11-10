@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useRuns, useRemoveRun, isActiveRun, type Run } from '@/api/hooks/use-runs'
 import { formatDateTime, formatDuration, parseTimestamp } from '@/lib/formatters'
 import { toast } from '@/components/ui/toast'
+import { verdictLabel } from '@/lib/verdict'
 
 const SKELETON_ROWS = 5
 const COLUMNS = 8
@@ -258,7 +259,7 @@ export default function RunsListPage() {
                 </TableCell>
                 <TableCell>{formatDateTime(run.start_time)}</TableCell>
                 <TableCell>{isActiveRun(run) && !run.end_time ? '—' : formatDuration(run.duration_seconds)}</TableCell>
-                <TableCell>{run.result_status || '—'}</TableCell>
+                <TableCell>{verdictLabel(run.result_status)}</TableCell>
                 <TableCell>
                   <Badge variant={run.published ? 'success' : 'outline'}>
                     {run.published ? 'Yes' : 'No'}

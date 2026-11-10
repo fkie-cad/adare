@@ -66,13 +66,17 @@ Parameters
    * - ``verify_timeout``
      - float
      - Seconds to poll ``verify`` after each click (default 3.0; one check is always made)
+   * - ``effect``
+     - string
+     - ``none``: no screen change expected, skips the automatic effect check (see :doc:`/guide/negative-results`)
 
 Verify and Retry
 ----------------
 
-A click is reported successful as soon as the input events were delivered; nothing checks
-that the widget reacted (a menu that only showed its hover state, a missed press). Add
-``verify`` to check the effect and re-click if it is absent:
+A click is reported successful as soon as the input events were delivered. The automatic
+effect check (:doc:`/guide/negative-results`) only records whether the screen changed near
+the click; it does not show that the widget reacted as intended (a menu that only showed
+its hover state). Add ``verify`` to check the effect and re-click if it is absent:
 
 .. code-block:: yaml
 

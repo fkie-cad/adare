@@ -269,6 +269,8 @@ class PlaybookApi(ProjectDatabaseApi):
             result["continue_on_test_failure"] = config.settings.continue_on_test_failure
         if getattr(config.settings, 'resolution', None) is not None:
             result["resolution"] = config.settings.resolution
+        if getattr(config.settings, 'effect_check', None) is not None:
+            result["effect_check"] = config.settings.effect_check
 
         return result
 
@@ -526,6 +528,7 @@ class PlaybookApi(ProjectDatabaseApi):
             collect_system_info=settings_json.get('collect_system_info', True),
             forensic_logging=settings_json.get('forensic_logging', True),
             resolution=settings_json.get('resolution'),
+            effect_check=settings_json.get('effect_check', 'warn'),
         )
 
     def _json_to_target(self, target_json: dict[str, Any] | None):
@@ -616,6 +619,15 @@ class PlaybookApi(ProjectDatabaseApi):
 
         return conditions if conditions else None
 
+    def _json_to_verify(self, verify_json, verify_cls):
+        """A stored ``verify: {exists|not_exists: target}`` back to its object (None if absent)."""
+        if not isinstance(verify_json, dict) or not (verify_json.get('exists') or verify_json.get('not_exists')):
+            return None
+        return verify_cls(
+            exists=self._json_to_target(verify_json['exists']) if verify_json.get('exists') else None,
+            not_exists=self._json_to_target(verify_json['not_exists']) if verify_json.get('not_exists') else None,
+        )
+
     def _playbook_item_to_action(self, item: PlaybookItem) -> ActionType:
         """Convert PlaybookItem database model to Action object."""
         from adare.types.playbook import (
@@ -661,30 +673,28 @@ class PlaybookApi(ProjectDatabaseApi):
                 log.error(f"Failed to parse parameters JSON: {e}")
                 raise ValueError(f"Invalid JSON in {action_type} action parameters: {params[:200]}") from e
 
+        # verify:/verify_timeout/effect, shared by the GUI actions that take them
+        action_verify = self._json_to_verify(params.get('verify'), ClickVerify)
+        effect_fields: dict[str, Any] = {
+            'verify': action_verify,
+            'verify_timeout': params.get('verify_timeout', 3.0),
+            'effect': params.get('effect'),
+        }
+
         if action_type == 'click':
-            click_verify = None
-            verify_json = params.get('verify')
-            if isinstance(verify_json, dict) and ('exists' in verify_json or 'not_exists' in verify_json):
-                click_verify = ClickVerify(
-                    exists=self._json_to_target(verify_json['exists']) if verify_json.get('exists') else None,
-                    not_exists=self._json_to_target(verify_json['not_exists'])
-                    if verify_json.get('not_exists')
-                    else None,
-                )
             return ClickAction(
                 target=self._json_to_target(item.target),
                 type=params.get('type', 'left'),
                 description=description,
-                verify=click_verify,
-                retries=params.get('retries', 0) if click_verify else 0,
-                verify_timeout=params.get('verify_timeout', 3.0),
+                retries=params.get('retries', 0) if action_verify else 0,
+                **effect_fields,
             )
 
         if action_type == 'drag':
             # Drag has src and dst targets in parameters
             src_target = self._json_to_target(params.get('src'))
             dst_target = self._json_to_target(params.get('dst'))
-            return DragAction(src=src_target, dst=dst_target, description=description)
+            return DragAction(src=src_target, dst=dst_target, description=description, **effect_fields)
 
         if action_type == 'keyboard':
             return KeyboardAction(
@@ -693,6 +703,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 combination=params.get('combination'),
                 when=conditions,
                 description=description,
+                **effect_fields,
             )
 
         if action_type == 'idle':
@@ -700,11 +711,14 @@ class PlaybookApi(ProjectDatabaseApi):
 
         if action_type == 'scroll':
             return ScrollAction(
-                direction=params.get('direction', 'down'), amount=params.get('amount', 1), description=description
+                direction=params.get('direction', 'down'),
+                amount=params.get('amount', 1),
+                description=description,
+                **effect_fields,
             )
 
         if action_type == 'goto':
-            return GotoAction(target=self._json_to_target(item.target), description=description)
+            return GotoAction(target=self._json_to_target(item.target), description=description, **effect_fields)
 
         if action_type == 'actiontest':
             return ActionTestAction(name=params.get('name', ''), description=description)

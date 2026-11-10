@@ -99,12 +99,14 @@ def _catalog():
 
 
 def _server(tmp_path, resolver=None):
-    return GuiMcpServer(
+    server = GuiMcpServer(
         executor=_FakeExecutor(),
         resolver=resolver or _FakeResolver(),
         catalog=_catalog(),
         base_dir=tmp_path,
     )
+    server.verify_settle_seconds = server.verify_confirm_seconds = 0
+    return server
 
 
 # ---------------------------------------------------------------------------

@@ -34,6 +34,9 @@ from PIL import Image
 
 log = logging.getLogger(__name__)
 
+#: Wait after a recorded click/keyboard step before reading the screen it produced
+_VERIFY_SETTLE_SECONDS = 1.0
+
 DEFAULT_MCP_PATH = '/mcp'
 
 
@@ -86,6 +89,9 @@ class GuiMcpServer:
 
         self._recorder: Any | None = None
         self._recording = False
+        # Generated verify: wait for the step's effect, then a confirm frame a moment later
+        self.verify_settle_seconds = _VERIFY_SETTLE_SECONDS
+        self.verify_confirm_seconds = 0.5
         self._last_png: bytes | None = None
 
         self.mcp = self._build_mcp()
@@ -234,10 +240,26 @@ class GuiMcpServer:
             'height': height,
         }
 
+    async def _attach_effect(self, before_png: bytes | None, result: dict[str, Any]) -> None:
+        """Derive a ``verify:`` for the step just recorded from the screen it produced."""
+        import asyncio
+
+        if self._recorder is None or not before_png or result.get('status') != 'success':
+            return
+        try:
+            await asyncio.sleep(self.verify_settle_seconds)
+            after = await self._capture()
+            await asyncio.sleep(self.verify_confirm_seconds)
+            confirm = await self._capture()
+        except RuntimeError as exc:
+            log.warning('No generated verify (screenshot failed: %s)', exc)
+            return
+        self._recorder.attach_effect(before_png, after, confirm)
+
     async def click(self, x: int, y: int, *, button: str = 'left', describe: str = '') -> dict[str, Any]:
+        png = (self._last_png or await self._capture()) if self._recording else None
         result = await self._executor.click(int(x), int(y), button_type=button)
         if self._recording:
-            png = self._last_png or await self._capture()
             self._recorder.record_click(
                 png,
                 int(x),
@@ -246,19 +268,24 @@ class GuiMcpServer:
                 button='left' if button == 'double' else button,
                 double=(button == 'double'),
             )
+            await self._attach_effect(png, result)
         return result
 
     async def type_text(self, text: str, *, describe: str = '') -> dict[str, Any]:
+        before = await self._capture() if self._recording else None
         result = await self._executor.keyboard('type', text)
         if self._recording:
             self._recorder.record_type(text, describe)
+            await self._attach_effect(before, result)
         return result
 
     async def key(self, combo: str, *, describe: str = '') -> dict[str, Any]:
+        before = await self._capture() if self._recording else None
         action_type = 'hotkey' if '+' in combo else 'press'
         result = await self._executor.keyboard(action_type, combo)
         if self._recording:
             self._recorder.record_key(combo, describe)
+            await self._attach_effect(before, result)
         return result
 
     async def scroll(self, direction: str, amount: int = 3, *, describe: str = '') -> dict[str, Any]:

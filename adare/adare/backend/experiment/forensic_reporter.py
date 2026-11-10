@@ -143,7 +143,7 @@ class ForensicReporter:
 
     def _extract_result_details(self, event: Event) -> dict[str, Any]:
         """Extract result details from event."""
-        result_details = {}
+        result_details: dict[str, Any] = {}
 
         # Add execution time if available
         if hasattr(event, 'execution_time') and event.execution_time is not None:
@@ -170,11 +170,23 @@ class ForensicReporter:
                 if 'return_code' in action_data:
                     result_details['return_code'] = action_data['return_code']
 
-                # Extract text for keyboard actions
-                if 'text_entered' in action_data:
+                # Extract text for keyboard actions (complete events store the typed text as 'text')
+                if action_data.get('text_entered'):
                     result_details['text_entered'] = action_data['text_entered']
-                elif 'keys_sent' in action_data:
+                elif action_data.get('text'):
+                    result_details['text_entered'] = action_data['text']
+                elif action_data.get('keys_sent'):
                     result_details['keys_sent'] = action_data['keys_sent']
+
+                # How the action went: its error, a when: skip, the verify: outcome and the
+                # automatic effect check (what makes an absence test's result credible)
+                if action_data.get('error_message') and 'error' not in result_details:
+                    result_details['error'] = action_data['error_message']
+                if action_data.get('skipped'):
+                    result_details['skipped'] = True
+                for key in ('verified', 'click_attempts', 'effect', 'effect_info'):
+                    if action_data.get(key) is not None:
+                        result_details[key] = action_data[key]
 
             except (json.JSONDecodeError, TypeError) as e:
                 log.debug(f"Could not parse action_data for event {event.id}: {e}")
@@ -289,6 +301,8 @@ class ForensicReporter:
                 return 'ERROR'
             if status_enum == StatusEnum.WARNING:
                 return 'WARNING'
+            if status_enum == StatusEnum.INCONCLUSIVE:
+                return 'INCONCLUSIVE'
             return 'UNKNOWN'
         except (ValueError, TypeError):
             return 'UNKNOWN'

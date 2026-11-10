@@ -26,7 +26,9 @@ class Event:
 
 @attrs.define
 class TestResult:
-    status: Literal[StatusEnum.SUCCESS, StatusEnum.WARNING, StatusEnum.FAILED, StatusEnum.ERROR]
+    status: Literal[
+        StatusEnum.SUCCESS, StatusEnum.WARNING, StatusEnum.FAILED, StatusEnum.ERROR, StatusEnum.INCONCLUSIVE
+    ]
     details: list = attrs.field(default=attrs.Factory(list))
 
     @classmethod
@@ -43,6 +45,12 @@ class TestResult:
         SUCCESS (and never as FAILED).
         """
         return cls(status=StatusEnum.WARNING, details=details or [])
+
+    @classmethod
+    def inconclusive(cls, details: list = None):
+        """Create an inconclusive result: a negative test passed, but the actions it
+        depends on cannot be shown to have taken effect. Neither a pass nor a failure."""
+        return cls(status=StatusEnum.INCONCLUSIVE, details=details or [])
 
     @classmethod
     def failed(cls, details: list = None):

@@ -13,6 +13,8 @@ const badgeVariants = cva(
         outline: 'text-foreground',
         success: 'border-transparent bg-green-500/15 text-green-700 dark:text-green-400',
         warning: 'border-transparent bg-yellow-500/15 text-yellow-700 dark:text-yellow-400',
+        // Neither pass nor fail: dashed amber outline, distinct from success and warning.
+        inconclusive: 'border-dashed border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-300',
       },
     },
     defaultVariants: {
@@ -45,6 +47,7 @@ function statusToVariant(status: string | null | undefined): BadgeVariant {
   if (['running', 'in_progress', 'active'].includes(s)) return 'default'
   if (['success', 'passed', 'completed', 'ok', 'done'].includes(s)) return 'success'
   if (['failed', 'error', 'errored'].includes(s)) return 'destructive'
+  if (s === 'inconclusive') return 'inconclusive'
   if (['cancelled', 'canceled', 'aborted', 'timeout', 'skipped'].includes(s)) return 'warning'
   return 'outline'
 }

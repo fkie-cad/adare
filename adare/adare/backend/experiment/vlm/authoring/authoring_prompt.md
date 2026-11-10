@@ -81,6 +81,13 @@ engine (no model runs at replay time), so it must not rely on timing luck.
 10. **Prefer stable window/UI text for `wait_until`.** Wait on text that appears
     only once the app/dialog is truly interactive (e.g. a menu label like
     "File", a dialog title), not on transient splash text.
+11. **Prove the decisive action.** When the goal removes or prevents something
+    (delete, clear, close, discard), a later check for its absence proves nothing
+    unless that action visibly took effect. Give the decisive `click`/`keyboard`
+    a `verify:` with the screen state it must produce, e.g.
+    `verify: { not_exists: { text: "<file name>" } }` after deleting the file,
+    or `verify: { exists: { text: "<confirmation>" } }`. Do NOT put the
+    decisive action inside a `when:`-guarded block.
 
 ### OUTPUT FORMAT (strict)
 - Output **exactly one** ```yaml fenced code block and NOTHING else.

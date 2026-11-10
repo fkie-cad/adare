@@ -199,9 +199,14 @@ class GuestToHostTestExecutor:
             for guest_path in matching_paths:
                 try:
                     await self.guest_file.pull_file(guest_path, force=bool(sidecars))
-                except RuntimeError as e:
-                    log.warning(f"GuestToHostTestExecutor: failed to pull {guest_path}: {e}")
+                except FileNotFoundError as e:
+                    # Gone between glob and pull: it is absent, like an unmatched path.
+                    log.warning(f"GuestToHostTestExecutor: {guest_path} vanished before pull: {e}")
                     continue
+                except RuntimeError as e:
+                    # A file that matched but could not be read must not silently drop out
+                    # of the test: an absence/count test would pass on a transport error.
+                    return self._pull_error(test_name, guest_path, e)
                 missing = await self._pull_sidecars(guest_path, sidecars)
                 if missing:
                     return self._sidecar_error(missing)
@@ -213,16 +218,19 @@ class GuestToHostTestExecutor:
             try:
                 local_path = await self.guest_file.pull_file(original_dst, force=bool(sidecars))
                 local_dst = str(local_path)
-            except (RuntimeError, FileNotFoundError) as e:
-                # For existence tests, this is expected if file doesn't exist
+            except FileNotFoundError as e:
+                # The guest answered "no such file": a real absence.
                 func_name = test_function.split('.')[-1] if '.' in test_function else test_function
                 if func_name in ('file_does_not_exist', 'dir_does_not_exist'):
-                    # File not found on guest = test should pass (file doesn't exist)
                     return TestResult.success([f'{original_dst} does not exist on guest'])
                 if func_name in ('file_exists', 'dir_exists'):
                     return TestResult.failed([f'{original_dst} does not exist on guest: {e}'])
-                log.warning(f"GuestToHostTestExecutor: could not pull {original_dst}: {e}")
+                log.warning(f"GuestToHostTestExecutor: {original_dst} not found on guest: {e}")
                 local_dst = str(self.guest_file._guest_path_to_local(original_dst))
+            except RuntimeError as e:
+                # Transport/permission failure: says nothing about whether the file exists,
+                # so neither an absence test may pass nor an existence test fail on it.
+                return self._pull_error(test_name, original_dst, e)
             else:
                 missing = await self._pull_sidecars(original_dst, sidecars)
                 if missing:
@@ -237,6 +245,12 @@ class GuestToHostTestExecutor:
             object.__setattr__(test_instance.parameter, 'dst', original_dst)
 
         return result
+
+    @staticmethod
+    def _pull_error(test_name: str, guest_path: str, error: Exception) -> TestResult:
+        """ERROR result for a file that could not be read for a reason other than absence."""
+        log.error(f"GuestToHostTestExecutor: could not read {guest_path} for '{test_name}': {error}")
+        return TestResult.error([f'Could not read {guest_path} from guest (not a "not found"): {error}'])
 
     async def _pull_sidecars(self, guest_path: str, suffixes: tuple[str, ...]) -> list[str]:
         """Pull the companion files of guest_path (e.g. SQLite -wal/-journal).

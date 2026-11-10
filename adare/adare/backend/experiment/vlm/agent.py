@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 from ..execution.gui_executor_interface import AbstractGUIExecutor
 from . import actions as A
@@ -30,6 +30,8 @@ from .actions import AgentAction, parse_action
 from .client import VLMClient
 from .exceptions import AgentError, PlaybookRecordingError, VLMError
 from .recorder import PlaybookRecorder
+from .visual_log import annotate_click_png
+from .visual_log import label_font as _label_font  # noqa: F401 - text_author imports it from here
 
 log = logging.getLogger(__name__)
 
@@ -118,8 +120,12 @@ class GuiAgent:
         repair_client: Any = None,
         progress: Callable[[dict], None] | None = None,
         restart_vm: Callable[..., Any] | None = None,
+        generate_verify: bool = True,
     ):
         self.executor = gui_executor
+        # When recording, derive a ``verify:`` for each click/keyboard step from the
+        # screen it produced (one settle + two extra screenshots per step).
+        self.generate_verify = generate_verify
         self.client = client
         self.goal = goal
         self.acceptance_spec = acceptance_spec or {}
@@ -528,11 +534,13 @@ class GuiAgent:
                     double=double,
                     bbox=action.crop_bbox,
                 )
+                await self._attach_effect(pre_png, res)
             return res.get('status', 'unknown')
         if kind == A.TYPE:
             res = await self.executor.keyboard('type', action.text or '')
             if self.recorder:
                 self.recorder.record_type(action.text or '', action.describe)
+                await self._attach_effect(pre_png, res)
             return res.get('status', 'unknown')
         if kind == A.KEY:
             combo = action.combo or ''
@@ -540,6 +548,7 @@ class GuiAgent:
             res = await self.executor.keyboard(mode, combo)
             if self.recorder:
                 self.recorder.record_key(combo, action.describe)
+                await self._attach_effect(pre_png, res)
             return res.get('status', 'unknown')
         if kind == A.SCROLL:
             res = await self.executor.scroll(action.direction or 'down', action.amount or 3)
@@ -576,6 +585,20 @@ class GuiAgent:
             return status
         return 'unknown'
 
+    async def _attach_effect(self, pre_png: bytes, res: dict) -> None:
+        """Let the recorder derive a ``verify:`` for the step just recorded (best-effort)."""
+        if not (self.generate_verify and self.recorder) or res.get('status') != 'success':
+            return
+        try:
+            await asyncio.sleep(self.step_settle_seconds)
+            _b64, after, _w, _h = await self._capture()
+            await asyncio.sleep(0.5)
+            _b64, confirm, _w, _h = await self._capture()
+        except AgentError as exc:
+            log.warning('No generated verify (screenshot failed: %s)', exc)
+            return
+        self.recorder.attach_effect(pre_png, after, confirm)
+
     # -- documentation ------------------------------------------------------
 
     def _persist_step(self, index: int, png: bytes, action: AgentAction, status: str) -> str | None:
@@ -586,64 +609,10 @@ class GuiAgent:
         # where we clicked (crosshair) — plus, if grounding moved the click, the
         # model's original point and a FROM->TO arrow — so a human can verify at
         # a glance. Best-effort: any drawing error falls back to the raw shot.
-        shot.write_bytes(self._annotate_click_png(png, action, index))
+        shot.write_bytes(annotate_click_png(png, action, index))
         note = self._steps_dir / f'step_{index:03d}.json'
         note.write_text(_json_step(index, action, status))
         return shot.name
-
-    def _annotate_click_png(self, png: bytes, action: AgentAction, index: int) -> bytes:
-        """Overlay click markers on a click screenshot; return PNG bytes.
-
-        Draws the grounded crop box (green, what was found/recorded), the
-        executed click point (red crosshair), and — when LocateAnything moved
-        the click — the model's original point (orange) with a line to the final
-        point. Returns the input bytes unchanged for non-click actions or on any
-        rendering error, so the visual log never breaks the run.
-        """
-        if action.kind not in (A.CLICK, A.DOUBLE_CLICK) or action.x is None:
-            return png
-        try:
-            with Image.open(io.BytesIO(png)) as im:
-                img = im.convert('RGB')
-            draw = ImageDraw.Draw(img)
-            green, red, orange, black = ((0, 210, 0), (255, 40, 40), (255, 150, 0), (0, 0, 0))
-
-            if action.crop_bbox:
-                x1, y1, x2, y2 = (round(v) for v in action.crop_bbox)
-                draw.rectangle([x1, y1, x2, y2], outline=green, width=3)
-
-            # From the model's original point (if grounding moved it) to the click.
-            if action.vlm_point and action.vlm_point != (action.x, action.y):
-                ox, oy = action.vlm_point
-                draw.line([ox, oy, action.x, action.y], fill=orange, width=2)
-                self._mark(draw, ox, oy, orange, r=7)
-
-            cx, cy = action.x, action.y
-            draw.line([cx - 11, cy, cx + 11, cy], fill=red, width=3)
-            draw.line([cx, cy - 11, cx, cy + 11], fill=red, width=3)
-            draw.ellipse([cx - 5, cy - 5, cx + 5, cy + 5], outline=red, width=2)
-
-            label = f'#{index} {action.kind} ({cx},{cy})'
-            if action.vlm_point and action.vlm_point != (cx, cy):
-                label += f'  [grounded from {action.vlm_point}]'
-            if action.describe:
-                label += f'  {action.describe[:70]}'
-            font = _label_font(max(13, round(img.width / 110)))
-            tb = draw.textbbox((0, 0), label, font=font)
-            tw, th = tb[2] - tb[0], tb[3] - tb[1]
-            draw.rectangle([0, 0, tw + 12, th + 12], fill=green)
-            draw.text((6, 4), label, fill=black, font=font)
-
-            buf = io.BytesIO()
-            img.save(buf, format='PNG')
-            return buf.getvalue()
-        except (OSError, ValueError) as exc:
-            log.warning('Could not annotate step %d screenshot (%s); saving raw', index, exc)
-            return png
-
-    @staticmethod
-    def _mark(draw: ImageDraw.ImageDraw, x: int, y: int, color: tuple, *, r: int) -> None:
-        draw.ellipse([x - r, y - r, x + r, y + r], outline=color, width=2)
 
     def _write_report(self, result: AgentRunResult) -> Path | None:
         if not self.run_dir:
@@ -954,25 +923,6 @@ class GuiAgent:
         finally:
             self._subgoal = prev_subgoal
             self.hints = prev_hints
-
-
-def _label_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """A truetype font at ``size`` for the visual-log banner, else the default.
-
-    Tries a few common bundled fonts (Linux DejaVu, macOS Helvetica) so the
-    label is readable on high-res screenshots; falls back to PIL's default
-    bitmap font (fixed small size) if none are present.
-    """
-    for path in (
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-        '/System/Library/Fonts/Helvetica.ttc',
-    ):
-        try:
-            return ImageFont.truetype(path, size)
-        except OSError:
-            continue
-    return ImageFont.load_default()
 
 
 def _json_step(index: int, action: AgentAction, status: str) -> str:

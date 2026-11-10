@@ -15,7 +15,7 @@
   },
   "mypy": {
     "arg-type": 462,
-    "assignment": 378,
+    "assignment": 368,
     "attr-defined": 363,
     "call-arg": 25,
     "call-overload": 4,
@@ -26,7 +26,7 @@
     "list-item": 4,
     "misc": 43,
     "name-defined": 2,
-    "no-any-return": 250,
+    "no-any-return": 248,
     "no-redef": 7,
     "no-untyped-def": 27,
     "operator": 17,

@@ -455,3 +455,80 @@ class TestSidecarPulling:
 
         guest_file.pull_file.assert_awaited_once_with('/tmp/testfile', force=False)
         guest_file.file_exists.assert_not_awaited()
+
+
+# ============================================================================
+# A real "not found" vs. a transport error
+# ============================================================================
+
+
+class TestNotFoundVersusTransportError:
+    """Only a "no such file" answer may make an absence test pass."""
+
+    def _make_executor(self, tmp_path, error):
+        guest_file = MagicMock()
+        guest_file.pull_file = AsyncMock(side_effect=error)
+        guest_file.file_exists = AsyncMock(return_value=False)
+        guest_file._guest_path_to_local = lambda p: tmp_path / p.lstrip('/')
+        executor = GuestToHostTestExecutor(guest_file=guest_file, guest_command=MagicMock(), testfunction_collection={})
+        executor._run_test = AsyncMock(return_value=TestResult.success(['ran']))
+        return executor
+
+    @pytest.mark.asyncio
+    async def test_not_found_passes_does_not_exist(self, tmp_path):
+        executor = self._make_executor(tmp_path, FileNotFoundError('no such file'))
+        result = await executor._execute_file_based_test('t', 'standard.file_does_not_exist', FileContentTest())
+        assert result.status == StatusEnum.SUCCESS
+
+    @pytest.mark.asyncio
+    async def test_transport_error_is_error_for_does_not_exist(self, tmp_path):
+        executor = self._make_executor(tmp_path, RuntimeError('QGA timeout'))
+        result = await executor._execute_file_based_test('t', 'standard.file_does_not_exist', FileContentTest())
+        assert result.status == StatusEnum.ERROR
+        executor._run_test.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_transport_error_is_error_for_exists(self, tmp_path):
+        executor = self._make_executor(tmp_path, RuntimeError('QGA timeout'))
+        result = await executor._execute_file_based_test('t', 'standard.file_exists', FileContentTest())
+        assert result.status == StatusEnum.ERROR
+
+    @pytest.mark.asyncio
+    async def test_not_found_fails_exists(self, tmp_path):
+        executor = self._make_executor(tmp_path, FileNotFoundError('no such file'))
+        result = await executor._execute_file_based_test('t', 'standard.file_exists', FileContentTest())
+        assert result.status == StatusEnum.FAILED
+
+    @pytest.mark.asyncio
+    async def test_transport_error_on_glob_match_is_error(self, tmp_path):
+        executor = self._make_executor(tmp_path, RuntimeError('QGA timeout'))
+        executor.guest_file.resolve_guest_glob = AsyncMock(return_value=['/tmp/a.json'])
+        instance = FileContentTest()
+        object.__setattr__(instance.parameter, 'dst', '/tmp/*.json')
+        result = await executor._execute_file_based_test('t', 'json.contains_key', instance)
+        assert result.status == StatusEnum.ERROR
+        executor._run_test.assert_not_awaited()
+
+
+class TestQgaNotFoundClassification:
+    @pytest.mark.parametrize(
+        'message',
+        [
+            "QGA file-open '/x' (mode=rb) failed: failed to open file '/x' (mode: 'rb'): No such file or directory",
+            "QGA file-open failed: failed to open file 'C:\\x' (error: The system cannot find the file specified.)",
+            "QGA file-open failed: The system cannot find the path specified.",
+        ],
+    )
+    def test_not_found_messages(self, message):
+        from adare.backend.experiment.host_services.guest_file_proxy import is_not_found_error
+
+        assert is_not_found_error(message)
+
+    @pytest.mark.parametrize(
+        'message',
+        ['QGA file-open failed: Guest agent is not responding', 'QGA file-read failed: Permission denied', 'timeout'],
+    )
+    def test_transport_messages(self, message):
+        from adare.backend.experiment.host_services.guest_file_proxy import is_not_found_error
+
+        assert not is_not_found_error(message)

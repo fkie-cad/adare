@@ -225,6 +225,7 @@ class EventManager:
             'success': result.success,
             'execution_time': result.execution_time,
             'parent_event_id': parent_event_id,
+            **self._outcome_fields(result),
         }
 
         # Dispatch to type-specific factory
@@ -234,6 +235,19 @@ class EventManager:
 
         # Generic complete event for unknown action types
         return ActionCompleteEvent(**event_data)
+
+    @staticmethod
+    def _outcome_fields(result) -> dict:
+        """What every complete event carries about how the action went (forensic log, verdict)."""
+        data = result.data or {}
+        return {
+            'error_message': None if result.success else (result.message or None),
+            'skipped': bool(data.get('skipped', False)),
+            'effect': data.get('effect'),
+            'effect_info': data.get('effect_info'),
+            'verified': data.get('verified'),
+            'click_attempts': data.get('click_attempts'),
+        }
 
     def _complete_event_factories(self):
         """Yield (action_class, factory_callable) pairs for complete events."""
@@ -269,6 +283,9 @@ class EventManager:
                 test_output=r.data.get('result', {}).get('details') if r.data else None,
                 result_category=r.data.get('result_category') if r.data else None,
                 expect_to_fail=r.data.get('expect_to_fail', False) if r.data else False,
+                test_status=r.data.get('test_status') if r.data else None,
+                original_status=r.data.get('original_status') if r.data else None,
+                inconclusive_reasons=r.data.get('inconclusive_reasons') if r.data else None,
                 **d,
             ),
         )
