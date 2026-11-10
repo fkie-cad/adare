@@ -30,15 +30,19 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ### Added
 - Negative results are now proven, not assumed (guide: *Proving negative results*):
   - Every click/keyboard/drag/scroll/goto gets an automatic **effect check**: the screen
-    near the input is compared before and after (polled up to 1 s, clock/panels ignored).
+    near the input (for keyboard steps: the whole screen) is compared before and after
+    (polled up to 1 s, clock/panels ignored).
     `effect: changed|unchanged` goes into the event data and the forensic log; for
-    `unchanged` a WebP screenshot is kept. `settings.effect_check: off|warn|strict`
-    (default `warn`; `strict` fails the step); `effect: none` marks an action expected to
-    change nothing.
+    `unchanged` a WebP screenshot is kept and the run summary counts them.
+    `settings.effect_check: off|warn|prove|strict` (default `warn`: record only, no
+    verdict changes; `prove`: unchanged/when-skipped actions count against negative tests;
+    `strict`: `prove` + fail the step); `effect: none` marks an action expected to change
+    nothing.
   - New status **INCONCLUSIVE** (15): a passing negative test (`*_does_not_exist`,
     `visual.not_exists`, `count_max` with max 0, `expect_to_fail`, or a testfunction
     declared `@testfunction(..., negative=True)`) is INCONCLUSIVE when an earlier GUI
-    action was skipped by `when:`, showed no effect or failed its `verify:`. Run verdict
+    action failed or failed its `verify:` (under `prove`/`strict` also: was skipped by
+    `when:` or showed no effect). Run verdict
     precedence: FAILED > INCONCLUSIVE > TEST_MISSING > WARNING > SUCCESS. Needs
     adare-server migration `0021_status_inconclusive` before uploading such runs.
     The run summary says "EXPERIMENT INCONCLUSIVE" and counts such tests apart

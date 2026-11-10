@@ -462,6 +462,22 @@ class TestLoadEventRows:
         project_session.commit()
         assert load_event_rows(project_session, 'SOME-OTHER-RUN') == []
 
+    def test_effect_of_a_gui_action_is_read_from_its_data(self, project_session):
+        from itertools import count
+
+        counter = count(1)
+        _add_action_event(project_session, counter, group_id='k', specific='keyboard_start')
+        _add_action_event(
+            project_session,
+            counter,
+            group_id='k',
+            specific='keyboard_complete',
+            success=True,
+            extra={'effect': 'unchanged', 'effect_info': {'changed_pixels': 0}},
+        )
+        project_session.commit()
+        assert build_tally(load_event_rows(project_session, RUN)).unchanged_actions == 1
+
 
 # --------------------------------------------------------------------------- #
 # summary rendering
@@ -622,3 +638,31 @@ def test_multi_environment_summary_lists_inconclusive_runs():
     assert "❔ Inconclusive: 1" in message
     assert "env2[/dim] [magenta](4.0s)[/magenta][dim] - unproven" in message
     assert "Failed" not in message
+
+
+class TestUnchangedEffects:
+    """GUI actions that changed nothing on screen: counted and shown, verdict untouched."""
+
+    @staticmethod
+    def _run():
+        rows = make_action('wake', 'keyboard', effect='unchanged')
+        rows += make_action('click', 'click', effect='changed')
+        rows += make_action('focus', 'click', effect='unchanged')
+        rows += make_action('cmd', 'command')
+        return build_tally(rows)
+
+    def test_counted(self):
+        tally = self._run()
+        assert tally.unchanged_actions == 2
+        assert tally.successful_actions == tally.total_actions == 4
+        assert tally.all_passed is True
+
+    def test_summary_lists_them_and_stays_green(self):
+        tally = self._run()
+        message = TestSummaryLine._summary(tally, success=tally.all_passed)
+        assert "EXPERIMENT COMPLETED SUCCESSFULLY" in message
+        assert "[bold yellow]2[/bold yellow] GUI action(s) showed no screen change" in message
+
+    def test_no_line_when_every_action_changed_the_screen(self):
+        tally = build_tally(make_action('click', 'click', effect='changed'))
+        assert "no screen change" not in TestSummaryLine._summary(tally, success=True)

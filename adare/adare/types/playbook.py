@@ -32,7 +32,7 @@ from adare.types.targets import (
 from adarelib.common.variables import VariableRegistry
 from adarelib.testset.type import Test
 
-EFFECT_CHECK_MODES = ('off', 'warn', 'strict')
+EFFECT_CHECK_MODES = ('off', 'warn', 'prove', 'strict')
 #: Per-action ``effect:``: 'none' = this action is expected to change nothing on screen
 ACTION_EFFECT_VALUES = ('auto', 'none')
 
@@ -83,7 +83,8 @@ class Settings:
         'agent'  # 'agent' (in-guest adarevm) or 'hostside' (agent-free); CLI --backend / ADARE_BACKEND override
     )
     # Automatic check that each GUI action changed the screen near where its input went:
-    # 'off', 'warn' (record it; a later negative test becomes INCONCLUSIVE) or 'strict' (fail the step)
+    # 'off', 'warn' (record it, list it in the summary), 'prove' (also: an unchanged or when-skipped
+    # GUI action makes a later negative test INCONCLUSIVE) or 'strict' (prove + an unchanged action fails its step)
     effect_check: str = attrs.field(default='warn', converter=normalize_effect_check)
 
     def __attrs_post_init__(self):

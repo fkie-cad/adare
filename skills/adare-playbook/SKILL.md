@@ -113,10 +113,12 @@ defined test. Parameter names and types come from `adare test info`.
 An absence test (`*_does_not_exist`, `visual.not_exists`, `count_max` with `max: 0`,
 anything with `expect_to_fail`) passes just as well when the deleting click never
 took effect. ADARE guards this by itself: every click/keyboard/drag/scroll/goto is
-checked for a screen change near its input (`settings.effect_check: warn` by default,
-`strict` fails the step, `off` disables it), and a passing negative test becomes
-**INCONCLUSIVE** if an earlier GUI action was skipped by `when:`, showed no change,
-or failed its `verify:`. Nothing to author for that. When you write a negative test,
+checked for a screen change near its input and recorded (`settings.effect_check: warn`
+by default, `off` disables it). A passing negative test becomes **INCONCLUSIVE** if an
+earlier GUI action failed or failed its `verify:`; with `effect_check: prove` (or
+`strict`, which also fails the step) also if one was skipped by `when:` or showed no
+change. Before suggesting `prove`, mark steps that rightly change nothing (wake key,
+focus click, ctrl+a on selected text) with `effect: none`. When you write a negative test,
 still suggest a **control** — a test that proves the precondition outside the UI —
 and name it in `controls:`:
 

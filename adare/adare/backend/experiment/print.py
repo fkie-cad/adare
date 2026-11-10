@@ -557,6 +557,14 @@ class ExperimentFlowConsole:
                 f"{indent}⚠️  [bold yellow]{incomplete}[/bold yellow] step(s) started but never reported completion"
             )
 
+        # Automatic effect check: recorded, and only under effect_check prove/strict held against negative tests
+        unchanged = getattr(breakdown, 'unchanged_actions', 0) if breakdown is not None else 0
+        if unchanged > 0:
+            summary_parts.append(
+                f"{indent}👁️  [bold yellow]{unchanged}[/bold yellow] GUI action(s) showed no screen change "
+                "[dim](reporting/screenshots/effect_unchanged_*.webp)[/dim]"
+            )
+
         summary_parts.extend([f"{indent}🆔 Run ID: [dim]{ulid}[/dim]"])
         summary_parts.extend(["", separator])
 

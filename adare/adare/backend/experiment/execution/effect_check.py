@@ -4,15 +4,18 @@ A click is "done" once the input is sent, so an absent artifact cannot tell "the
 not store it" from "the click never took effect". After each click, keyboard, drag, scroll
 and goto, :class:`EffectProbe` compares the screen *near the action* before and after it:
 
-* click / goto / drag / scroll: a box around the input point(s)
-* keyboard: the box of the last pointer action, else the full screen minus the panel edges
+* click / goto / drag: a box around the input point(s)
+* scroll: the box of the last pointer action (it scrolls where the pointer is)
+* keyboard: the full screen minus the panel edges (keys go wherever focus is)
 
 Only that region is compared, so a taskbar clock or an animation elsewhere does not count.
 Change is polled for up to ``settle_timeout`` seconds, so a slow redraw is not missed.
 The result goes into the action's event data as ``effect: changed | unchanged | unknown``;
-for ``unchanged`` a WebP screenshot is kept as evidence. Under ``effect_check: strict`` an
-unchanged action fails its step; under ``warn`` (default) it is recorded and makes a later
-negative test INCONCLUSIVE; ``off`` disables the check. This is a weak proof (something
+for ``unchanged`` a WebP screenshot is kept as evidence. Under ``warn`` (default) it is only
+recorded and counted in the run summary: real playbooks are full of steps that rightly change
+nothing (a wake key, a focus click, ctrl+a on selected text). ``prove`` also makes a later
+negative test INCONCLUSIVE (see :mod:`~adare.backend.experiment.negative_proof`); ``strict``
+additionally fails the unchanged step; ``off`` disables the check. This is a weak proof (something
 happened where the input went), not that the intended thing happened: ``verify:`` and
 ``controls:`` give stronger ones.
 """
@@ -29,7 +32,9 @@ from adare.helperfunctions.image import count_changed_pixels, decode_base64_imag
 
 log = logging.getLogger(__name__)
 
-EFFECT_MODES = ('off', 'warn', 'strict')
+EFFECT_MODES = ('off', 'warn', 'prove', 'strict')
+#: Modes in which an unchanged or when-skipped GUI action undermines a later negative test
+PROOF_MODES = ('prove', 'strict')
 DEFAULT_EFFECT_MODE = 'warn'
 
 #: Seconds to wait for a change before calling the action unchanged (ADARE_EFFECT_TIMEOUT overrides)
@@ -76,7 +81,7 @@ def screen_without_edges(screen_w: int, screen_h: int) -> Region:
 
 
 def resolve_effect_mode(settings) -> str:
-    """``settings.effect_check`` (off | warn | strict), defaulting to warn."""
+    """``settings.effect_check`` (off | warn | prove | strict), defaulting to warn."""
     from adare.types.playbook import normalize_effect_check
 
     mode = normalize_effect_check(getattr(settings, 'effect_check', None))
@@ -118,8 +123,13 @@ class EffectProbe:
         self._region = None
         self.target_resolution.resolution_frame = None
 
-    async def arm(self, points: list[tuple[int, int]] | None = None) -> None:
-        """Take the "before" frame and fix the region; ``points`` = where the input goes."""
+    async def arm(self, points: list[tuple[int, int]] | None = None, whole_screen: bool = False) -> None:
+        """Take the "before" frame and fix the region; ``points`` = where the input goes.
+
+        ``whole_screen`` (keyboard): the screen minus its edges. Keys go to whatever has focus,
+        and shortcuts open and close dialogs, so the last click's box is often stale (typing
+        into a Save dialog or the document after the click's dialog closed).
+        """
         if not self.enabled:
             return
         frame = getattr(self.target_resolution, 'resolution_frame', None) or await self._capture()
@@ -135,6 +145,8 @@ class EffectProbe:
         if points:
             region = box_around(points, screen_w, screen_h)
             self._last_pointer_box = box_around(points[-1:], screen_w, screen_h)
+        elif whole_screen:
+            region = screen_without_edges(screen_w, screen_h)
         elif self._last_pointer_box is not None:
             region = self._last_pointer_box
         else:
