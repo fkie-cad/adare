@@ -38,6 +38,15 @@ Parameters
    * - ``description``
      - string
      - Human-readable description (optional)
+   * - ``verify``
+     - mapping
+     - Effect check after the input, one of ``exists: <target>`` / ``not_exists: <target>``; the step fails if it does not hold (optional)
+   * - ``verify_timeout``
+     - float
+     - Seconds to poll ``verify`` (default 3.0)
+   * - ``effect``
+     - string
+     - ``none``: no screen change expected, skips the automatic effect check (see :doc:`/guide/negative-results`)
 
 Notes
 -----

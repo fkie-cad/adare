@@ -319,6 +319,8 @@ def _determine_test_status_success(action_data: dict):
     result_category = action_data.get('result_category', 'unknown')
     expect_to_fail = action_data.get('expect_to_fail', False)
 
+    if action_data.get('test_status') == 'INCONCLUSIVE':
+        return StatusEnum.FINISHED, StatusEnum.INCONCLUSIVE
     if result_category == 'success':
         result_status = StatusEnum.TEST_FAILED if expect_to_fail else StatusEnum.SUCCESS
         return StatusEnum.FINISHED, result_status

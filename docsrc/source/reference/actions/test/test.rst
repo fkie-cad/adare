@@ -52,6 +52,11 @@ Notes
 - Test execution validates forensic artifacts
 - Failed tests can trigger auto-pull of evidence files (if ``auto_pull_on_test_failure`` enabled)
 - Use ``expect_to_fail: true`` in test definition for negative assertions
+- A passing negative test (absence, ``expect_to_fail``) is INCONCLUSIVE when an earlier GUI
+  action was skipped or showed no effect; ``controls: [<test names>]`` in a test definition
+  names tests that must pass before it. See :doc:`/guide/negative-results`
+- The stored result keeps the real status (SUCCESS, FAILED, ERROR, WARNING, INCONCLUSIVE);
+  under ``expect_to_fail`` the test's own answer is kept in the details
 
 See Also
 --------

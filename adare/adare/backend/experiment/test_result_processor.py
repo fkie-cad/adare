@@ -53,26 +53,28 @@ class TestResultProcessor:
         # Categorize the result for better logging
         result_category = cls._categorize_result(test_status)
 
-        # Apply expect_to_fail logic - only invert test success/failure, not execution errors
+        # Apply expect_to_fail logic - only invert test success/failure, not execution errors.
+        # ``effective_status`` is what the test counts as after the inversion; it is what the
+        # database stores, while ``test_status`` (the test's own answer) is kept alongside.
         modified_test_details = list(test_details)
-        if expect_to_fail and ws_result.get('status') == 'success':
-            # Only invert if the test actually executed (no execution errors)
-            if test_status == cls.STATUS_SUCCESS:
-                # Test succeeded but we expected it to fail
-                test_success = False
-                # Add note to details about expectation
-                modified_test_details.append("Expected to fail but succeeded")
-            elif test_status == cls.STATUS_FAILED:
-                # Test failed but we expected it to fail - this is success
-                test_success = True
-                # Add note to details about expectation
-                modified_test_details.append("Expected to fail and did fail")
-            else:
-                # For success/unknown status, use normal logic
-                test_success = test_status in cls.SUCCESS_STATUSES
+        executed = ws_result.get('status') == 'success'
+        if not executed:
+            test_success = False
+            effective_status = cls.STATUS_ERROR
+        elif expect_to_fail and test_status in (cls.STATUS_SUCCESS, cls.STATUS_WARNING):
+            # Passed (with or without a warning) although it was expected to fail.
+            test_success = False
+            effective_status = cls.STATUS_FAILED
+            suffix = " (with warning)" if test_status == cls.STATUS_WARNING else ""
+            modified_test_details.append(f"Expected to fail but succeeded{suffix}")
+        elif expect_to_fail and test_status == cls.STATUS_FAILED:
+            test_success = True
+            effective_status = cls.STATUS_SUCCESS
+            modified_test_details.append("Expected to fail and did fail")
         else:
-            # Normal logic when expect_to_fail is False or there was an execution error
+            # Errors stay errors under expect_to_fail: an error is not the expected failure.
             test_success = test_status in cls.SUCCESS_STATUSES
+            effective_status = test_status if test_status != cls.STATUS_UNKNOWN else cls.STATUS_ERROR
 
         # Log test result on host side with category (use modified details for logging)
         cls._log_test_result(test_name, test_status, modified_test_details, result_category)
@@ -83,14 +85,16 @@ class TestResultProcessor:
             base_message, test_status, modified_test_details, result_category
         )
 
-        # Determine overall success
-        execution_success = ws_result.get('status') == 'success'
-        overall_success = execution_success and test_success
-
         return ActionResult(
-            success=overall_success,
+            success=executed and test_success,
             message=detailed_message,
-            data={**ws_result, 'result_category': result_category, 'expect_to_fail': expect_to_fail},
+            data={
+                **ws_result,
+                'result_category': result_category,
+                'expect_to_fail': expect_to_fail,
+                'test_status': effective_status,
+                'original_status': test_status,
+            },
         )
 
     @classmethod

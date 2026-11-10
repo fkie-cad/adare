@@ -276,3 +276,44 @@ def _forget_modules_imported_against_a_libvirt_stub():
         for name in set(sys.modules) - before:
             if name.startswith("adare.hypervisor.qemu") or name == "libvirt":
                 del sys.modules[name]
+
+
+# --- effect / verify on the other GUI actions survive the database round trip ----
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        _click(effect="none"),
+        __import__("adare.types.playbook", fromlist=["KeyboardAction"]).KeyboardAction(
+            key="enter", verify=ClickVerify(exists=Target(text="Saved")), verify_timeout=2.0
+        ),
+        __import__("adare.types.playbook", fromlist=["ScrollAction"]).ScrollAction(
+            direction="down", amount=2, effect="none"
+        ),
+        __import__("adare.types.playbook", fromlist=["GotoAction"]).GotoAction(
+            target=Target(text="Next"), verify=ClickVerify(not_exists=Target(text="Busy"))
+        ),
+    ],
+)
+def test_effect_and_verify_round_trip_through_database(action):
+    from adare.database.api.playbook import PlaybookApi
+
+    api = PlaybookApi.__new__(PlaybookApi)
+    item = MagicMock()
+    item.action_type = type(action).__name__.replace("Action", "").lower()
+    item.parameters = api._action_to_parameters_json(action)
+    item.target = api._target_to_json(action.target) if hasattr(action, "target") else None
+    item.conditions = None
+    item.description = ""
+    restored = api._playbook_item_to_action(item)
+    assert restored.effect == action.effect
+    assert restored.verify == action.verify
+    assert restored.verify_timeout == action.verify_timeout
+
+
+def test_new_fields_parse_from_yaml():
+    action = structure_action({"keyboard": {"key": "enter", "effect": "none", "verify": {"exists": {"text": "Saved"}}}})
+    assert action.effect == "none" and action.verify.exists.text == "Saved"
+    with pytest.raises((ValueError, cattrs.BaseValidationError)):
+        structure_action({"scroll": {"direction": "down", "amount": 1, "effect": "maybe"}})

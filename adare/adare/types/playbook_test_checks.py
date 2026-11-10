@@ -62,6 +62,53 @@ def _check_against_catalog(test: dict, entries: list) -> list[str]:
     return warnings
 
 
+def _check_controls(tests: list[dict], names: list, refs: list[str]) -> list[str]:
+    """``controls:`` must name defined tests, not form a cycle, and run before the test they control."""
+    errors = []
+    graph: dict[str, list[str]] = {}
+    position = {ref: i for i, ref in reversed(list(enumerate(refs)))}  # first `- test:` of each name
+    for test in tests:
+        name, controls = test.get('name'), test.get('controls')
+        if controls is None or not isinstance(name, str):
+            continue
+        if not isinstance(controls, list) or not all(isinstance(c, str) for c in controls):
+            errors.append(f'test "{name}": `controls:` must be a list of test names')
+            continue
+        graph[name] = controls
+        for control in controls:
+            if control == name:
+                errors.append(f'test "{name}": cannot be its own control')
+            elif control not in names:
+                errors.append(f'test "{name}": control "{control}" is not in `tests:`{_suggest(control, names)}')
+            elif control not in position:
+                errors.append(f'test "{name}": control "{control}" never runs (no `- test: {control}` action)')
+            elif name in position and position[control] > position[name]:
+                errors.append(f'test "{name}": control "{control}" runs after the test it controls')
+    errors += _control_cycles(graph)
+    return errors
+
+
+def _control_cycles(graph: dict[str, list[str]]) -> list[str]:
+    """One error per ``controls:`` cycle (a -> b -> a)."""
+    errors, done = [], set()
+
+    def visit(node: str, path: list[str]) -> None:
+        if node in path:
+            cycle = path[path.index(node) :] + [node]
+            errors.append(f'`controls:` cycle: {" -> ".join(cycle)}')
+            return
+        if node in done:
+            return
+        for control in graph.get(node, []):
+            if control != node:
+                visit(control, path + [node])
+        done.add(node)
+
+    for node in graph:
+        visit(node, [])
+    return errors
+
+
 def check_playbook_tests(playbook_yaml: str, entries: list | None = None) -> tuple[list[str], list[str]]:
     """Return ``(errors, warnings)`` for the playbook's tests; unparsable YAML yields none."""
     try:
@@ -74,9 +121,11 @@ def check_playbook_tests(playbook_yaml: str, entries: list | None = None) -> tup
     tests = [t for t in (data.get('tests') or []) if isinstance(t, dict)]
     names = [t.get('name') for t in tests if isinstance(t.get('name'), str)]
     errors = [f'duplicate test name "{n}" in `tests:`' for n in sorted({n for n in names if names.count(n) > 1})]
-    for ref in dict.fromkeys(_test_refs(data.get('actions'))):
+    refs = _test_refs(data.get('actions'))
+    for ref in dict.fromkeys(refs):
         if ref not in names:
             errors.append(f'`- test: {ref}` refers to no entry in `tests:`{_suggest(ref, names)}')
+    errors += _check_controls(tests, names, refs)
 
     if not tests:
         return errors, []
