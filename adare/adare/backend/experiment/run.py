@@ -195,7 +195,14 @@ async def experiment_run(
     allow_emulation: bool = False,
     file_log_level: int = logging.INFO,
     run_ulid: str | None = None,
+    verdict_out: dict | None = None,
 ):
+    """Run one experiment on one environment.
+
+    Returns ``(was_interrupted, was_successful)``. Pass a dict as ``verdict_out`` to also
+    receive the verdict diagnostics (``verdict`` is SUCCESS, FAILED or INCONCLUSIVE);
+    :func:`run_status` turns them into a :class:`StatusEnum`.
+    """
     import signal
 
     log.info(f"Starting experiment run {experiment_name} in project {project_path}")
@@ -897,8 +904,25 @@ async def experiment_run(
 
             console_print(retention_message)
 
+    if verdict_out is not None:
+        verdict_out.update(diagnostics)
     # Return both interruption status and actual success status
     return user_interrupt_event.is_set(), experiment_success
+
+
+def run_status(was_interrupted: bool, was_successful: bool, verdict: dict | None = None) -> StatusEnum:
+    """The status to report for a finished ``experiment_run`` (``verdict``: its ``verdict_out``)."""
+    if was_interrupted:
+        return StatusEnum.INTERRUPTED
+    if was_successful:
+        return StatusEnum.SUCCESS
+    if (verdict or {}).get('verdict') == 'INCONCLUSIVE':
+        return StatusEnum.INCONCLUSIVE
+    return StatusEnum.FAILED
+
+
+#: Shown for an INCONCLUSIVE run: a negative test passed without proof that its actions took effect
+INCONCLUSIVE_MESSAGE = 'Negative result unproven: an earlier action showed no effect (see the forensic log)'
 
 
 def experiment_test(project_path: Path, experiment_name: str, environment_name: str):

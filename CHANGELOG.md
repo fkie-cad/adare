@@ -41,6 +41,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
     action was skipped by `when:`, showed no effect or failed its `verify:`. Run verdict
     precedence: FAILED > INCONCLUSIVE > TEST_MISSING > WARNING > SUCCESS. Needs
     adare-server migration `0021_status_inconclusive` before uploading such runs.
+    The run summary says "EXPERIMENT INCONCLUSIVE" and counts such tests apart
+    ("1 inconclusive", not "failed"); `--format`/batch results report the run as
+    INCONCLUSIVE (`summary.inconclusive_runs`).
   - `controls: [test names]` on a test: tests that must have passed before it (else
     INCONCLUSIVE); `adare exp playbook validate` rejects unknown, cyclic or late controls.
   - `verify:` / `verify_timeout` now also on `keyboard`, `drag`, `scroll` and `goto`.
@@ -483,6 +486,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- `adare experiment run` without `-e` (all environments): the closing summary crashed on a
+  missing helper and, past that, deadlocked on the console lock; it now prints.
+- `settings.effect_check: off` written unquoted (YAML reads it as false) is accepted as off.
 - False passes: a host-mode (QGA/hostside) test whose file read failed for any reason other
   than "no such file" (guest agent down, timeout, permission) is now ERROR. Before, a
   `*_does_not_exist` test passed on a transport error and a glob match that failed to pull
