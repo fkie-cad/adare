@@ -43,6 +43,20 @@ def format_nesting_detail(top_level: int, nested: int, loops=()) -> str:
     return f" [dim]({top_level} top-level + {nested} in {where})[/dim]"
 
 
+def _result_group_lines(runs: list, label: str, color: str) -> list[str]:
+    """Summary lines for one group of environment results (with their errors)."""
+    if not runs:
+        return []
+    lines = [f"     [bold {color}]{label}: {len(runs)}[/bold {color}]"]
+    for result in runs:
+        duration_str = f"({result['duration']:.1f}s)"
+        error_str = f" - {result['error']}" if result.get('error') else ""
+        lines.append(
+            f"        • [dim]{result['environment']}[/dim] [{color}]{duration_str}[/{color}][dim]{error_str}[/dim]"
+        )
+    return lines
+
+
 class ExperimentFlowConsole:
     console: Console
     stop_event: threading.Event
@@ -348,6 +362,7 @@ class ExperimentFlowConsole:
         # Categorize results
         successful_runs = [r for r in results if r['status'] == 'SUCCESS']
         failed_runs = [r for r in results if r['status'] == 'FAILED']
+        inconclusive_runs = [r for r in results if r['status'] == 'INCONCLUSIVE']
         interrupted_runs = [r for r in results if r['status'] == 'INTERRUPTED']
         skipped_runs = [r for r in results if r['status'] == 'SKIPPED']
 
@@ -357,6 +372,9 @@ class ExperimentFlowConsole:
         if has_failures:
             status_color = "red"
             status_icon = "❌"
+        elif inconclusive_runs:
+            status_color = "magenta"
+            status_icon = "❔"
         elif has_issues:
             status_color = "yellow"
             status_icon = "⚠️"
@@ -377,16 +395,7 @@ class ExperimentFlowConsole:
         )
 
         env_names = [env.name for env in environments]
-        summary_parts.extend(
-            [
-                f"  📊 Tested {len(environments)} environment(s): [dim]{', '.join(env_names)}[/dim]",
-                f"  ⏱️  Total duration: [bold cyan]{self.state._format_experiment_timer_duration(total_duration, StatusEnum.NONE)}[/bold cyan]",  # Reusing/Adapting formatting
-                # Note: _format_duration_text was removed, using state's helper or local logic would be better.
-                # Let's fix this properly below.
-            ]
-        )
 
-        # Formatting helper
         def format_dur(d):
             if not d:
                 return "0s"
@@ -394,8 +403,12 @@ class ExperimentFlowConsole:
                 return f"{int(d // 60)}m {d % 60:.1f}s"
             return f"{d:.1f}s"
 
-        # Correct previous line
-        summary_parts[-1] = f"  ⏱️  Total duration: [bold cyan]{format_dur(total_duration)}[/bold cyan]"
+        summary_parts.extend(
+            [
+                f"  📊 Tested {len(environments)} environment(s): [dim]{', '.join(env_names)}[/dim]",
+                f"  ⏱️  Total duration: [bold cyan]{format_dur(total_duration)}[/bold cyan]",
+            ]
+        )
 
         summary_parts.append("  📋 Results:")
 
@@ -405,23 +418,12 @@ class ExperimentFlowConsole:
                 duration_str = f"({result['duration']:.1f}s)"
                 summary_parts.append(f"        • [dim]{result['environment']}[/dim] [green]{duration_str}[/green]")
 
-        if failed_runs:
-            summary_parts.append(f"     [bold red]❌ Failed: {len(failed_runs)}[/bold red]")
-            for result in failed_runs:
-                duration_str = f"({result['duration']:.1f}s)"
-                error_str = f" - {result['error']}" if result.get('error') else ""
-                summary_parts.append(
-                    f"        • [dim]{result['environment']}[/dim] [red]{duration_str}[/red][dim]{error_str}[/dim]"
-                )
-
-        if interrupted_runs:
-            summary_parts.append(f"     [bold yellow]⏸️  Interrupted: {len(interrupted_runs)}[/bold yellow]")
-            for result in interrupted_runs:
-                duration_str = f"({result['duration']:.1f}s)"
-                error_str = f" - {result['error']}" if result.get('error') else ""
-                summary_parts.append(
-                    f"        • [dim]{result['environment']}[/dim] [yellow]{duration_str}[/yellow][dim]{error_str}[/dim]"
-                )
+        for runs, label, color in (
+            (failed_runs, "❌ Failed", "red"),
+            (inconclusive_runs, "❔ Inconclusive", "magenta"),
+            (interrupted_runs, "⏸️  Interrupted", "yellow"),
+        ):
+            summary_parts.extend(_result_group_lines(runs, label, color))
 
         if skipped_runs:
             summary_parts.append(f"     [bold yellow]⏭️  Skipped: {len(skipped_runs)}[/bold yellow]")
@@ -433,9 +435,10 @@ class ExperimentFlowConsole:
         complete_message = "\n".join(summary_parts)
 
         # Store in state
+        # ConsoleState's lock is not reentrant and log_multi_experiment_summary takes it itself
         with self.state._lock:
             self.state.messages.clear()
-            self.state.log_multi_experiment_summary(complete_message)
+        self.state.log_multi_experiment_summary(complete_message)
 
     def log_experiment_summary(
         self,
@@ -461,8 +464,13 @@ class ExperimentFlowConsole:
         numbers themselves, which keeps the legacy callers working unchanged.
         """
 
+        # A passing negative test without proof of its act: neither a success nor a failure
+        inconclusive_tests = getattr(breakdown, 'inconclusive_tests', 0) if breakdown is not None else 0
+
         # Formatting Logic locally
         def get_status_header(success, interrupted):
+            if success and inconclusive_tests:
+                return "[bold magenta]EXPERIMENT INCONCLUSIVE[/bold magenta] ❔"
             if success:
                 return "[bold green]EXPERIMENT COMPLETED SUCCESSFULLY[/bold green] ✅"
             if interrupted:
@@ -481,6 +489,8 @@ class ExperimentFlowConsole:
             summary = f"Tests: [bold cyan]{successful}[/bold cyan]/[dim]{total}[/dim] passed"
             if failed > 0:
                 summary += f", [bold red]{failed}[/bold red] failed"
+            if inconclusive_tests > 0:
+                summary += f", [bold magenta]{inconclusive_tests}[/bold magenta] inconclusive"
             return summary
 
         def format_dur(d):

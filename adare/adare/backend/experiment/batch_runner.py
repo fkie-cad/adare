@@ -85,6 +85,11 @@ class BatchRunSummary:
         return len([r for r in self.results if r.status == StatusEnum.FAILED])
 
     @property
+    def inconclusive_runs(self) -> int:
+        """Count of runs whose negative result is unproven."""
+        return len([r for r in self.results if r.status == StatusEnum.INCONCLUSIVE])
+
+    @property
     def interrupted_runs(self) -> int:
         """Count of interrupted experiment runs."""
         return len([r for r in self.results if r.status == StatusEnum.INTERRUPTED])
@@ -127,6 +132,8 @@ class BatchRunSummary:
             return "✓", "green"
         if status == StatusEnum.FAILED:
             return "✗", "red"
+        if status == StatusEnum.INCONCLUSIVE:
+            return "?", "magenta"
         # INTERRUPTED or other
         return "⚠", "yellow"
 
@@ -160,6 +167,7 @@ class BatchRunSummary:
                 'total_combinations': self.total_combinations,
                 'successful_runs': self.successful_runs,
                 'failed_runs': self.failed_runs,
+                'inconclusive_runs': self.inconclusive_runs,
                 'interrupted_runs': self.interrupted_runs,
                 'success_rate': self.success_rate,
                 'total_duration_seconds': self.total_duration.total_seconds(),
@@ -590,6 +598,9 @@ class BatchExperimentRunner:
         elif result.status == StatusEnum.INTERRUPTED:
             status_icon = "⚠"
             status_color = "yellow"
+        elif result.status == StatusEnum.INCONCLUSIVE:
+            status_icon = "?"
+            status_color = "magenta"
         else:  # FAILED or ERROR
             status_icon = "✗"
             status_color = "red"
@@ -597,7 +608,9 @@ class BatchExperimentRunner:
         console.print(f"    [{status_color}]{status_icon}[/{status_color}] {result.duration.total_seconds():.1f}s")
 
         if result.error_message:
-            error_color = "yellow" if result.status == StatusEnum.INTERRUPTED else "red"
+            error_color = {StatusEnum.INTERRUPTED: "yellow", StatusEnum.INCONCLUSIVE: "magenta"}.get(
+                result.status, "red"
+            )
             console.print(f"    [{error_color}]{result.error_message}[/{error_color}]")
 
     def _print_execution_plan(self, combinations: dict[str, list[str]]):
@@ -620,14 +633,16 @@ class BatchExperimentRunner:
 
         try:
             # Import here to avoid circular imports
-            from adare.backend.experiment.run import experiment_run
+            from adare.backend.experiment.run import INCONCLUSIVE_MESSAGE, experiment_run, run_status
 
             # Execute the experiment
+            verdict: dict = {}
             was_interrupted, was_successful = await experiment_run(
                 project_path=project_path,
                 experiment_name=experiment_name,
                 environment_name=environment_name,
                 disable_printing=not show_flow_console,  # Control flow console display
+                verdict_out=verdict,
                 **kwargs,
             )
 
@@ -635,15 +650,12 @@ class BatchExperimentRunner:
             duration = end_time - start_time
 
             # Determine status based on experiment results
-            if was_interrupted:
-                status = StatusEnum.INTERRUPTED
-                error_msg = "User interrupted"
-            elif was_successful:
-                status = StatusEnum.SUCCESS
-                error_msg = None
-            else:
-                status = StatusEnum.FAILED
-                error_msg = "Experiment tests failed"
+            status = run_status(was_interrupted, was_successful, verdict)
+            error_msg = {
+                StatusEnum.INTERRUPTED: "User interrupted",
+                StatusEnum.SUCCESS: None,
+                StatusEnum.INCONCLUSIVE: INCONCLUSIVE_MESSAGE,
+            }.get(status, "Experiment tests failed")
 
             return ExperimentResult(
                 environment=environment_name,

@@ -4,6 +4,7 @@ No VM: frames are synthetic images, target resolution and the GUI executor are f
 """
 
 import base64
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import cv2
@@ -77,6 +78,22 @@ def test_screen_without_edges_drops_panels():
 def test_resolve_effect_mode_defaults_to_warn():
     assert resolve_effect_mode(None) == 'warn'
     assert resolve_effect_mode(Settings(effect_check='strict')) == 'strict'
+
+
+@pytest.mark.parametrize('written', ['off', "'off'", 'no', 'false'])
+def test_unquoted_yaml_off_parses_as_off(tmp_path, written):
+    """YAML 1.1 loads a bare ``off`` as False; it must still mean off, never warn."""
+    from adare.types.playbook import parse_playbook
+
+    path = tmp_path / 'playbook.yml'
+    path.write_text(f"settings:\n  effect_check: {written}\nactions:\n  - idle:\n      duration: 0.1\n")
+    settings = parse_playbook(path).settings
+    assert settings.effect_check == 'off'
+    assert resolve_effect_mode(settings) == 'off'
+
+
+def test_effect_mode_false_is_off_not_warn():
+    assert resolve_effect_mode(SimpleNamespace(effect_check=False)) == 'off'
 
 
 # ----------------------------------------------------------------------------- region diff

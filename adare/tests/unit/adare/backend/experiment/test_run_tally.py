@@ -564,3 +564,61 @@ class TestSummaryLine:
         message = console.state.messages['EXPERIMENT_SUMMARY']['message']
         assert "Actions: [bold cyan]5[/bold cyan]/[dim]5[/dim] passed" in message
         assert "top-level" not in message
+
+
+class TestInconclusive:
+    """A passing negative test without proof of its act: neither passed nor failed."""
+
+    @staticmethod
+    def _run():
+        rows = make_action('c', 'click')
+        rows += make_test('pos', status=StatusEnum.SUCCESS)
+        rows += make_test('neg', status=StatusEnum.INCONCLUSIVE)
+        return build_tally(rows)
+
+    def test_counted_on_its_own(self):
+        tally = self._run()
+        assert (tally.successful_tests, tally.failed_tests, tally.inconclusive_tests) == (1, 0, 1)
+
+    def test_its_test_action_ran_fine(self):
+        tally = self._run()
+        assert tally.failed_actions == 0
+        assert tally.successful_actions == tally.total_actions == 3
+
+    def test_does_not_count_as_a_failure(self):
+        assert self._run().all_passed is True
+
+    def test_summary_reads_inconclusive_not_failed(self):
+        tally = self._run()
+        message = TestSummaryLine._summary(tally, success=tally.all_passed)
+        assert "EXPERIMENT INCONCLUSIVE" in message
+        assert "EXPERIMENT FAILED" not in message
+        assert "[bold magenta]1[/bold magenta] inconclusive" in message
+        assert "failed" not in message
+
+    def test_a_real_failure_still_wins(self):
+        rows = make_test('neg', status=StatusEnum.INCONCLUSIVE) + make_test('bad', status=StatusEnum.FAILED)
+        tally = build_tally(rows)
+        message = TestSummaryLine._summary(tally, success=tally.all_passed)
+        assert "EXPERIMENT FAILED" in message
+
+
+def test_multi_environment_summary_lists_inconclusive_runs():
+    from types import SimpleNamespace
+
+    from adare.backend.experiment.print import ExperimentFlowConsole
+
+    console = ExperimentFlowConsole(disable=True)
+    results = [
+        {'environment': 'env1', 'status': 'SUCCESS', 'duration': 3.0, 'error': None},
+        {'environment': 'env2', 'status': 'INCONCLUSIVE', 'duration': 4.0, 'error': 'unproven'},
+    ]
+    envs = [SimpleNamespace(name='env1'), SimpleNamespace(name='env2')]
+    console.log_multi_experiment_summary('exp', envs, results, 7.0)
+    message = next(
+        m['message'] for m in console.state.messages.values() if 'EXPERIMENT SUMMARY' in str(m.get('message'))
+    )
+    assert "[bold magenta]EXPERIMENT SUMMARY: exp[/bold magenta] ❔" in message
+    assert "❔ Inconclusive: 1" in message
+    assert "env2[/dim] [magenta](4.0s)[/magenta][dim] - unproven" in message
+    assert "Failed" not in message

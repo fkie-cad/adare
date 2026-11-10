@@ -77,7 +77,9 @@ def screen_without_edges(screen_w: int, screen_h: int) -> Region:
 
 def resolve_effect_mode(settings) -> str:
     """``settings.effect_check`` (off | warn | strict), defaulting to warn."""
-    mode = getattr(settings, 'effect_check', None) or DEFAULT_EFFECT_MODE
+    from adare.types.playbook import normalize_effect_check
+
+    mode = normalize_effect_check(getattr(settings, 'effect_check', None))
     return mode if mode in EFFECT_MODES else DEFAULT_EFFECT_MODE
 
 

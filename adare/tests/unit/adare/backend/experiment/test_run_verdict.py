@@ -124,3 +124,48 @@ class TestFullTestRun:
         assert success is False
         assert diag["smoke_mode"] is False
         assert diag["run_found"] is False
+
+
+class TestRunStatus:
+    """``run_status`` maps a finished run (and its verdict_out) to the reported status."""
+
+    def test_inconclusive_verdict_is_reported_as_inconclusive(self):
+        from adare.backend.experiment.run import run_status
+
+        _, diagnostics = _resolve_experiment_verdict(
+            _make_run(tests=['t'], result_status=StatusEnum.INCONCLUSIVE), test_mode=True, execution_success=True
+        )
+        assert diagnostics['verdict'] == 'INCONCLUSIVE'
+        assert run_status(False, False, diagnostics) == StatusEnum.INCONCLUSIVE
+
+    @pytest.mark.parametrize(
+        'interrupted, successful, verdict, expected',
+        [
+            (True, False, {'verdict': 'INCONCLUSIVE'}, StatusEnum.INTERRUPTED),
+            (False, True, {'verdict': 'SUCCESS'}, StatusEnum.SUCCESS),
+            (False, False, {'verdict': 'FAILED'}, StatusEnum.FAILED),
+            (False, False, None, StatusEnum.FAILED),
+        ],
+    )
+    def test_other_outcomes(self, interrupted, successful, verdict, expected):
+        from adare.backend.experiment.run import run_status
+
+        assert run_status(interrupted, successful, verdict) == expected
+
+
+def test_batch_summary_counts_inconclusive_runs():
+    from datetime import timedelta
+
+    from adare.backend.experiment.batch_runner import BatchRunSummary, ExperimentResult
+
+    def result(status):
+        return ExperimentResult(environment='env', experiment='exp', status=status, duration=timedelta(seconds=1))
+
+    summary = BatchRunSummary(
+        results=[result(StatusEnum.SUCCESS), result(StatusEnum.INCONCLUSIVE)],
+        total_combinations=2,
+        total_duration=timedelta(seconds=2),
+    )
+    data = summary.to_dict()['summary']
+    assert (data['successful_runs'], data['failed_runs'], data['inconclusive_runs']) == (1, 0, 1)
+    assert summary._get_status_display(StatusEnum.INCONCLUSIVE) == ("?", "magenta")
