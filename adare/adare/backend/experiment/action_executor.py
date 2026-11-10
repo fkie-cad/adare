@@ -195,6 +195,10 @@ class ActionExecutor:
         self.test_actions = TestActionsExecutor(experiment_run_directory=experiment_run_directory, playbook=playbook)
 
         settings = getattr(playbook, 'settings', None)
+        from adare.backend.experiment.execution.effect_check import resolve_effect_mode
+
+        # Which recorded effects count against a negative test (warn: failures only; prove/strict: all)
+        self.test_actions.effect_ledger.mode = resolve_effect_mode(settings)
         # Host-side backend (set by run_setup): step markers into the qemufile run directory.
         self.hostside: Any | None = None
         # The guest clock is read through QGA or the in-guest agent; the host-side backend has neither.

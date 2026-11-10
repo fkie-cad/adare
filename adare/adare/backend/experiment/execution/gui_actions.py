@@ -302,7 +302,7 @@ class GUIActionsMixin(_Host):
 
         try:
             if (action.key or action.text or action.combination) and self._effect_checked(action):
-                await self.effect_probe.arm()
+                await self.effect_probe.arm(whole_screen=True)
             if action.key:
                 # Single key press -> pyautogui.press()
                 result = await self.gui_executor.keyboard("press", action.key)
