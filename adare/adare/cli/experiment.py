@@ -292,8 +292,9 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             if env_file_log_level is not None:
                 env_run_kwargs['file_log_level'] = env_file_log_level
 
+            verdict: dict = {}
             was_interrupted, was_successful = await experiment_run(
-                project_directory, experiment_name, env_name, **env_run_kwargs
+                project_directory, experiment_name, env_name, verdict_out=verdict, **env_run_kwargs
             )
 
             env_end_time = datetime.now(UTC)
@@ -317,6 +318,18 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             elif was_successful:
                 results.append({'environment': env_name, 'status': 'SUCCESS', 'duration': duration, 'error': None})
                 print(f"✅ Environment '{env_name}' completed successfully ({duration:.1f}s)")
+            elif verdict.get('verdict') == 'INCONCLUSIVE':
+                from adare.backend.experiment.run import INCONCLUSIVE_MESSAGE
+
+                results.append(
+                    {
+                        'environment': env_name,
+                        'status': 'INCONCLUSIVE',
+                        'duration': duration,
+                        'error': INCONCLUSIVE_MESSAGE,
+                    }
+                )
+                print(f"❔ Environment '{env_name}' inconclusive - a negative result is unproven ({duration:.1f}s)")
             else:
                 results.append(
                     {
@@ -565,8 +578,9 @@ def exec_experiment_run(arguments):
             from datetime import UTC, datetime
 
             run_started = datetime.now(UTC)
+            verdict: dict = {}
             was_interrupted, was_successful = asyncio.run(
-                experiment_run(project_directory, experiment_name, environment_name, **run_kwargs)
+                experiment_run(project_directory, experiment_name, environment_name, verdict_out=verdict, **run_kwargs)
             )
             run_ended = datetime.now(UTC)
 
@@ -580,15 +594,14 @@ def exec_experiment_run(arguments):
 
             if dual_output or formatter.format_type.value != 'rich':
                 # Create a summary for single run (similar to batch run format)
-                if was_interrupted:
-                    status = StatusEnum.INTERRUPTED
-                    error_msg = "User interrupted"
-                elif was_successful:
-                    status = StatusEnum.SUCCESS
-                    error_msg = None
-                else:
-                    status = StatusEnum.FAILED
-                    error_msg = "Experiment failed (see the run log)"
+                from adare.backend.experiment.run import INCONCLUSIVE_MESSAGE, run_status
+
+                status = run_status(was_interrupted, was_successful, verdict)
+                error_msg = {
+                    StatusEnum.INTERRUPTED: "User interrupted",
+                    StatusEnum.SUCCESS: None,
+                    StatusEnum.INCONCLUSIVE: INCONCLUSIVE_MESSAGE,
+                }.get(status, "Experiment failed (see the run log)")
 
                 # Create a single result entry
                 single_result = ExperimentResult(

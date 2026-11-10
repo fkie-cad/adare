@@ -37,6 +37,16 @@ EFFECT_CHECK_MODES = ('off', 'warn', 'strict')
 ACTION_EFFECT_VALUES = ('auto', 'none')
 
 
+def normalize_effect_check(value: object) -> str:
+    """``settings.effect_check`` as written (unset: warn). Unquoted YAML ``off`` (or ``no``/``false``)
+    loads as the boolean False, which strict structuring then turns into the string 'False'."""
+    if value is None:
+        return 'warn'
+    if value is False or (isinstance(value, str) and value.strip().lower() in ('false', 'no')):
+        return 'off'
+    return str(value)
+
+
 def _check_effect(kind: str, effect: str | None) -> None:
     if effect is not None and effect not in ACTION_EFFECT_VALUES:
         raise ValueError(f"{kind} effect must be one of {ACTION_EFFECT_VALUES}, got {effect!r}")
@@ -74,7 +84,7 @@ class Settings:
     )
     # Automatic check that each GUI action changed the screen near where its input went:
     # 'off', 'warn' (record it; a later negative test becomes INCONCLUSIVE) or 'strict' (fail the step)
-    effect_check: str = 'warn'
+    effect_check: str = attrs.field(default='warn', converter=normalize_effect_check)
 
     def __attrs_post_init__(self):
         if self.effect_check not in EFFECT_CHECK_MODES:
