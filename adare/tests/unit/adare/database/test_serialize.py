@@ -65,6 +65,7 @@ SERVER_STATUS_NAMES = {
     'test_missing',
     'test_failed',
     'pause',
+    'inconclusive',  # adare-server migration 0021_status_inconclusive
 }
 
 

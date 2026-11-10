@@ -99,6 +99,23 @@ it only fires if every condition holds:
       - exists: { text: "Tip of the Day" }
 ```
 
+### verify / effect  (optional, on click | keyboard | drag | scroll | goto)
+After the input, `verify:` (exactly one of `exists` / `not_exists`, a target) is
+polled for up to `verify_timeout` seconds (default 3); if it does not hold, the
+step fails. `click` also takes `retries:` (re-click while verify fails).
+`effect: none` marks a step that is expected to change nothing on screen.
+```yaml
+- keyboard:
+    key: delete
+    verify: { not_exists: { text: "report.txt" } }
+    description: delete the selected file
+- click:
+    target: { text: "Save" }
+    verify: { exists: { text: "Saved" } }
+    retries: 1
+    description: save
+```
+
 ### drag
 ```yaml
 - drag:

@@ -8,7 +8,9 @@ import { debugRunPrompt } from '@/components/terminal/claude-prompts'
 import { PageHeader } from '@/components/layout/page-header'
 import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge, statusToVariant } from '@/components/ui/badge'
+import { Badge, statusToVariant, type BadgeVariant } from '@/components/ui/badge'
+import { VerdictBadge } from '@/components/ui/verdict-badge'
+import { isInconclusive } from '@/lib/verdict'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -19,7 +21,7 @@ import { formatDateTime, formatDuration } from '@/lib/formatters'
 function OverviewTab({ run }: { run: RunDetail }) {
   const rows: [string, ReactNode][] = [
     ['Status', <Badge variant={statusToVariant(run.status ?? null)}>{run.status ?? '—'}</Badge>],
-    ['Result', run.result_status || '—'],
+    ['Result', <VerdictBadge status={run.result_status} />],
     [
       'Experiment',
       run.experiment_name ? (
@@ -66,7 +68,9 @@ function OverviewTab({ run }: { run: RunDetail }) {
   )
 }
 
-function resultVariant(result: RunTestResult) {
+function resultVariant(result: RunTestResult): BadgeVariant {
+  // Checked before `passed`: an inconclusive result is neither a pass nor a fail.
+  if (isInconclusive(result.status)) return 'inconclusive'
   if (result.status === 'WARNING') return 'warning'
   return result.passed ? 'success' : 'destructive'
 }
@@ -89,7 +93,7 @@ function TestResultsTab({ results }: { results: RunTestResult[] }) {
             <CardContent className="pt-6 space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-medium break-all">{result.name}</span>
-                <Badge variant={resultVariant(result)}>{result.status}</Badge>
+                <VerdictBadge status={result.status} variant={resultVariant(result)} />
               </div>
               {result.details && (
                 <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words">{result.details}</p>

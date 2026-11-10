@@ -64,6 +64,7 @@ TERMINAL_RUN_STATUSES = frozenset(
         StatusEnum.FINISHED,
         StatusEnum.TEST_MISSING,
         StatusEnum.TEST_FAILED,
+        StatusEnum.INCONCLUSIVE,
     }
 )
 

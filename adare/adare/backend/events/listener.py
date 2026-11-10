@@ -21,6 +21,7 @@ _COLLAPSE_REVEAL_STATUSES = frozenset(
         StatusEnum.ERROR,
         StatusEnum.TEST_MISSING,
         StatusEnum.TEST_FAILED,
+        StatusEnum.INCONCLUSIVE,
     }
 )
 

@@ -28,6 +28,25 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 ## [Unreleased]
 
 ### Added
+- Negative results are now proven, not assumed (guide: *Proving negative results*):
+  - Every click/keyboard/drag/scroll/goto gets an automatic **effect check**: the screen
+    near the input is compared before and after (polled up to 1 s, clock/panels ignored).
+    `effect: changed|unchanged` goes into the event data and the forensic log; for
+    `unchanged` a WebP screenshot is kept. `settings.effect_check: off|warn|strict`
+    (default `warn`; `strict` fails the step); `effect: none` marks an action expected to
+    change nothing.
+  - New status **INCONCLUSIVE** (15): a passing negative test (`*_does_not_exist`,
+    `visual.not_exists`, `count_max` with max 0, `expect_to_fail`, or a testfunction
+    declared `@testfunction(..., negative=True)`) is INCONCLUSIVE when an earlier GUI
+    action was skipped by `when:`, showed no effect or failed its `verify:`. Run verdict
+    precedence: FAILED > INCONCLUSIVE > TEST_MISSING > WARNING > SUCCESS. Needs
+    adare-server migration `0021_status_inconclusive` before uploading such runs.
+  - `controls: [test names]` on a test: tests that must have passed before it (else
+    INCONCLUSIVE); `adare exp playbook validate` rejects unknown, cyclic or late controls.
+  - `verify:` / `verify_timeout` now also on `keyboard`, `drag`, `scroll` and `goto`.
+  - Recorded playbooks (`adare dev agent`, `adare dev mcp`) get a generated
+    `verify: {exists: {image: ...}}` per click/keyboard step from the region that changed;
+    `--plan` adds a `wait_until` gate per verified sub-goal.
 - pcap captures (`--capture-pcap`) no longer contain ADARE's own traffic: after the VM
   stops, packets of the adarevm WebSocket (the `adarevm` hostfwd, guest port 18765, incl.
   every `pull`) and of the SLIRP SMB share (`10.0.2.4`) are removed; every other record is
@@ -464,6 +483,22 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- False passes: a host-mode (QGA/hostside) test whose file read failed for any reason other
+  than "no such file" (guest agent down, timeout, permission) is now ERROR. Before, a
+  `*_does_not_exist` test passed on a transport error and a glob match that failed to pull
+  silently dropped out of the test.
+- Test results are stored with their real status (SUCCESS/FAILED/ERROR/WARNING/
+  INCONCLUSIVE) instead of only SUCCESS/FAILED; under `expect_to_fail` the test's own
+  answer is kept in the details, and a WARNING under `expect_to_fail` now explicitly
+  counts as "passed although expected to fail".
+- The forensic log now carries a GUI action's error message, `verify:` outcome
+  (`verified`, `click_attempts`), the typed `text`, `skipped` (a false `when:`) and the
+  effect check; action events finally fill `Event.error`.
+- Idiom templates: `delete_file_and_verify` used a non-existent testfunction
+  (`filesystem.file_does_not_exist`, `path:`) and never ran its test; it now uses
+  `standard.file_does_not_exist` with a `file_present_before` control.
+  `open_app_and_verify` used the non-existent `visual.text_on_screen` (now `visual.exists`)
+  and never ran its test either.
 - Playbook `tests:` entries now reject unknown keys (e.g. a `paramter:` typo) at parse time,
   with a `did you mean: parameter?` hint, instead of silently dropping the key and failing
   at the end of the run with `NotAnAttrsClassError`. Validation errors from `parse_playbook`

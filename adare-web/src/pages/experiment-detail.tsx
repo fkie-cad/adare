@@ -24,6 +24,7 @@ import { useExperiment, useRunExperiment } from '@/api/hooks/use-experiments'
 import { useRuns } from '@/api/hooks/use-runs'
 import { formatDateTime, formatDuration } from '@/lib/formatters'
 import { toast } from '@/components/ui/toast'
+import { verdictLabel } from '@/lib/verdict'
 
 /** The project's filesystem path (not its name): run/validate/link all take it as `project_path`. */
 function projectPathOf(exp: { project_path?: string } | undefined): string {
@@ -258,7 +259,7 @@ export default function ExperimentDetailPage() {
                     <TableCell>{run.environment_name || '—'}</TableCell>
                     <TableCell>{formatDateTime(run.start_time)}</TableCell>
                     <TableCell>{formatDuration(run.duration_seconds)}</TableCell>
-                    <TableCell>{run.result_status || '—'}</TableCell>
+                    <TableCell>{verdictLabel(run.result_status)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

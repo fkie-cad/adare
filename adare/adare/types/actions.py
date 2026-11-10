@@ -112,6 +112,17 @@ class ActionCompleteEvent(ActionEvent):
     success: bool = False
     execution_time: float | None = None
     parent_event_id: str | None = None
+    # Why the action failed (stored as Event.error and in the forensic log)
+    error_message: str | None = None
+    # True when a ``when:`` condition was false and the action did nothing
+    skipped: bool = False
+    # Automatic effect check of a GUI action: 'changed' | 'unchanged' | 'none' (author said
+    # no change is expected) | 'verified' (a verify: condition held) | 'unknown' (no frames)
+    effect: str | None = None
+    effect_info: dict[str, Any] | None = None
+    # Outcome of an explicit ``verify:`` and the number of click attempts it took
+    verified: bool | None = None
+    click_attempts: int | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.ACTION_COMPLETE
@@ -219,6 +230,12 @@ class TestActionCompleteEvent(ActionCompleteEvent):
     test_output: str | None = None
     result_category: str | None = None
     expect_to_fail: bool = False
+    # What the test counts as after expect_to_fail / inconclusive handling
+    # ('SUCCESS' | 'FAILED' | 'ERROR' | 'WARNING' | 'INCONCLUSIVE'), and the test's own answer
+    test_status: str | None = None
+    original_status: str | None = None
+    # Why a passing negative test is INCONCLUSIVE (actions/controls that lack proof)
+    inconclusive_reasons: list[str] | None = None
 
     def get_event_type(self) -> EventType:
         return EventType.TEST_COMPLETE
@@ -226,6 +243,8 @@ class TestActionCompleteEvent(ActionCompleteEvent):
     @property
     def status(self) -> StatusEnum:
         """Get appropriate status for test results."""
+        if self.test_status == 'INCONCLUSIVE':
+            return StatusEnum.INCONCLUSIVE
         if self.success:
             return StatusEnum.SUCCESS
         return StatusEnum.TEST_FAILED

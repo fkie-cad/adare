@@ -47,6 +47,10 @@ class TestActionsExecutor:
         self.host_test_executor = None
         self.guest_to_host_test_executor = None
         self.test_execution_mode: TestExecutionMode | None = None
+        from adare.backend.experiment.negative_proof import EffectLedger
+
+        # Shared with ActionExecutor, which records every GUI action's effect into it
+        self.effect_ledger = EffectLedger()
 
     def set_test_loader(self, test_loader):
         """Set the test loader after initialization."""
@@ -89,16 +93,20 @@ class TestActionsExecutor:
 
             if test_class and getattr(test_class, 'execute_on_host', False):
                 # HOST-SIDE EXECUTION (visual tests — unchanged path)
-                return await self._execute_host_side_test(
+                result = await self._execute_host_side_test(
                     action, resolved_test, test_class, target_resolver, action_executor
                 )
-
-            if self.test_execution_mode == TestExecutionMode.HOST:
+            elif self.test_execution_mode == TestExecutionMode.HOST:
                 # HOST-MODE EXECUTION — all tests via QGA (no agent needed)
-                return await self._execute_host_mode_test(action, resolved_test)
+                result = await self._execute_host_mode_test(action, resolved_test)
+            else:
+                # VM-SIDE EXECUTION via WebSocket (existing code path)
+                result = await self._execute_vm_side_test(action, resolved_test, websocket_client)
 
-            # VM-SIDE EXECUTION via WebSocket (existing code path)
-            return await self._execute_vm_side_test(action, resolved_test, websocket_client)
+            # A passing negative test whose actions lack proof of effect is INCONCLUSIVE
+            from adare.backend.experiment.negative_proof import judge_negative_test
+
+            return judge_negative_test(self.effect_ledger, action.name, resolved_test, test_class, result)
 
         except ValueError as e:
             log.error(f"Test execution failed: {e}")

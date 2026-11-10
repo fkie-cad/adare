@@ -9,6 +9,7 @@ import asyncio
 import functools
 import logging
 import time
+from typing import Any
 
 from adare.backend.events.emitters import emit_action
 from adare.helperfunctions.image import calculate_pixel_change
@@ -78,12 +79,12 @@ class FlowControlExecutor:
                 conditions_met = await self.condition_checker.check_conditions(action.when, screenshot_base64)
                 if not conditions_met:
                     # Include screenshot path in skipped result
-                    data = {}
+                    # Skipping counts as success, but is recorded: a negative test after a
+                    # skipped block cannot tell "absent" from "never done".
+                    data: dict[str, Any] = {'skipped': True}
                     if screenshot_path:
                         data['screenshot_path'] = screenshot_path
-                    return ActionResult(
-                        success=True, message="Block conditions not met, skipping", data=data if data else None
-                    )
+                    return ActionResult(success=True, message="Block conditions not met, skipping", data=data)
             except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
                 log.error(f"Error checking block conditions: {e}")
                 return ActionResult(success=False, message=f"Condition check failed: {str(e)}")
@@ -635,7 +636,7 @@ class FlowControlExecutor:
 
                 # Cache successful match if we have a path
                 if target_match and screenshot_path:
-                    self.target_resolution.cache_match(target, target_match, screenshot_path)
+                    self.target_resolution.cache_match(target, target_match, screenshot_path, frame=screenshot_base64)
 
                 return target_match is not None
 

@@ -93,6 +93,10 @@ class BasicTest:
     # Suffixes of companion files that belong to parameter.dst (e.g. SQLite '-wal');
     # host mode pulls those that exist on the guest alongside dst.
     host_mode_sidecars: ClassVar[tuple[str, ...]] = ()
+    # True if a pass asserts that something is ABSENT (deleted, never written, not shown).
+    # The host then requires proof that the actions before the test took effect, and
+    # reports an unproven pass as INCONCLUSIVE instead of SUCCESS.
+    negative: ClassVar[bool] = False
 
     name: str
     parameter: Parameter

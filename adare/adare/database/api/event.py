@@ -21,6 +21,56 @@ log = logging.getLogger(__name__)
 lock = Lock()
 
 
+_STATUS_BY_NAME = {
+    'SUCCESS': StatusEnum.SUCCESS,
+    'FAILED': StatusEnum.FAILED,
+    'ERROR': StatusEnum.ERROR,
+    'WARNING': StatusEnum.WARNING,
+    'INCONCLUSIVE': StatusEnum.INCONCLUSIVE,
+}
+
+
+def stored_test_status(action_data: dict) -> StatusEnum:
+    """The status a completed test is stored with: its real outcome, not just pass/fail.
+
+    ``test_status`` is the status after ``expect_to_fail`` and inconclusive handling. Events
+    from before it existed fall back to ``result_category`` (so an execution error is ERROR
+    and a pass-with-warning WARNING instead of both collapsing into SUCCESS/FAILED).
+    """
+    success = bool(action_data.get('success'))
+    status = _STATUS_BY_NAME.get(str(action_data.get('test_status') or '').upper())
+    if status is None:
+        category = action_data.get('result_category')
+        if category == 'execution_error':
+            status = StatusEnum.ERROR
+        elif category == 'warning' and success and not action_data.get('expect_to_fail'):
+            status = StatusEnum.WARNING
+        else:
+            status = StatusEnum.SUCCESS if success else StatusEnum.FAILED
+    if not success and status in (StatusEnum.SUCCESS, StatusEnum.WARNING, StatusEnum.INCONCLUSIVE):
+        return StatusEnum.FAILED  # a failed action never stores a passing status
+    return status
+
+
+def stored_test_details(action_data: dict) -> str | None:
+    """Result details: the test's own lines, plus why its status differs from its answer."""
+    import json
+
+    output = action_data.get('test_output')
+    lines = list(output) if isinstance(output, (list, tuple)) else ([output] if output else [])
+    notes = []
+    original = action_data.get('original_status')
+    if action_data.get('expect_to_fail'):
+        notes.append(f'expect_to_fail: the test itself reported {original or "unknown"}')
+    for reason in action_data.get('inconclusive_reasons') or []:
+        notes.append(f'INCONCLUSIVE: {reason}')
+    if not lines and not notes:
+        return action_data.get('error_message') or None
+    if not lines and action_data.get('error_message'):
+        lines = [action_data['error_message']]
+    return json.dumps(lines + notes)
+
+
 def replace_list_recursive_in_dict(d: dict):
     for key, value in d.items():
         if isinstance(value, dict):
@@ -238,7 +288,6 @@ class EventDbApi(ExperimentApi):
             parent_group_id: Grouping key (action id) of the enclosing action for
                 nested tests, ``None`` for top-level ones. Not an event id.
         """
-        import json
         from datetime import datetime
 
         from adare.types.event_types import event_type_resolver
@@ -293,14 +342,8 @@ class EventDbApi(ExperimentApi):
                 test_result = None
                 success = action_data.get('success')
                 if is_complete and success is not None:
-                    # Create a Result object for the test
                     test_result = self.get_or_create_test_result(
-                        {
-                            'status': StatusEnum.SUCCESS if success else StatusEnum.FAILED,
-                            'details': json.dumps(action_data.get('test_output'))
-                            if action_data.get('test_output')
-                            else (action_data.get('error_message') or None),
-                        }
+                        {'status': stored_test_status(action_data), 'details': stored_test_details(action_data)}
                     )
 
                 # Create TestEvent with specific event type information (like ActionEvent)

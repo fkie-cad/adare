@@ -32,6 +32,20 @@ from adare.types.targets import (
 from adarelib.common.variables import VariableRegistry
 from adarelib.testset.type import Test
 
+EFFECT_CHECK_MODES = ('off', 'warn', 'strict')
+#: Per-action ``effect:``: 'none' = this action is expected to change nothing on screen
+ACTION_EFFECT_VALUES = ('auto', 'none')
+
+
+def _check_effect(kind: str, effect: str | None) -> None:
+    if effect is not None and effect not in ACTION_EFFECT_VALUES:
+        raise ValueError(f"{kind} effect must be one of {ACTION_EFFECT_VALUES}, got {effect!r}")
+
+
+def _check_verify_timeout(kind: str, timeout: float) -> None:
+    if timeout < 0:
+        raise ValueError(f"{kind} verify_timeout must be >= 0, got {timeout}")
+
 
 @attrs.define
 class Settings:
@@ -58,6 +72,25 @@ class Settings:
     backend: str = (
         'agent'  # 'agent' (in-guest adarevm) or 'hostside' (agent-free); CLI --backend / ADARE_BACKEND override
     )
+    # Automatic check that each GUI action changed the screen near where its input went:
+    # 'off', 'warn' (record it; a later negative test becomes INCONCLUSIVE) or 'strict' (fail the step)
+    effect_check: str = 'warn'
+
+    def __attrs_post_init__(self):
+        if self.effect_check not in EFFECT_CHECK_MODES:
+            raise ValueError(f"settings.effect_check must be one of {EFFECT_CHECK_MODES}, got {self.effect_check!r}")
+
+
+@attrs.define
+class ClickVerify:
+    """Effect check for a GUI action: exactly one of ``exists`` / ``not_exists``."""
+
+    exists: Target | None = None
+    not_exists: Target | None = None
+
+    def __attrs_post_init__(self):
+        if (self.exists is None) == (self.not_exists is None):
+            raise ValueError("click verify must set exactly one of: exists, not_exists")
 
 
 @attrs.define
@@ -68,18 +101,14 @@ class KeyboardAction:
     when: list[ExistsCondition | NotExistsCondition] | None = None
     description: str = ''
     machine: str | None = None
-
-
-@attrs.define
-class ClickVerify:
-    """Effect check for a click: exactly one of ``exists`` / ``not_exists``."""
-
-    exists: Target | None = None
-    not_exists: Target | None = None
+    # Optional effect check, polled for up to verify_timeout seconds after the input
+    verify: ClickVerify | None = None
+    verify_timeout: float = 3.0
+    effect: str | None = None  # 'none': no screen change expected (skips the automatic check)
 
     def __attrs_post_init__(self):
-        if (self.exists is None) == (self.not_exists is None):
-            raise ValueError("click verify must set exactly one of: exists, not_exists")
+        _check_verify_timeout('keyboard', self.verify_timeout)
+        _check_effect('keyboard', self.effect)
 
 
 @attrs.define
@@ -94,14 +123,15 @@ class ClickAction:
     verify: ClickVerify | None = None
     retries: int = 0
     verify_timeout: float = 3.0
+    effect: str | None = None  # 'none': no screen change expected (skips the automatic check)
 
     def __attrs_post_init__(self):
         if self.retries < 0:
             raise ValueError(f"click retries must be >= 0, got {self.retries}")
-        if self.verify_timeout < 0:
-            raise ValueError(f"click verify_timeout must be >= 0, got {self.verify_timeout}")
+        _check_verify_timeout('click', self.verify_timeout)
         if self.verify is None and self.retries:
             raise ValueError("click retries requires a verify condition (verify: {exists|not_exists: ...})")
+        _check_effect('click', self.effect)
 
 
 @attrs.define
@@ -110,6 +140,13 @@ class DragAction:
     dst: Target
     description: str = ''
     machine: str | None = None
+    verify: ClickVerify | None = None
+    verify_timeout: float = 3.0
+    effect: str | None = None  # 'none': no screen change expected (skips the automatic check)
+
+    def __attrs_post_init__(self):
+        _check_verify_timeout('drag', self.verify_timeout)
+        _check_effect('drag', self.effect)
 
 
 @attrs.define
@@ -125,6 +162,13 @@ class ScrollAction:
     amount: int
     description: str = ''
     machine: str | None = None
+    verify: ClickVerify | None = None
+    verify_timeout: float = 3.0
+    effect: str | None = None  # 'none': no screen change expected (skips the automatic check)
+
+    def __attrs_post_init__(self):
+        _check_verify_timeout('scroll', self.verify_timeout)
+        _check_effect('scroll', self.effect)
 
 
 @attrs.define
@@ -132,6 +176,13 @@ class GotoAction:
     target: Target
     description: str = ''
     machine: str | None = None
+    verify: ClickVerify | None = None
+    verify_timeout: float = 3.0
+    effect: str | None = None  # 'none': no screen change expected (skips the automatic check)
+
+    def __attrs_post_init__(self):
+        _check_verify_timeout('goto', self.verify_timeout)
+        _check_effect('goto', self.effect)
 
 
 # info: Do NOT rename it to TestAction, since it lets pytest think it is a test

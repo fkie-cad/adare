@@ -13,6 +13,7 @@ import { VerifyEnvironmentDialog } from '@/components/dialogs/verify-environment
 import { useEnvironment } from '@/api/hooks/use-environments'
 import { useRuns } from '@/api/hooks/use-runs'
 import { formatDateTime, formatDuration } from '@/lib/formatters'
+import { verdictLabel } from '@/lib/verdict'
 
 export default function EnvironmentDetailPage() {
   const { name } = useParams({ from: '/environments/$name' })
@@ -142,7 +143,7 @@ export default function EnvironmentDetailPage() {
                     </TableCell>
                     <TableCell>{formatDateTime((run as { start_time?: string }).start_time)}</TableCell>
                     <TableCell>{formatDuration((run as { duration_seconds?: number }).duration_seconds)}</TableCell>
-                    <TableCell>{run.result_status || '—'}</TableCell>
+                    <TableCell>{verdictLabel(run.result_status)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

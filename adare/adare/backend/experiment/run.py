@@ -127,10 +127,14 @@ def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_succe
         success = bool(execution_success)
     else:
         # WARNING is pass-with-warning: a passing verdict, reported distinctly.
+        # INCONCLUSIVE (an unproven absence) is not a pass, but is not called a failure either.
         success = result_status in (StatusEnum.SUCCESS, StatusEnum.WARNING)
 
+    verdict = "SUCCESS" if success else "FAILED"
+    if not success and result_status == StatusEnum.INCONCLUSIVE:
+        verdict = "INCONCLUSIVE"
     diagnostics = {
-        "verdict": "SUCCESS" if success else "FAILED",
+        "verdict": verdict,
         "smoke_mode": is_smoke_run,
         "test_mode": test_mode,
         "run_found": experiment_run is not None,

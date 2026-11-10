@@ -674,6 +674,7 @@ class PlaybookController(FailureHandlingMixin):
             # Host-side backend: a test is evaluated after the guest quiesced, not at its position.
             if self.hostside is not None and not self._deferred_pass and self._is_test_action(action):
                 self.hostside.defer_test(action_index, getattr(action, 'name', ''))
+                self.action_executor.test_actions.effect_ledger.note_deferred(getattr(action, 'name', ''))
                 continue
 
             log.info(f"Executing action {action_index}/{total_actions}: {action_name}")

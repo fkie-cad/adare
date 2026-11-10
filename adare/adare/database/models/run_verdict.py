@@ -21,9 +21,12 @@ def compute_result_status(
         expected_test_ids: Ids of the abstract tests the experiment declares.
     """
     tests = list(tests)
+    # Precedence: FAILED > INCONCLUSIVE > TEST_MISSING > WARNING > SUCCESS.
     # Failures take priority over missing tests: a failed test stops execution early,
-    # so the tests after it are expected to be missing.
+    # so the tests after it are expected to be missing. INCONCLUSIVE outranks a missing
+    # test: an absence that could not be proven is the more important thing to report.
     saw_warning = False
+    saw_inconclusive = False
     for success, _abstract_test_id, status_id in tests:
         if success is False:
             return StatusEnum.FAILED
@@ -32,8 +35,12 @@ def compute_result_status(
             # WARNING is pass-with-warning: it must not be treated as a failure (see TestResult.warning).
             if status == StatusEnum.WARNING:
                 saw_warning = True
+            elif status == StatusEnum.INCONCLUSIVE:
+                saw_inconclusive = True
             elif status != StatusEnum.SUCCESS:
                 return StatusEnum.FAILED
+    if saw_inconclusive:
+        return StatusEnum.INCONCLUSIVE
 
     ran = {abstract_test_id for _success, abstract_test_id, _status_id in tests}
     if any(test_id not in ran for test_id in expected_test_ids):

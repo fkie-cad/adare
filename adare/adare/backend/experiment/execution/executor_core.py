@@ -70,6 +70,10 @@ class ActionsExecutorCore:
         )
         log.info(f"SimpleActionsExecutor initialized with GUI mode: {gui_mode.value}")
 
+        from .effect_check import EffectProbe, resolve_effect_mode
+
+        self.effect_probe = EffectProbe(target_resolution_executor, resolve_effect_mode(playbook_settings))
+
     def _resolve_pull_mode(self, requested_mode: str) -> str:
         """Resolve effective pull mode based on VM type and requested mode.
 

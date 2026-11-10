@@ -16,7 +16,7 @@ export interface Run {
   end_time?: string
   duration_seconds?: number
   status?: string
-  /** Verdict computed from the run's test results (SUCCESS, FAILED, WARNING, TEST_MISSING, ...). */
+  /** Verdict computed from the run's test results (SUCCESS, FAILED, INCONCLUSIVE, WARNING, TEST_MISSING, ...). */
   result_status?: string
   published?: boolean
   fake?: boolean
@@ -25,7 +25,7 @@ export interface Run {
 
 export interface RunTestResult {
   name: string
-  /** StatusEnum name of the stored result, e.g. SUCCESS / FAILED / WARNING. */
+  /** StatusEnum name of the stored result, e.g. SUCCESS / FAILED / WARNING / INCONCLUSIVE. */
   status: string
   passed: boolean
   details: string
