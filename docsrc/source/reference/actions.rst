@@ -106,8 +106,10 @@ Configure experiment-wide behavior:
      clock_log: true                # Sample the guest clock before/after every action
                                     # into clock.jsonl (offset to host, jumps, timezone)
      effect_check: warn             # Check each GUI action changed the screen near its
-                                    # input: off | warn (record; negative tests become
-                                    # INCONCLUSIVE) | strict (fail the step)
+                                    # input: off | warn (record + summary) | prove (an
+                                    # unchanged or when-skipped action makes later
+                                    # negative tests INCONCLUSIVE) | strict (prove +
+                                    # fail the step)
                                     # see guide/negative-results
 
      # GUI automation mode (QEMU only)

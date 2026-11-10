@@ -922,7 +922,9 @@ def run_status(was_interrupted: bool, was_successful: bool, verdict: dict | None
 
 
 #: Shown for an INCONCLUSIVE run: a negative test passed without proof that its actions took effect
-INCONCLUSIVE_MESSAGE = 'Negative result unproven: an earlier action showed no effect (see the forensic log)'
+INCONCLUSIVE_MESSAGE = (
+    'Negative result unproven: an earlier action or control gave no proof of the act (see the test details)'
+)
 
 
 def experiment_test(project_path: Path, experiment_name: str, environment_name: str):

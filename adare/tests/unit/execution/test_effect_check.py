@@ -78,6 +78,9 @@ def test_screen_without_edges_drops_panels():
 def test_resolve_effect_mode_defaults_to_warn():
     assert resolve_effect_mode(None) == 'warn'
     assert resolve_effect_mode(Settings(effect_check='strict')) == 'strict'
+    assert resolve_effect_mode(Settings(effect_check='prove')) == 'prove'
+    with pytest.raises(ValueError):
+        Settings(effect_check='paranoid')
 
 
 @pytest.mark.parametrize('written', ['off', "'off'", 'no', 'false'])
@@ -155,14 +158,36 @@ async def test_resolution_frame_is_reused_as_before():
 
 
 @pytest.mark.asyncio
-async def test_keyboard_uses_last_pointer_box():
+async def test_keyboard_sees_a_change_far_from_the_last_click():
+    # LibreOffice: a click in the Options dialog, alt+o closes it, then text is typed into the
+    # document (or a Save dialog) far from that click; the last click's box would miss it
     tr = FakeTR([frame()])
     probe = EffectProbe(tr, settle_timeout=0)
     await probe.arm([(200, 200)])
     probe.begin_action()
-    tr.frames = [frame(), frame((1000, 600, 40, 40))]  # change far from the last click
-    await probe.arm()
+    tr.frames = [frame(), frame((1000, 600, 40, 40))]
+    await probe.arm(whole_screen=True)
+    assert (await probe.settle('keyboard'))['effect'] == 'changed'
+
+
+@pytest.mark.asyncio
+async def test_keyboard_ignores_the_panel_clock():
+    tr = FakeTR([frame(), frame(CLOCK)])
+    probe = EffectProbe(tr, settle_timeout=0)
+    probe.begin_action()
+    await probe.arm(whole_screen=True)
     assert (await probe.settle('keyboard'))['effect'] == 'unchanged'
+
+
+@pytest.mark.asyncio
+async def test_scroll_uses_last_pointer_box():
+    tr = FakeTR([frame()])
+    probe = EffectProbe(tr, settle_timeout=0)
+    await probe.arm([(200, 200)])
+    probe.begin_action()
+    tr.frames = [frame(), frame((1000, 600, 40, 40))]  # change far from the pointer
+    await probe.arm()
+    assert (await probe.settle('scroll'))['effect'] == 'unchanged'
 
 
 @pytest.mark.asyncio
@@ -247,3 +272,12 @@ async def test_keyboard_verify_success_is_verified_effect():
     action = KeyboardAction(key='enter', verify=ClickVerify(exists=Target(text='Saved')))
     result = await executor.execute_keyboard(action)
     assert result.success and result.data['effect'] == 'verified' and result.data['verified'] is True
+
+
+@pytest.mark.parametrize(('written', 'mode'), [(None, 'warn'), ('prove', 'prove'), ('strict', 'strict')])
+def test_action_executor_hands_the_mode_to_the_ledger(written, mode):
+    from adare.backend.experiment.action_executor import ActionExecutor
+
+    settings = Settings() if written is None else Settings(effect_check=written)
+    executor = ActionExecutor(playbook=SimpleNamespace(settings=settings))
+    assert executor.test_actions.effect_ledger.mode == mode

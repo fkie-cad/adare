@@ -6,14 +6,21 @@ with max 0, anything with ``expect_to_fail``, or a test function declaring
 the absence never took effect. So a *passing* negative test becomes **INCONCLUSIVE** when
 any GUI action before it in the run
 
-* was skipped by a ``when:`` condition,
-* failed,
-* failed its ``verify:``, or
+* failed, or
+* failed its ``verify:``,
+
+and, under ``settings.effect_check: prove`` or ``strict``, also when one
+
+* was skipped by a ``when:`` condition, or
 * showed no screen change in the automatic effect check (``effect: unchanged``, unless the
   author marked it ``effect: none``),
 
 or when one of its explicit ``controls:`` (other tests, e.g. "the file existed before")
-did not pass before it. The implicit action checks never affect a positive test; explicit
+did not pass before it. Under the default ``warn`` the last two are only recorded: on real
+playbooks (T2F Firefox, LibreOffice, Chrome) 7-29 % of GUI actions are steps that rightly
+change nothing (wake key, focus click, ctrl+a on selected text) and 88 % use ``when:`` for
+defensive steps, so counting them by default would make nearly every negative test
+INCONCLUSIVE. The implicit action checks never affect a positive test; explicit
 ``controls:`` count on whichever test declares them. :class:`EffectLedger` collects
 the evidence while the run executes; :func:`judge_negative_test` applies the rule.
 """
@@ -24,6 +31,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from adare.backend.experiment.execution.effect_check import PROOF_MODES
 from adare.types.playbook import BlockAction, ClickAction, DragAction, GotoAction, KeyboardAction, ScrollAction
 
 log = logging.getLogger(__name__)
@@ -78,15 +86,21 @@ class LedgerEntry:
     effect: str | None = None
     verified: bool | None = None
 
-    def problem(self) -> str | None:
-        """Why this action does not support an absence, or None if it does."""
+    def problem(self, prove: bool = True) -> str | None:
+        """Why this action does not support an absence, or None if it does.
+
+        ``prove`` False (``effect_check: warn``/``off``): a when-skip or an unchanged screen
+        is recorded but does not count; a failed action or ``verify:`` always does.
+        """
         where = f'action #{self.number} ({self.label})'
         if not self.success:
             return f'{where} failed'
-        if self.skipped:
-            return f'{where} was skipped by its when: condition'
         if self.verified is False:
             return f'{where} failed its verify:'
+        if not prove:
+            return None
+        if self.skipped:
+            return f'{where} was skipped by its when: condition'
         if self.effect == 'unchanged':
             return f'{where} showed no screen change near its input (effect: unchanged)'
         return None
@@ -96,6 +110,8 @@ class LedgerEntry:
 class EffectLedger:
     """The run's record of GUI-action effects and test outcomes, in execution order."""
 
+    #: ``settings.effect_check`` of the run (off | warn | prove | strict)
+    mode: str = 'warn'
     entries: list[LedgerEntry] = field(default_factory=list)
     test_statuses: dict[str, str] = field(default_factory=dict)
     # Host-side backend: tests run after the guest quiesced, so remember where each one stood
@@ -131,7 +147,8 @@ class EffectLedger:
         reasons = []
         if actions:
             entries = self.entries[: self.cutoffs.get(test_name, len(self.entries))]
-            reasons = [problem for entry in entries if (problem := entry.problem())]
+            prove = self.mode in PROOF_MODES
+            reasons = [problem for entry in entries if (problem := entry.problem(prove))]
         for control in controls or []:
             status = self.test_statuses.get(control)
             if status is None:

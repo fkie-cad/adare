@@ -90,6 +90,7 @@ class EventRow:
     loop_iterations_planned: int | None = None  # from the loop start event
     loop_iterations_completed: int | None = None  # from the loop complete event
     loop_actions_executed: int | None = None
+    effect: str | None = None  # automatic effect check of a GUI action (changed | unchanged | ...)
 
     @property
     def is_complete(self) -> bool:
@@ -131,6 +132,8 @@ class ExperimentTally:
     incomplete_tests: int = 0
     top_level_tests: int = 0
     nested_tests: int = 0
+    # GUI actions whose automatic effect check saw no screen change (evidence screenshots kept)
+    unchanged_actions: int = 0
 
     loops: tuple[LoopSummary, ...] = field(default_factory=tuple)
 
@@ -202,6 +205,7 @@ def build_tally(rows: Iterable[EventRow]) -> ExperimentTally:
     actions = _Counter()
     tests = _Counter()
     loops: list[LoopSummary] = []
+    unchanged = 0
 
     for group_rows in groups.values():
         kind = event_kind(group_rows[0].event_type_specific)
@@ -230,6 +234,8 @@ def build_tally(rows: Iterable[EventRow]) -> ExperimentTally:
 
         if kind in UTILITY_KINDS:
             continue
+        if complete is not None and complete.effect == 'unchanged':
+            unchanged += 1
         # The test action itself ran fine; its unproven verdict is reported on the test line
         actions.add(nested=nested, completed=complete is not None, passed=passed or inconclusive)
 
@@ -247,6 +253,7 @@ def build_tally(rows: Iterable[EventRow]) -> ExperimentTally:
         incomplete_tests=tests.incomplete,
         top_level_tests=tests.top_level,
         nested_tests=tests.nested,
+        unchanged_actions=unchanged,
         loops=tuple(loops),
     )
 
@@ -304,6 +311,7 @@ def load_event_rows(session, experiment_run_ulid: str) -> list[EventRow]:
                 loop_iterations_planned=_coerce_int(data.get('iteration_count')),
                 loop_iterations_completed=_coerce_int(data.get('iterations_completed')),
                 loop_actions_executed=_coerce_int(data.get('actions_executed')),
+                effect=data.get('effect') if isinstance(data.get('effect'), str) else None,
             )
         )
 

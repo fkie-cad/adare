@@ -4,8 +4,9 @@ Proving negative results
 A test for an absent artifact cannot by itself separate "the application did not store
 it" from "the action that should have produced it never took effect". A click counts as
 done once its input is sent, and a ``when:`` that is false skips its step silently. ADARE
-therefore checks the effect of every GUI action automatically, and judges negative tests
-on that evidence. The default costs playbook authors nothing.
+therefore checks the effect of every GUI action automatically and records it. With
+``effect_check: prove`` it also judges negative tests on that evidence. The default
+(``warn``) costs playbook authors nothing and changes no verdict.
 
 .. list-table::
    :widths: 35 20 45
@@ -19,7 +20,8 @@ on that evidence. The default costs playbook authors nothing.
      - Weak: something changed on screen where the input went
    * - Implicit control for negative tests
      - nobody (verdict logic)
-     - Every earlier GUI action ran, was not skipped and showed an effect
+     - Every earlier GUI action ran and passed its ``verify:``; under ``prove`` also
+       was not skipped and showed an effect
    * - ``verify:`` on an action (generated when recording)
      - the recorder, or the author
      - Medium: the expected screen state appeared
@@ -36,7 +38,8 @@ an animation elsewhere does not count:
 
 - click, goto, drag: a box (a quarter of the screen) around the input point(s)
 - scroll: the box of the last pointer action
-- keyboard: the box of the last pointer action, or the full screen without its edges
+- keyboard: the full screen without its edges (panels, clock), since keys go wherever the
+  focus is and shortcuts open and close dialogs away from the last click
 
 Change is polled for up to one second (``ADARE_EFFECT_TIMEOUT`` overrides it), so a slow
 redraw is not missed. The frame target resolution already took is reused as the "before"
@@ -48,10 +51,20 @@ stored in the action's event data and the forensic log as ``effect: changed``,
 .. code-block:: yaml
 
    settings:
-     effect_check: warn   # off | warn (default) | strict
+     effect_check: warn   # off | warn (default) | prove | strict
 
-Under ``strict`` an ``unchanged`` action fails its step. Mark an action that is expected
-to change nothing (focusing a window, a modifier key) with ``effect: none``.
+- ``warn``: record the effect, keep the evidence and count ``unchanged`` actions in the run
+  summary ("N GUI action(s) showed no screen change"). No verdict changes.
+- ``prove``: also hold ``unchanged`` and ``when:``-skipped actions against later negative
+  tests (see below).
+- ``strict``: ``prove``, and an ``unchanged`` action fails its step.
+
+Mark an action that is expected to change nothing with ``effect: none`` before switching a
+playbook to ``prove`` or ``strict``. Real playbooks have many: on three T2F playbooks
+(Firefox, LibreOffice, Chrome) 7-29 % of GUI actions rightly changed nothing, all of them
+idempotent steps such as a wake key, a focus click on a focused window, ``ctrl+a`` on text
+that is already selected, ``ctrl+l`` into a focused address bar, or expanding a node that is
+already open. That is why ``warn`` is the default.
 
 The check is weak on purpose: a hover highlight or a blinking caret near the input also
 counts as a change. It catches the clear failures (a click on empty desktop, a key sent to
@@ -71,15 +84,16 @@ These tests are *negative*:
 A negative test that passes is reported **INCONCLUSIVE** (status 15) instead of SUCCESS
 when any GUI action before it in the run
 
-- was skipped by a ``when:`` condition (an action or a block),
-- reported ``effect: unchanged`` (and is not marked ``effect: none``),
-- failed its ``verify:``, or
-- when one of its ``controls:`` did not pass before it.
+- failed, or failed its ``verify:``,
+- (``prove``/``strict`` only) was skipped by a ``when:`` condition (an action or a block),
+- (``prove``/``strict`` only) reported ``effect: unchanged`` (and is not marked
+  ``effect: none``),
+
+or when one of its ``controls:`` did not pass before it.
 
 The result details list the actions and controls responsible. Positive tests are never
 affected by the implicit check. INCONCLUSIVE does not stop the run. The run verdict takes
-FAILED first, then INCONCLUSIVE, then TEST_MISSING, then WARNING or SUCCESS; ``adare
-experiment run`` exits non-zero for it, like for any verdict that is not a pass. The server
+FAILED first, then INCONCLUSIVE, then TEST_MISSING, then WARNING or SUCCESS. The server
 and both web UIs show it as its own badge.
 
 Explicit controls

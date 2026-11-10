@@ -88,7 +88,7 @@ def test_negative_test_with_proven_actions_stays_success():
     ],
 )
 def test_unproven_action_makes_negative_test_inconclusive(data, reason):
-    ledger = EffectLedger()
+    ledger = EffectLedger(mode='prove')
     ledger.record_action(_click(), _ok(**data))
     result = _judge(ledger, ABSENT)
     assert result.success  # not a failure: execution continues
@@ -98,6 +98,36 @@ def test_unproven_action_makes_negative_test_inconclusive(data, reason):
     assert ledger.test_statuses['gone'] == 'INCONCLUSIVE'
 
 
+@pytest.mark.parametrize('mode', ['warn', 'off'])
+@pytest.mark.parametrize('data', [{'skipped': True}, {'effect': 'unchanged'}])
+def test_warn_only_records_unchanged_and_when_skipped(mode, data):
+    # Real T2F playbooks: wake key, focus clicks, ctrl+a on selected text change nothing,
+    # and most use when: for defensive steps; under warn they must not flip negative tests
+    ledger = EffectLedger(mode=mode)
+    ledger.record_action(KeyboardAction(key='shift'), _ok(**data))
+    assert _judge(ledger, ABSENT).data['test_status'] == 'SUCCESS'
+    assert ledger.entries[0].effect == data.get('effect')  # still recorded
+
+
+@pytest.mark.parametrize(
+    ('data', 'reason'),
+    [({'verified': False, 'effect': 'unchanged'}, 'verify'), ({'success': False}, 'failed')],
+)
+def test_warn_still_counts_failed_actions_and_verify(data, reason):
+    ledger = EffectLedger(mode='warn')
+    success = data.pop('success', True)
+    ledger.record_action(_click(), ActionResult(success=success, message='', data=data))
+    result = _judge(ledger, ABSENT)
+    assert result.data['test_status'] == 'INCONCLUSIVE'
+    assert reason in result.data['inconclusive_reasons'][0]
+
+
+def test_strict_counts_when_skipped_like_prove():
+    ledger = EffectLedger(mode='strict')
+    ledger.record_action(_click(), _ok(skipped=True))
+    assert _judge(ledger, ABSENT).data['test_status'] == 'INCONCLUSIVE'
+
+
 def test_effect_none_is_not_a_problem():
     ledger = EffectLedger()
     ledger.record_action(KeyboardAction(key='alt', effect='none'), _ok(effect='none'))
@@ -105,7 +135,7 @@ def test_effect_none_is_not_a_problem():
 
 
 def test_skipped_block_counts_executed_block_does_not():
-    ledger = EffectLedger()
+    ledger = EffectLedger(mode='prove')
     ledger.record_action(BlockAction(actions=[]), _ok())
     assert ledger.entries == []
     ledger.record_action(BlockAction(actions=[]), _ok(skipped=True))
@@ -119,13 +149,13 @@ def test_non_gui_actions_are_ignored():
 
 
 def test_positive_test_is_never_affected_by_actions():
-    ledger = EffectLedger()
+    ledger = EffectLedger(mode='prove')
     ledger.record_action(_click(), _ok(effect='unchanged'))
     assert _judge(ledger, PRESENT).data['test_status'] == 'SUCCESS'
 
 
 def test_failed_negative_test_stays_failed():
-    ledger = EffectLedger()
+    ledger = EffectLedger(mode='prove')
     ledger.record_action(_click(), _ok(effect='unchanged'))
     failed = ActionResult(success=False, message='exists', data={'test_status': 'FAILED'})
     result = _judge(ledger, ABSENT, failed)
@@ -150,7 +180,7 @@ def test_explicit_control_must_pass_before():
 
 
 def test_controls_on_a_positive_test_only_check_the_controls():
-    ledger = EffectLedger()
+    ledger = EffectLedger(mode='prove')
     ledger.record_action(_click(), _ok(effect='unchanged'))
     test_def = {**PRESENT, 'name': 'p2', 'controls': ['missing']}
     reasons = _judge(ledger, test_def).data['inconclusive_reasons']
@@ -158,7 +188,7 @@ def test_controls_on_a_positive_test_only_check_the_controls():
 
 
 def test_deferred_test_only_counts_actions_before_its_position():
-    ledger = EffectLedger()
+    ledger = EffectLedger(mode='prove')
     ledger.record_action(_click(), _ok(effect='changed'))
     ledger.note_deferred('gone')
     ledger.record_action(_click('Later'), _ok(effect='unchanged'))  # after the test's position
