@@ -186,9 +186,55 @@ class TestQueryResult:
 
         assert_test_success(result)
         assert "0 rows" in result.details[0]
+        assert result.details[1] == "query result: []"
 
-    def test_query_result_failure_sql_syntax_error(self, create_sqlite_db):
-        """Test failure with invalid SQL syntax."""
+    def test_query_result_success_reports_rows_read(self, create_sqlite_db):
+        """A pass reports the rows read, not only their count."""
+        db_file = create_sqlite_db("test.db", "CREATE TABLE test_table (id INTEGER, typed INTEGER)", [(1, 1)])
+
+        test = QueryResult(
+            name="test_query",
+            parameter=QueryResultParameter(
+                dst=str(db_file),
+                query="SELECT count(*) AS n FROM test_table WHERE typed = 1",
+                expected_result=[{"n": 1}],
+            ),
+        )
+        result = test.test()
+
+        assert_test_success(result)
+        assert result.details[1] == "query result: [{'n': 1}]"
+
+    def test_query_result_failure_row_count_reports_rows_read(self, create_sqlite_db):
+        """A row-count mismatch reports the rows read."""
+        db_file = create_sqlite_db("test.db", "CREATE TABLE test_table (id INTEGER, name TEXT)", [(1, "Alice")])
+
+        test = QueryResult(
+            name="test_query",
+            parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table", expected_rows=0),
+        )
+        result = test.test()
+
+        assert_test_failed(result)
+        assert result.details[1] == "query result: [{'id': 1, 'name': 'Alice'}]"
+
+    def test_query_result_long_result_detail_is_truncated(self, create_sqlite_db):
+        """A large result is cut in the details, with the row count."""
+        db_file = create_sqlite_db(
+            "test.db", "CREATE TABLE test_table (id INTEGER, name TEXT)", [(i, "x" * 50) for i in range(200)]
+        )
+
+        test = QueryResult(
+            name="test_query", parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table")
+        )
+        result = test.test()
+
+        assert_test_success(result)
+        assert result.details[1].endswith("... (truncated, 200 rows)")
+        assert len(result.details[1]) < 2100
+
+    def test_query_result_error_sql_syntax_error(self, create_sqlite_db):
+        """Invalid SQL cannot be evaluated: an error, not a failure."""
         db_file = create_sqlite_db("test.db", "CREATE TABLE test_table (id INTEGER, name TEXT)", [(1, "Alice")])
 
         test = QueryResult(
@@ -200,11 +246,11 @@ class TestQueryResult:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "SQLite error" in result.details[0]
 
-    def test_query_result_failure_table_not_exists(self, create_sqlite_db):
-        """Test failure when querying non-existent table."""
+    def test_query_result_error_table_not_exists(self, create_sqlite_db):
+        """A query on a missing table cannot be evaluated: an error, not a failure."""
         db_file = create_sqlite_db("test.db", "CREATE TABLE test_table (id INTEGER, name TEXT)", [(1, "Alice")])
 
         test = QueryResult(
@@ -212,18 +258,18 @@ class TestQueryResult:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "SQLite error" in result.details[0]
 
-    def test_query_result_failure_database_not_found(self, tmp_path):
-        """Test failure when database file doesn't exist, without creating one."""
+    def test_query_result_error_database_not_found(self, tmp_path):
+        """A missing database is an error, not a failure, and no empty database is created."""
         test = QueryResult(
             name="test_query",
             parameter=QueryResultParameter(dst=str(tmp_path / "nonexistent.db"), query="SELECT * FROM test_table"),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
         assert not (tmp_path / "nonexistent.db").exists()
 
