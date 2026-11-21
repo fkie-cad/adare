@@ -294,6 +294,12 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   commands as suggestions, instead of filling the disk mid-run.
 
 ### Changed
+- Run screenshots (`reporting/screenshots/`, failure evidence) are re-encoded losslessly
+  as PNG at zlib level 9 in a background thread after they are written: pixel-identical,
+  roughly 25-50% smaller. The file is swapped atomically and only when smaller; a run
+  waits for pending jobs before it finishes. The file's sha256 is no longer that of the
+  bytes the guest sent. `ADARE_SCREENSHOT_PNG_LEVEL=0-9` picks the level, `off` keeps
+  the captured bytes.
 - Locked dependencies upgraded to clear the 68 pip-audit advisories (authlib 1.9.5,
   certifi 2026.10.23, dnspython 2.9.2, fastmcp 3.4.11, filelock 4.2.9, joserfc 1.8.0,
   mcp 1.30.0, opentelemetry-api 1.45.2, pillow 13.0.0, setuptools 84.2.1). The guest
