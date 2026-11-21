@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from adare.backend.events.emitters import emit_action
+from adare.backend.experiment.screenshot_store import store_screenshot
 from adare.types.step_actions import ExecuteAction, FindAction
 
 from .base import ActionResult, get_target_info, serialize_target
@@ -554,10 +555,8 @@ class TargetResolutionExecutor:
             # Increment counter for next screenshot
             self.screenshot_counter += 1
 
-            # Decode and save the image
-            image_data = base64.b64decode(screenshot_base64)
-            with open(filepath, 'wb') as f:
-                f.write(image_data)
+            # Decode and save the image (recompressed losslessly in the background)
+            store_screenshot(filepath, base64.b64decode(screenshot_base64))
 
             log.debug(f"Debug screenshot saved: {filepath}")
 

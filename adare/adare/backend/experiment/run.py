@@ -692,6 +692,11 @@ async def experiment_run(
                     await step_runner.run_cleanup_step(
                         vm_manager.cleanup_vm, experiment_run_context, post_interrupt=True
                     )
+            # Let background screenshot recompression finish before the run counts as done
+            from adare.backend.experiment.screenshot_store import wait_for_pending
+
+            await asyncio.to_thread(wait_for_pending)
+
             # Give time for all events to be processed before stopping
             await asyncio.sleep(2)
 

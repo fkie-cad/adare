@@ -28,6 +28,8 @@ from typing import Any
 
 import attrs
 
+from adare.backend.experiment.screenshot_store import store_screenshot
+
 log = logging.getLogger(__name__)
 
 EVIDENCE_ENV = "ADARE_FAILURE_EVIDENCE"
@@ -99,7 +101,7 @@ def _write_png(path: Path, screenshot_base64: str | None) -> bool:
     if not screenshot_base64:
         return False
     try:
-        path.write_bytes(base64.b64decode(screenshot_base64))
+        store_screenshot(path, base64.b64decode(screenshot_base64))
         return True
     except (OSError, ValueError, binascii.Error) as exc:
         log.warning(f"Could not write failure screenshot {path}: {exc}")
