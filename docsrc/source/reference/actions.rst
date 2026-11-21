@@ -136,6 +136,14 @@ Configure experiment-wide behavior:
        parallel_tests: false      # Run tests in parallel
        cache_screenshots: true    # Cache images for speed
 
+**Screenshot file size.** Run screenshots (``reporting/screenshots/*.png`` and failure
+evidence) are written as captured, then re-encoded losslessly at PNG zlib level 9 in a
+background thread. The pixels stay identical and the files get roughly 25-50% smaller. A
+file is swapped atomically, and only when the result is smaller. The run waits for pending
+jobs before it finishes. Because of this, a file's hash differs from that of the bytes the
+guest sent. Set the environment variable ``ADARE_SCREENSHOT_PNG_LEVEL`` to ``0``-``9`` for
+another level, or to ``off`` to keep the captured bytes.
+
 Platform-Specific Settings
 ===========================
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from adare.backend.events.emitters import emit_action
+from adare.backend.experiment.screenshot_store import store_screenshot
 from adare.types.playbook import (
     ClickAction,
     ClickVerify,
@@ -458,10 +459,8 @@ class GUIActionsMixin(_Host):
 
             filepath = screenshots_dir / filename
 
-            # Decode and save the image
-            image_data = base64.b64decode(screenshot_base64)
-            with open(filepath, 'wb') as f:
-                f.write(image_data)
+            # Decode and save the image (recompressed losslessly in the background)
+            store_screenshot(filepath, base64.b64decode(screenshot_base64))
 
             log.info(f"Explicit screenshot saved: {filepath}")
 
