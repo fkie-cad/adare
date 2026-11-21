@@ -145,14 +145,17 @@ Expected Failure Cases
          expected_rows: 0
        description: "Test sqlite_query_result with query returning no results"
 
-     - name: test_sqlite_query_invalid_table
+     - name: test_sqlite_query_wrong_count
        function: sqlite.query_result
        expect_to_fail: true
        parameter:
          dst: '/home/adare/test_sqlite/test.db'
-         query: 'SELECT * FROM nonexistent_table'
-         expected_rows: 0
-       description: "Test sqlite_query_result with invalid table"
+         query: 'SELECT * FROM users'
+         expected_rows: 10
+       description: "Test sqlite_query_result with a wrong expected count"
+
+``expect_to_fail`` inverts only a pass or a failure. A database that cannot be evaluated (missing
+file, SQL error) ends with an error, and an error stays an error.
 
 Common Use Cases
 ----------------
@@ -202,22 +205,26 @@ Query Features
 Return Values
 -------------
 
+A failure means the query ran and its result did not match; an error means the database could
+not be evaluated. Every result after the query ran reports the rows read as
+``query result: [...]`` (cut after 2000 characters, with the row count).
+
 **Success**
   Returns success when query executes successfully and results match expectations
 
 **Failure**
-  Returns failure when:
+  Returns failure when the query ran and:
 
   - Query result row count doesn't match expected count
   - Query result content doesn't match expected result
   - Query returns no results when results were expected
-  - SQL syntax errors in the query
-  - Database file doesn't exist (no empty database is created)
-  - SQLite database corruption or connection issues
 
 **Execution Error**
   Returns execution error when:
 
+  - Database file doesn't exist (no empty database is created)
+  - SQL errors: syntax, unknown table or column, a corrupt or unreadable database
+  - The glob in ``dst`` does not match exactly one file
   - Database file cannot be read or copied (e.g. permission denied)
   - Invalid placeholder comparisons
 
@@ -229,31 +236,28 @@ Example Results
    # Success case - row count match (WAL-mode database)
    result: success
    details:
-     - "query returned 3 rows"
+     - "query returned 1 rows"
+     - "query result: [{'n': 1}]"
      - "queried snapshot: app.db sha256=9f2c...e41a"
      - "queried snapshot: app.db-wal sha256=0b7d...93c5"
-
-   # Success case - specific result match
-   result: success
-   details:
-     - "query returned 1 rows"
 
    # Failure case - row count mismatch
    result: failed
    details:
      - "expected 5 rows, got 3"
+     - "query result: [{'id': 1}, {'id': 2}, {'id': 3}]"
 
    # Failure case - result content mismatch
    result: failed
    details:
      - "query result does not match expected result. Got: [{'count': 3}]"
 
-   # Failure case - SQL error
-   result: failed
+   # Error case - SQL error
+   result: error
    details:
      - "SQLite error executing query: SELECT * FROM nonexistent_table - no such table: nonexistent_table"
 
-   # Failure case - missing database
-   result: failed
+   # Error case - missing database
+   result: error
    details:
      - "database file /path/to/missing.db does not exist"

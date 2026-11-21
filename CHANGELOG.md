@@ -300,6 +300,14 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   waits for pending jobs before it finishes. The file's sha256 is no longer that of the
   bytes the guest sent. `ADARE_SCREENSHOT_PNG_LEVEL=0-9` picks the level, `off` keeps
   the captured bytes.
+- `sqlite.query_result` now ends with an **error**, not a failure, when the database cannot be
+  evaluated: a missing database file, or any SQL error (syntax, unknown table or column, a
+  corrupt or unreadable database). A failure now always means the query ran and the result did
+  not match, so `expect_to_fail` can no longer turn a missing database into a pass (errors are
+  never inverted). Playbooks that used `expect_to_fail` on a missing table or database get an
+  error instead; assert absence with a query that runs (e.g. `expected_rows: 0`). Every result
+  after the query ran, a pass included, now reports the rows read as `query result: [...]`
+  (cut after 2000 characters).
 - Locked dependencies upgraded to clear the 68 pip-audit advisories (authlib 1.9.5,
   certifi 2026.10.23, dnspython 2.9.2, fastmcp 3.4.11, filelock 4.2.9, joserfc 1.8.0,
   mcp 1.30.0, opentelemetry-api 1.45.2, pillow 13.0.0, setuptools 84.2.1). The guest
