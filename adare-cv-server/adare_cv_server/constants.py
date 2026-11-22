@@ -173,7 +173,7 @@ class OCRProfiles:
     """Pinned OCR profiles: engine, model files (sha256) and parameters.
 
     OCR decides where the client clicks, so any change here changes experiment
-    results. Changing a value means a new profile name, a regenerated golden test
+    results. Changing a value means a new profile name, an updated golden test
     (``tests/test_ocr_engines.py``) and an A/B over real experiments.
     """
 
@@ -210,7 +210,7 @@ class OCRProfiles:
         ),
     }
 
-    # RapidOCR parameters (benchmarked 2026-11-01 on 60 MyProject screenshots).
+    # RapidOCR parameters (benchmarked 2026-11-01 on 60 real experiment screenshots).
     # Detection never downscales: limit_type "max" with a side limit far above any
     # screen equals the planned max(1920, image side) for every frame up to 8192 px.
     RAPIDOCR_PARAMS = {

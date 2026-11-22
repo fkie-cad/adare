@@ -42,6 +42,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `ctx.resolve_globfilepath`. Guide: *Files inside archives*.
 
 ### Changed
+- cv-server: the OCR golden test no longer ships real desktop screenshots; it pins the
+  profile, the model hashes and the text read from rendered UI-string frames.
+- Neutral names in comments, tests and docs (example project label `MyProject`).
 - The file-content testfunctions now end with an **error**, not a failure, when they cannot
   read their file: the path does not exist, a glob matches no file or more than one, or the
   content cannot be parsed (invalid JSON, a malformed JSONL line with `skip_malformed: false`,
@@ -110,7 +113,7 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - pcap captures (`--capture-pcap`) no longer contain ADARE's own traffic: after the VM
   stops, packets of the adarevm WebSocket (the `adarevm` hostfwd, guest port 18765, incl.
   every `pull`) and of the SLIRP SMB share (`10.0.2.4`) are removed; every other record is
-  copied byte for byte. This was typically >90% of a capture (one MyProject run: 20.3 MB ->
+  copied byte for byte. This was typically >90% of a capture (one run: 20.3 MB ->
   61 KB). `<machine>.pcap.filter.json` next to the pcap records the rules, the packet
   counts and the sha256 of the raw and the filtered capture. On by default; keep the raw
   capture with `--no-filter-pcap` or `settings.filter_pcap: false`.
@@ -149,7 +152,7 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - cv-server: `--ocr-engine {rapidocr,paddle}` / `--ocr-lang {latin,en}` (env
   `ADARE_OCR_ENGINE` / `ADARE_OCR_LANG`), `ADARE_OCR_THREADS` (onnxruntime threads,
   default 4), `ADARE_OCR_MODEL_DIR`.
-- cv-server: golden OCR test on real MyProject screenshots and rendered German UI text
+- cv-server: golden OCR test on real screenshots and rendered German UI text
   (`make test-cv`), and `adare-cv-server/scripts/ocr_compare.py`, an offline A/B of two
   OCR profiles over a project's recorded runs and text queries.
 - Automatic test-run retention: every test-mode run (`adare experiment run` /
@@ -372,7 +375,7 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - **OCR engine: RapidOCR is the new default.** New cv-servers use the pinned profile
   `rapidocr-v5m-latin`: RapidOCR on onnxruntime (CPU on Linux, Windows and macOS),
   PP-OCRv5 mobile detection + mobile Latin recognition, model files verified by sha256
-  (a mismatch is a hard error). Measured on real MyProject screenshots: 0.2-0.3 s and ~1 GB
+  (a mismatch is a hard error). Measured on real experiment screenshots: 0.2-0.3 s and ~1 GB
   per frame instead of 11.3 s and 6-21 GB (PaddleOCR), word recall 97.4% vs 95.1%,
   rendered German UI lines 92% vs 76%. OCR results - and so clicks - can differ from
   the PaddleOCR runs (about one in six anchored-line queries; two words up to ~30 px
@@ -635,7 +638,7 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - SMB file transfer no longer reverts host-written run files. The SMB share serves a
   copy of the run directory taken at VM setup, and the writeback at retrieval copied
   that whole copy back, resetting every file the host kept writing (`logs/mcp_gui.log`,
-  `qemu_debug.log`, ...) to its setup-time content and mtime: SMB runs (e.g. all MyProject
+  `qemu_debug.log`, ...) to its setup-time content and mtime: SMB runs (e.g. all
   arm64 runs) kept only the cv-server's first ~2 s of log, losing every OCR/CV call.
   The writeback now copies only files the guest created or changed since staging
   (replacing the `adare.log`-only exclusion).

@@ -1,4 +1,4 @@
-"""click ``verify`` / ``retries`` / ``verify_timeout`` (MyProject gap G7) and the click settle env.
+"""click ``verify`` / ``retries`` / ``verify_timeout`` and the click settle env.
 
 No VM: the target-resolution executor and the GUI executor are fakes.
 """

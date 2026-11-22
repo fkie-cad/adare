@@ -1,4 +1,4 @@
-"""Evidence on a failed playbook action (MyProject gap G8).
+"""Evidence on a failed playbook action.
 
 When an action fails (target not found, ``wait_until`` timeout, command error, ...) the run
 used to keep only the error message; the screenshot of the failing search existed only with

@@ -1,4 +1,4 @@
-"""Evidence on a failed action and the playbook-level ``on_failure:`` list (MyProject gap G8).
+"""Evidence on a failed action and the playbook-level ``on_failure:`` list.
 
 The controller runs against a fake action executor, so no VM is needed.
 """

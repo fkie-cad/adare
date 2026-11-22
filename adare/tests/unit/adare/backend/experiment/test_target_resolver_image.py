@@ -1,4 +1,4 @@
-"""Image targets: offset ``base`` honoured, floor filter, ``min_margin`` (MyProject gaps G4/G5).
+"""Image targets: offset ``base`` honoured, floor filter, ``min_margin``.
 
 The CV server is replaced by a fake MCP client, so these tests need no VM and no OpenCV.
 """
