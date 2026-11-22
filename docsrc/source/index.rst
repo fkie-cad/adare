@@ -44,7 +44,7 @@ Key Use Cases
    Test how forensic tools behave across different OS versions and validate their reliability
 
 **Artifact Analysis**
-   Analyze how user actions create, modify, or delete forensic artifacts (registry entries, file timestamps, browser history, etc.)
+   Analyze how user actions create, modify, or delete forensic artifacts (registry entries, file timestamps, application databases, etc.)
 
 **Research & Education**
    Create reproducible experiments for forensic research papers or educational content

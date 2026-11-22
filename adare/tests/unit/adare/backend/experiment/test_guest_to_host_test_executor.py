@@ -53,7 +53,7 @@ class FileContentTest(BasicTest):
 
 @attrs.define
 class SidecarParam(Parameter):
-    dst: str = '/home/user/places.sqlite'
+    dst: str = '/home/user/app.db'
 
 
 @attrs.define
@@ -398,19 +398,19 @@ class TestSidecarPulling:
 
     @pytest.mark.asyncio
     async def test_pulls_existing_sidecars_without_cache(self, tmp_path):
-        executor, guest_file = self._make_executor(tmp_path, {'/home/user/places.sqlite-wal'})
+        executor, guest_file = self._make_executor(tmp_path, {'/home/user/app.db-wal'})
 
         result = await executor._execute_file_based_test('t', 'sqlite.query_result', SidecarTest())
 
         assert result.status == StatusEnum.SUCCESS
         assert guest_file.pull_file.await_args_list == [
-            (('/home/user/places.sqlite',), {'force': True}),
-            (('/home/user/places.sqlite-wal',), {'force': True}),
+            (('/home/user/app.db',), {'force': True}),
+            (('/home/user/app.db-wal',), {'force': True}),
         ]
 
     @pytest.mark.asyncio
     async def test_removes_stale_local_sidecar_gone_from_guest(self, tmp_path):
-        stale = tmp_path / 'home/user/places.sqlite-wal'
+        stale = tmp_path / 'home/user/app.db-wal'
         stale.parent.mkdir(parents=True)
         stale.write_bytes(b'from an earlier pull')
         executor, _ = self._make_executor(tmp_path, set())
@@ -421,7 +421,7 @@ class TestSidecarPulling:
 
     @pytest.mark.asyncio
     async def test_sidecar_pull_failure_is_an_error(self, tmp_path):
-        executor, guest_file = self._make_executor(tmp_path, {'/home/user/places.sqlite-wal'})
+        executor, guest_file = self._make_executor(tmp_path, {'/home/user/app.db-wal'})
 
         async def pull(path, force=False):
             if path.endswith('-wal'):
@@ -433,19 +433,19 @@ class TestSidecarPulling:
         result = await executor._execute_file_based_test('t', 'sqlite.query_result', SidecarTest())
 
         assert result.status == StatusEnum.ERROR
-        assert 'places.sqlite-wal' in result.details[0]
+        assert 'app.db-wal' in result.details[0]
         executor._run_test.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_glob_pulls_sidecars_of_each_match(self, tmp_path):
-        executor, guest_file = self._make_executor(tmp_path, {'/home/user/places.sqlite-journal'})
-        guest_file.resolve_guest_glob = AsyncMock(return_value=['/home/user/places.sqlite'])
-        instance = SidecarTest(parameter=SidecarParam(dst='/home/*/places.sqlite'))
+        executor, guest_file = self._make_executor(tmp_path, {'/home/user/app.db-journal'})
+        guest_file.resolve_guest_glob = AsyncMock(return_value=['/home/user/app.db'])
+        instance = SidecarTest(parameter=SidecarParam(dst='/home/*/app.db'))
 
         await executor._execute_file_based_test('t', 'sqlite.query_result', instance)
 
         pulled = [c.args[0] for c in guest_file.pull_file.await_args_list]
-        assert pulled == ['/home/user/places.sqlite', '/home/user/places.sqlite-journal']
+        assert pulled == ['/home/user/app.db', '/home/user/app.db-journal']
 
     @pytest.mark.asyncio
     async def test_tests_without_sidecars_keep_cached_pull(self, tmp_path):

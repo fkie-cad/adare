@@ -21,7 +21,8 @@ In a test-driven workflow you:
 1. **Define expectations first** -- specify which files, registry keys, database
    entries, or log lines should exist (or not exist) after a set of user actions.
 2. **Automate the actions** -- write a playbook that performs those user actions
-   inside a VM (browsing a website, opening a document, deleting a file, etc.).
+   inside a VM (creating an entry in an application, opening a document, deleting
+   a file, etc.).
 3. **Let ADARE evaluate** -- the framework executes the actions, runs every test
    assertion, and records pass/fail results with full context.
 
@@ -45,7 +46,7 @@ Browse the testsets to find functions that match your artifact type:
 - **json** -- key existence, value assertions in JSON files
 - **csv** -- column checks, row matching in CSV/TSV files
 - **xml** -- XPath queries, element assertions
-- **sqlite** -- SQL queries against SQLite databases (browser history, logs)
+- **sqlite** -- SQL queries against SQLite databases (application data, logs)
 - **linux** -- syslog entries, package state, service status
 - **windows** -- registry keys/values, event log entries, Prefetch files
 
@@ -54,10 +55,10 @@ Defining pass/fail criteria
 
 For each artifact, decide:
 
-- **Must exist** -- e.g., a browser history database must be present after
-  visiting a URL.
-- **Must contain specific data** -- e.g., the visited URL must appear in the
-  ``moz_places`` table.
+- **Must exist** -- e.g., an application's database must be present after
+  the first entry was saved.
+- **Must contain specific data** -- e.g., the new entry must appear in the
+  database's ``items`` table.
 - **Must not exist** -- e.g., a file must be absent after secure deletion.
 - **Must match a value** -- e.g., a registry key must hold a specific DWORD.
 
@@ -80,35 +81,35 @@ A test-driven playbook has four main sections: ``settings``, ``variables``,
        quality: 95
 
    variables:
-     target_url: "https://example.com/research"
-     history_db: "C:\\Users\\adare\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\*.default-release\\places.sqlite"
+     entry_title: "Research notes"
+     app_db: "C:\\Users\\adare\\AppData\\Roaming\\SomeApp\\data\\app.db"
 
    tests:
-     - name: history_db_exists
+     - name: app_db_exists
        function: standard.file_exists
        parameter:
-         dst: "{{ history_db }}"
+         dst: "{{ app_db }}"
 
-     - name: url_recorded
+     - name: entry_recorded
        function: sqlite.query_result_contains
        parameter:
-         dst: "{{ history_db }}"
-         query: "SELECT url FROM moz_places WHERE url LIKE '%example.com%'"
-         expected: "{{ target_url }}"
+         dst: "{{ app_db }}"
+         query: "SELECT title FROM items WHERE title LIKE '%Research%'"
+         expected: "{{ entry_title }}"
 
-     - name: favicon_stored
+     - name: thumbnail_stored
        function: standard.file_exists
        parameter:
-         dst: "C:\\Users\\adare\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\*.default-release\\favicons.sqlite"
+         dst: "C:\\Users\\adare\\AppData\\Roaming\\SomeApp\\data\\thumbnails.db"
 
    actions:
      - action: gui.open_application
        parameter:
-         name: firefox
+         name: someapp
 
      - action: gui.type_text
        parameter:
-         text: "{{ target_url }}"
+         text: "{{ entry_title }}"
 
      - action: keyboard.press
        parameter:
@@ -120,19 +121,19 @@ A test-driven playbook has four main sections: ``settings``, ``variables``,
 
      - action: test
        parameter:
-         name: history_db_exists
+         name: app_db_exists
 
      - action: test
        parameter:
-         name: url_recorded
+         name: entry_recorded
 
      - action: test
        parameter:
-         name: favicon_stored
+         name: thumbnail_stored
 
      - action: gui.close_application
        parameter:
-         name: firefox
+         name: someapp
 
 How tests integrate with actions
 --------------------------------
@@ -242,34 +243,35 @@ Three log files provide progressively deeper detail:
   location, click/type operations).
 
 
-End-to-End Example: Browser History Analysis
-=============================================
+End-to-End Example: Recent Items Analysis
+=========================================
 
-This example investigates which artifacts Firefox creates on Windows 11 when
-a user visits a URL, bookmarks it, and then clears recent history.
+This example investigates which artifacts a made-up application, SomeApp,
+leaves on Windows 11 when a user creates an entry, pins it, and then clears the
+recent-items list. Swap in the application, paths and tables you study.
 
 Step 1 -- Design the test plan
 ------------------------------
 
 We want to verify:
 
-1. After visiting a URL, the history database records it.
-2. After bookmarking, the bookmark entry exists.
-3. After clearing recent history (last hour), the URL is removed from history
-   but the bookmark persists.
+1. After creating an entry, the application's database records it as recent.
+2. After pinning, the pin exists.
+3. After clearing the recent items, the entry is gone from the recent list but
+   the pin persists.
 
 Step 2 -- Create the experiment
 -------------------------------
 
 .. code-block:: bash
 
-   adare experiment create firefox-history-analysis
+   adare experiment create recent-items-analysis
 
 Step 3 -- Write the playbook
 -----------------------------
 
 .. code-block:: yaml
-   :caption: experiments/firefox-history-analysis/playbook.yml
+   :caption: experiments/recent-items-analysis/playbook.yml
 
    settings:
      idle: 1.5
@@ -278,57 +280,64 @@ Step 3 -- Write the playbook
        format: png
 
    variables:
-     profile_glob: "C:\\Users\\adare\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\*.default-release"
-     places_db: "{{ profile_glob }}\\places.sqlite"
-     target_url: "https://www.iana.org/help/example-domains"
+     data_dir: "C:\\Users\\adare\\AppData\\Roaming\\SomeApp\\data"
+     app_db: "{{ data_dir }}\\app.db"
+     entry_title: "Example entry"
 
    tests:
-     - name: url_in_history
+     - name: entry_in_recent
        function: sqlite.query_result_contains
        parameter:
-         dst: "{{ places_db }}"
-         query: "SELECT url FROM moz_places WHERE url LIKE '%iana.org%'"
-         expected: "{{ target_url }}"
-
-     - name: bookmark_exists
-       function: sqlite.query_result_contains
-       parameter:
-         dst: "{{ places_db }}"
+         dst: "{{ app_db }}"
          query: >
-           SELECT p.url FROM moz_bookmarks b
-           JOIN moz_places p ON b.fk = p.id
-           WHERE p.url LIKE '%iana.org%'
-         expected: "{{ target_url }}"
+           SELECT i.title FROM recent r
+           JOIN items i ON r.item_id = i.id
+           WHERE i.title LIKE '%Example%'
+         expected: "{{ entry_title }}"
 
-     - name: history_cleared
+     - name: pin_exists
+       function: sqlite.query_result_contains
+       parameter:
+         dst: "{{ app_db }}"
+         query: >
+           SELECT i.title FROM pins p
+           JOIN items i ON p.item_id = i.id
+           WHERE i.title LIKE '%Example%'
+         expected: "{{ entry_title }}"
+
+     - name: recent_cleared
        function: sqlite.query_result_not_contains
        parameter:
-         dst: "{{ places_db }}"
+         dst: "{{ app_db }}"
          query: >
-           SELECT url FROM moz_historyvisits v
-           JOIN moz_places p ON v.place_id = p.id
-           WHERE p.url LIKE '%iana.org%'
-         expected: "{{ target_url }}"
+           SELECT i.title FROM recent r
+           JOIN items i ON r.item_id = i.id
+           WHERE i.title LIKE '%Example%'
+         expected: "{{ entry_title }}"
 
-     - name: bookmark_survives_clear
+     - name: pin_survives_clear
        function: sqlite.query_result_contains
        parameter:
-         dst: "{{ places_db }}"
+         dst: "{{ app_db }}"
          query: >
-           SELECT p.url FROM moz_bookmarks b
-           JOIN moz_places p ON b.fk = p.id
-           WHERE p.url LIKE '%iana.org%'
-         expected: "{{ target_url }}"
+           SELECT i.title FROM pins p
+           JOIN items i ON p.item_id = i.id
+           WHERE i.title LIKE '%Example%'
+         expected: "{{ entry_title }}"
 
    actions:
-     # --- Open Firefox and visit URL ---
+     # --- Open SomeApp and create an entry ---
      - action: gui.open_application
        parameter:
-         name: firefox
+         name: someapp
+
+     - action: keyboard.hotkey
+       parameter:
+         keys: ctrl+n
 
      - action: gui.type_text
        parameter:
-         text: "{{ target_url }}"
+         text: "{{ entry_title }}"
 
      - action: keyboard.press
        parameter:
@@ -338,45 +347,29 @@ Step 3 -- Write the playbook
        parameter:
          seconds: 5
 
-     # --- Verify history was recorded ---
+     # --- Verify the entry is listed as recent ---
      - action: test
        parameter:
-         name: url_in_history
+         name: entry_in_recent
 
-     # --- Bookmark the page ---
+     # --- Pin the entry ---
      - action: keyboard.hotkey
        parameter:
-         keys: ctrl+d
+         keys: ctrl+p
 
      - action: general.wait
        parameter:
          seconds: 2
 
-     - action: keyboard.press
-       parameter:
-         key: enter
-
-     - action: general.wait
-       parameter:
-         seconds: 2
-
-     # --- Verify bookmark exists ---
+     # --- Verify the pin exists ---
      - action: test
        parameter:
-         name: bookmark_exists
+         name: pin_exists
 
-     # --- Clear recent history (last hour) ---
-     - action: keyboard.hotkey
-       parameter:
-         keys: ctrl+shift+delete
-
-     - action: general.wait
-       parameter:
-         seconds: 2
-
+     # --- Clear the recent items ---
      - action: gui.click_text
        parameter:
-         text: "Last hour"
+         text: "Clear recent items"
 
      - action: gui.click_text
        parameter:
@@ -386,25 +379,25 @@ Step 3 -- Write the playbook
        parameter:
          seconds: 3
 
-     # --- Verify history cleared but bookmark survived ---
+     # --- Verify recent items cleared but the pin survived ---
      - action: test
        parameter:
-         name: history_cleared
+         name: recent_cleared
 
      - action: test
        parameter:
-         name: bookmark_survives_clear
+         name: pin_survives_clear
 
      - action: gui.close_application
        parameter:
-         name: firefox
+         name: someapp
 
 Step 4 -- Iterate in test mode
 ------------------------------
 
 .. code-block:: bash
 
-   adare experiment run firefox-history-analysis -e win11
+   adare experiment run recent-items-analysis -e win11
 
 Review results with ``adare runs info``. Adjust wait times, fix image references,
 or refine SQL queries as needed. Repeat until all four tests pass consistently.
@@ -414,7 +407,7 @@ Step 5 -- Production run
 
 .. code-block:: bash
 
-   adare experiment run firefox-history-analysis -e win11 --production
+   adare experiment run recent-items-analysis -e win11 --production
 
 The production run locks the playbook and generates the official forensic
 record. To compare behavior across OS versions, run the same experiment against
@@ -422,7 +415,7 @@ additional environments:
 
 .. code-block:: bash
 
-   adare experiment run firefox-history-analysis -e win10 --production
+   adare experiment run recent-items-analysis -e win10 --production
 
 
 See Also
