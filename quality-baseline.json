@@ -45,11 +45,11 @@
     "adare/adare/hypervisor/qemu/libvirt_xml_builder.py": 1031,
     "adare/adare/hypervisor/qemu/mixins/commands.py": 1058,
     "adare/adare/hypervisor/qemu/vm.py": 1809,
-    "adare/appdata/testfunctions/excel/excel.py": 1200,
+    "adare/appdata/testfunctions/excel/excel.py": 1116,
     "adare/tests/unit/testfunctions/test_csv.py": 1241,
     "adare/tests/unit/testfunctions/test_excel.py": 1575,
     "adare/tests/unit/testfunctions/test_standard.py": 1123,
-    "adare/tests/unit/testfunctions/test_xml.py": 1324,
+    "adare/tests/unit/testfunctions/test_xml.py": 1314,
     "adarelib/adarelib/common/variables.py": 1367
   }
 }

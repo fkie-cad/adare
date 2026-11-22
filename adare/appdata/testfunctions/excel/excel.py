@@ -17,9 +17,19 @@ from adarelib.testset.compare import compare_row_sequences, compare_row_sets, ex
 import logging
 
 # What pandas/openpyxl raise for a file that is not a readable workbook (wrong
-# format, corrupt archive, missing sheet). These fail the test; anything else
-# is a bug and surfaces as an ERROR result through the testfunction decorator.
+# format, corrupt archive). The test cannot be evaluated, so these are errors;
+# anything else is a bug and surfaces as an ERROR result through the testfunction decorator.
 UNREADABLE_WORKBOOK_ERRORS = (ValueError, KeyError, zipfile.BadZipFile, InvalidFileException)
+
+
+class SheetNotFoundError(LookupError):
+    """The workbook was read but has no sheet with the requested name or index.
+
+    Kept apart from ``ValueError`` (which pandas/openpyxl raise for unreadable
+    workbooks): a missing sheet in the file under test is a finding (FAILED), an
+    unreadable workbook is not (ERROR).
+    """
+
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +59,24 @@ def _normalize_cell_value(value) -> str:
     return str(value)
 
 
+def _unresolved_path_error(label: str, path: str, status: str) -> TestResult:
+    """ERROR for a glob that matched no file or several, listing the directory to help fix the path."""
+    try:
+        search_path = Path(path).parent if '/' in path or '\\' in path else Path('.')
+        available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
+        files_info = (
+            f"Available files in directory: {available_files}" if available_files else "No files found in directory"
+        )
+    except OSError as e:
+        files_info = f"Could not list directory contents: {e}"
+    return TestResult.error(
+        [
+            f"{label} with path {path} can't be used, because no unambiguous file could be identified "
+            f"(because {status}). {files_info}"
+        ]
+    )
+
+
 def _get_sheet_names(filepath: str) -> list[str]:
     """Get list of all sheet names in Excel file."""
     return pd.ExcelFile(filepath, engine='openpyxl').sheet_names
@@ -66,18 +94,20 @@ def _resolve_sheet_identifier(filepath: str, sheet: str | int) -> str:
         Sheet name as string
 
     Raises:
-        ValueError: If sheet not found
+        SheetNotFoundError: If the sheet is not in the workbook
     """
     sheet_names = _get_sheet_names(filepath)
 
     if isinstance(sheet, int):
         # Resolve by index
         if sheet < 0 or sheet >= len(sheet_names):
-            raise ValueError(f"Sheet index {sheet} out of range (file has {len(sheet_names)} sheets: {sheet_names})")
+            raise SheetNotFoundError(
+                f"Sheet index {sheet} out of range (file has {len(sheet_names)} sheets: {sheet_names})"
+            )
         return sheet_names[sheet]
     # Resolve by name
     if sheet not in sheet_names:
-        raise ValueError(f"Sheet '{sheet}' not found (available sheets: {sheet_names})")
+        raise SheetNotFoundError(f"Sheet '{sheet}' not found (available sheets: {sheet_names})")
     return sheet
 
 
@@ -268,8 +298,8 @@ def sheet_exists(ctx: TestContext, dst: str = '', sheet_name: str = '', regex_ma
     Use for: checking a GUI action added/renamed a worksheet.
 
     Args:
-        dst: Guest path to the .xlsx; a glob must match exactly one path. Missing or
-            unreadable files fail (permission/OS errors are execution errors).
+        dst: Guest path to the .xlsx; a glob must match exactly one path. A missing or
+            unreadable file is an error.
         sheet_name: Exact, case-sensitive sheet name, or a regex if ``regex_match``.
         regex_match: Treat ``sheet_name`` as a Python regex applied with ``re.match``
             (anchored at the start only); an invalid regex fails.
@@ -283,20 +313,7 @@ def sheet_exists(ctx: TestContext, dst: str = '', sheet_name: str = '', regex_ma
     # Resolve file path
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        try:
-            search_path = Path(dst).parent if '/' in dst or '\\' in dst else Path('.')
-            available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-            files_info = (
-                f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-            )
-        except (OSError, PermissionError, FileNotFoundError) as e:
-            files_info = f"Could not list directory contents: {e}"
-
-        return TestResult.failed(
-            [
-                f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'
-            ]
-        )
+        return _unresolved_path_error('file', dst, status)
 
     log.debug(f'dst file {dst_resolved} will be used for test sheet_exists')
 
@@ -324,11 +341,11 @@ def sheet_exists(ctx: TestContext, dst: str = '', sheet_name: str = '', regex_ma
         return TestResult.failed([f'sheet "{sheet_name}" not found', f'available sheets: {sheet_names}'])
 
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
+        return TestResult.error([f'file with path {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read Excel file {dst_resolved}")
     except UNREADABLE_WORKBOOK_ERRORS as e:
-        return TestResult.failed([f"Error reading Excel file {dst_resolved}: {e}"])
+        return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
 # ============================================================================
@@ -359,7 +376,7 @@ def cell_value_matches(
     use ``!re`` for dates and numbers when unsure.
 
     Args:
-        dst: Guest path to the .xlsx; a glob must match exactly one path. Missing file fails.
+        dst: Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error.
         row: 0-based row index in the raw sheet (row 0 = spreadsheet row 1); out of range fails.
         column: 0-based column index (A = 0); out of range fails.
         expected_value: Compared exactly with ``str(expected_value)`` (``None`` -> ``''``).
@@ -378,20 +395,7 @@ def cell_value_matches(
     # Resolve file path
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        try:
-            search_path = Path(dst).parent if '/' in dst or '\\' in dst else Path('.')
-            available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-            files_info = (
-                f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-            )
-        except (OSError, PermissionError, FileNotFoundError) as e:
-            files_info = f"Could not list directory contents: {e}"
-
-        return TestResult.failed(
-            [
-                f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'
-            ]
-        )
+        return _unresolved_path_error('file', dst, status)
 
     log.debug(f'dst file {dst_resolved} will be used for test cell_value_matches')
 
@@ -435,7 +439,7 @@ def cell_value_matches(
                         f'comparison: {message}',
                     ]
                 )
-            return TestResult.failed(
+            return TestResult.error(
                 [f'expected exactly one placeholder in expected_value, got {len(placeholder_names)}']
             )
 
@@ -464,14 +468,13 @@ def cell_value_matches(
         )
 
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
-    except ValueError as e:
-        # Sheet resolution errors
+        return TestResult.error([f'file with path {dst} does not exist'])
+    except SheetNotFoundError as e:
         return TestResult.failed([str(e)])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read Excel file {dst_resolved}")
     except UNREADABLE_WORKBOOK_ERRORS as e:
-        return TestResult.failed([f"Error reading Excel file {dst_resolved}: {e}"])
+        return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
 # ============================================================================
@@ -493,7 +496,7 @@ def contains_row(
     excel.cell_value_matches (beware float/date formatting).
 
     Args:
-        dst: Guest path to the .xlsx; a glob must match exactly one path. Missing file fails.
+        dst: Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error.
         entry: Expected row; a row must have exactly as many columns as the sheet's used width.
             Items compared as exact strings, or by type for ``!re``/``!timestamp`` tags.
         sheet: Sheet name (str) or 0-based index (int); unknown sheets fail.
@@ -508,20 +511,7 @@ def contains_row(
     # Resolve file path
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        try:
-            search_path = Path(dst).parent if '/' in dst or '\\' in dst else Path('.')
-            available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-            files_info = (
-                f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-            )
-        except (OSError, PermissionError, FileNotFoundError) as e:
-            files_info = f"Could not list directory contents: {e}"
-
-        return TestResult.failed(
-            [
-                f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'
-            ]
-        )
+        return _unresolved_path_error('file', dst, status)
 
     log.debug(f'dst file {dst_resolved} will be used for test contains_row')
 
@@ -577,14 +567,13 @@ def contains_row(
         )
 
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
-    except ValueError as e:
-        # Sheet resolution errors
+        return TestResult.error([f'file with path {dst} does not exist'])
+    except SheetNotFoundError as e:
         return TestResult.failed([str(e)])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read Excel file {dst_resolved}")
     except UNREADABLE_WORKBOOK_ERRORS as e:
-        return TestResult.failed([f"Error reading Excel file {dst_resolved}: {e}"])
+        return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
 # ============================================================================
@@ -612,7 +601,7 @@ def validate_columns(
     Use for: verifying a sheet's column layout/schema.
 
     Args:
-        dst: Guest path to the .xlsx; a glob must match exactly one path. Missing file fails.
+        dst: Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error.
         expected_columns: Non-empty list of header names; whitespace-stripped, case-sensitive.
             Empty header cells read as ``''`` and count as extra columns.
         sheet: Sheet name (str) or 0-based index (int).
@@ -630,29 +619,16 @@ def validate_columns(
     # Resolve file path
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        try:
-            search_path = Path(dst).parent if '/' in dst or '\\' in dst else Path('.')
-            available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-            files_info = (
-                f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-            )
-        except (OSError, PermissionError, FileNotFoundError) as e:
-            files_info = f"Could not list directory contents: {e}"
-
-        return TestResult.failed(
-            [
-                f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'
-            ]
-        )
+        return _unresolved_path_error('file', dst, status)
 
     log.debug(f'dst file {dst_resolved} will be used for test validate_columns')
 
     # Validate expected_columns parameter
     if not isinstance(expected_columns, list):
-        return TestResult.failed(['expected_columns must be a list'])
+        return TestResult.error(['expected_columns must be a list'])
 
     if not expected_columns:
-        return TestResult.failed(['expected_columns cannot be empty'])
+        return TestResult.error(['expected_columns cannot be empty'])
 
     try:
         # Read sheet
@@ -688,14 +664,13 @@ def validate_columns(
         return TestResult.failed(error_details)
 
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
-    except ValueError as e:
-        # Sheet resolution errors
+        return TestResult.error([f'file with path {dst} does not exist'])
+    except SheetNotFoundError as e:
         return TestResult.failed([str(e)])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read Excel file {dst_resolved}")
     except UNREADABLE_WORKBOOK_ERRORS as e:
-        return TestResult.failed([f"Error reading Excel file {dst_resolved}: {e}"])
+        return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
 # ============================================================================
@@ -750,20 +725,7 @@ def compare_rows(
     # Resolve file path
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        try:
-            search_path = Path(dst).parent if '/' in dst or '\\' in dst else Path('.')
-            available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-            files_info = (
-                f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-            )
-        except (OSError, PermissionError, FileNotFoundError) as e:
-            files_info = f"Could not list directory contents: {e}"
-
-        return TestResult.failed(
-            [
-                f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'
-            ]
-        )
+        return _unresolved_path_error('file', dst, status)
 
     log.debug(f'dst file {dst_resolved} will be used for test compare_rows')
 
@@ -772,38 +734,41 @@ def compare_rows(
     has_file = reference_file is not None
 
     if not has_embedded and not has_file:
-        return TestResult.failed(['Must provide either reference_rows or reference_file'])
+        return TestResult.error(['Must provide either reference_rows or reference_file'])
     if has_embedded and has_file:
-        return TestResult.failed(['Cannot provide both reference_rows and reference_file'])
+        return TestResult.error(['Cannot provide both reference_rows and reference_file'])
 
     # Load reference data from file if specified
     if has_file:
         ref_file_path, ref_status = ctx.resolve_globfilepath(reference_file)
         if not ref_file_path:
-            return TestResult.failed([f'reference_file {reference_file} not found (because {ref_status})'])
+            return TestResult.error([f'reference_file {reference_file} not found (because {ref_status})'])
 
         try:
             ref_rows = _read_excel_sheet(ref_file_path, sheet=reference_sheet, header_row=reference_header_row)
-        except ValueError as e:
-            return TestResult.failed([f'Error reading reference file: {e}'])
+        except SheetNotFoundError as e:
+            # The expectation cannot be built, so this is no finding about dst.
+            return TestResult.error([f'reference_file {reference_file}: {e}'])
         except FileNotFoundError:
-            return TestResult.failed([f'reference_file {reference_file} does not exist'])
+            return TestResult.error([f'reference_file {reference_file} does not exist'])
         except (PermissionError, OSError) as e:
             return TestResult.execution_error(e, f"Cannot read reference Excel file {ref_file_path}")
+        except UNREADABLE_WORKBOOK_ERRORS as e:
+            return TestResult.execution_error(e, f"Cannot parse reference Excel file {ref_file_path}")
     else:
         # Existing validation for embedded reference_rows
         ref_rows = reference_rows
 
         # Validate reference_rows structure
         if not isinstance(ref_rows, list):
-            return TestResult.failed(['reference_rows must be a list of rows'])
+            return TestResult.error(['reference_rows must be a list of rows'])
 
         if not ref_rows:
-            return TestResult.failed(['reference_rows cannot be empty'])
+            return TestResult.error(['reference_rows cannot be empty'])
 
         for i, row_item in enumerate(ref_rows):
             if not isinstance(row_item, list):
-                return TestResult.failed([f'reference_rows[{i}] must be a list, got {type(row_item).__name__}'])
+                return TestResult.error([f'reference_rows[{i}] must be a list, got {type(row_item).__name__}'])
 
     try:
         # Read sheet
@@ -835,14 +800,13 @@ def compare_rows(
         )
 
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
-    except ValueError as e:
-        # Sheet resolution errors
+        return TestResult.error([f'file with path {dst} does not exist'])
+    except SheetNotFoundError as e:
         return TestResult.failed([str(e)])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read Excel file {dst_resolved}")
     except UNREADABLE_WORKBOOK_ERRORS as e:
-        return TestResult.failed([f"Error reading Excel file {dst_resolved}: {e}"])
+        return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
 # ============================================================================
@@ -894,38 +858,12 @@ def compare_sheets(
     # Resolve actual file path
     actual_path, actual_status = ctx.resolve_globfilepath(actual)
     if not actual_path:
-        try:
-            search_path = Path(actual).parent if '/' in actual or '\\' in actual else Path('.')
-            available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-            files_info = (
-                f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-            )
-        except (OSError, PermissionError, FileNotFoundError) as e:
-            files_info = f"Could not list directory contents: {e}"
-
-        return TestResult.failed(
-            [
-                f'actual file with path {actual} can\'t be used, because no unambiguous file could be identified (because {actual_status}). {files_info}'
-            ]
-        )
+        return _unresolved_path_error('actual file', actual, actual_status)
 
     # Resolve reference file path
     reference_path, reference_status = ctx.resolve_globfilepath(reference)
     if not reference_path:
-        try:
-            search_path = Path(reference).parent if '/' in reference or '\\' in reference else Path('.')
-            available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-            files_info = (
-                f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-            )
-        except (OSError, PermissionError, FileNotFoundError) as e:
-            files_info = f"Could not list directory contents: {e}"
-
-        return TestResult.failed(
-            [
-                f'reference file with path {reference} can\'t be used, because no unambiguous file could be identified (because {reference_status}). {files_info}'
-            ]
-        )
+        return _unresolved_path_error('reference file', reference, reference_status)
 
     log.debug(
         f'actual file {actual_path} sheet {actual_sheet} will be compared against reference file {reference_path} sheet {reference_sheet} for test compare_sheets'
@@ -934,7 +872,11 @@ def compare_sheets(
     try:
         # Read sheets
         actual_rows = _read_excel_sheet(actual_path, sheet=actual_sheet, header_row=header_row)
-        reference_rows = _read_excel_sheet(reference_path, sheet=reference_sheet, header_row=header_row)
+        try:
+            reference_rows = _read_excel_sheet(reference_path, sheet=reference_sheet, header_row=header_row)
+        except SheetNotFoundError as e:
+            # A missing reference sheet leaves nothing to compare against: no finding about actual.
+            return TestResult.error([f'reference file {reference}: {e}'])
 
         # Log contents for debugging
         log.debug(f"Actual sheet contains {len(actual_rows)} rows")
@@ -964,15 +906,14 @@ def compare_sheets(
     except FileNotFoundError as e:
         error_str = str(e)
         if actual_path in error_str or actual in error_str:
-            return TestResult.failed([f'actual file with path {actual} does not exist'])
-        return TestResult.failed([f'reference file with path {reference} does not exist'])
-    except ValueError as e:
-        # Sheet resolution errors
+            return TestResult.error([f'actual file with path {actual} does not exist'])
+        return TestResult.error([f'reference file with path {reference} does not exist'])
+    except SheetNotFoundError as e:
         return TestResult.failed([str(e)])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, "Cannot read Excel files")
     except UNREADABLE_WORKBOOK_ERRORS as e:
-        return TestResult.failed([f"Error reading Excel files: {e}"])
+        return TestResult.execution_error(e, "Cannot parse Excel files")
 
 
 # ============================================================================
@@ -1029,38 +970,12 @@ def compare_files(
     # Resolve actual file path
     actual_path, actual_status = ctx.resolve_globfilepath(actual)
     if not actual_path:
-        try:
-            search_path = Path(actual).parent if '/' in actual or '\\' in actual else Path('.')
-            available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-            files_info = (
-                f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-            )
-        except (OSError, PermissionError, FileNotFoundError) as e:
-            files_info = f"Could not list directory contents: {e}"
-
-        return TestResult.failed(
-            [
-                f'actual file with path {actual} can\'t be used, because no unambiguous file could be identified (because {actual_status}). {files_info}'
-            ]
-        )
+        return _unresolved_path_error('actual file', actual, actual_status)
 
     # Resolve reference file path
     reference_path, reference_status = ctx.resolve_globfilepath(reference)
     if not reference_path:
-        try:
-            search_path = Path(reference).parent if '/' in reference or '\\' in reference else Path('.')
-            available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-            files_info = (
-                f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-            )
-        except (OSError, PermissionError, FileNotFoundError) as e:
-            files_info = f"Could not list directory contents: {e}"
-
-        return TestResult.failed(
-            [
-                f'reference file with path {reference} can\'t be used, because no unambiguous file could be identified (because {reference_status}). {files_info}'
-            ]
-        )
+        return _unresolved_path_error('reference file', reference, reference_status)
 
     log.debug(f'comparing Excel files: {actual_path} vs {reference_path} for test compare_files')
 
@@ -1076,7 +991,8 @@ def compare_files(
         try:
             sheet_matches = _match_sheets(actual_sheets, reference_sheets, sheet_mode, specific_sheets)
         except ValueError as e:
-            return TestResult.failed([str(e)])
+            # Invalid sheet_mode parameter
+            return TestResult.error([str(e)])
 
         # Check for missing/extra sheets
         if sheet_mode == "by_name":
@@ -1192,9 +1108,9 @@ def compare_files(
     except FileNotFoundError as e:
         error_str = str(e)
         if actual_path in error_str or actual in error_str:
-            return TestResult.failed([f'actual file with path {actual} does not exist'])
-        return TestResult.failed([f'reference file with path {reference} does not exist'])
+            return TestResult.error([f'actual file with path {actual} does not exist'])
+        return TestResult.error([f'reference file with path {reference} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, "Cannot read Excel files")
     except UNREADABLE_WORKBOOK_ERRORS as e:
-        return TestResult.failed([f"Error reading Excel files: {e}"])
+        return TestResult.execution_error(e, "Cannot parse Excel files")

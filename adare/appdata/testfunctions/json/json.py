@@ -29,7 +29,7 @@ def _compare_values(ctx, actual_value, expected_value, regex_match=False):
                     return True, f'value "{actual_value}" matches regex "{expected_value.string}"'
                 return False, f'value "{actual_value}" does not match regex "{expected_value.string}"'
             except re.error as e:
-                return False, f'Invalid regex pattern: {expected_value.string} - {e}'
+                raise re.error(f'invalid regex pattern {expected_value.string!r}: {e}') from e
     except ImportError:
         pass  # YamlRegexString not available, continue with normal processing
 
@@ -45,7 +45,7 @@ def _compare_values(ctx, actual_value, expected_value, regex_match=False):
                     return True, f'value "{actual_value}" matches regex "{expected_value}"'
                 return False, f'value "{actual_value}" does not match regex "{expected_value}"'
             except re.error as e:
-                return False, f'Invalid regex pattern: {expected_value} - {e}'
+                raise re.error(f'invalid regex pattern {expected_value!r}: {e}') from e
         else:
             # Direct value comparison
             if actual_value == expected_value:
@@ -128,7 +128,7 @@ def contains_key(ctx, dst: str, key_path: str):
 
     Args:
         dst: Guest path to the JSON file; a glob must match exactly one path. A missing file
-            or invalid JSON fails. Read with the guest's default encoding.
+            or invalid JSON is an error. Read with the guest's default encoding.
         key_path: Dot path from the root object, e.g. ``user.profile.name``. ``*`` expands
             all values of an object (``config.*.enabled``), ``name[*]`` all elements of array
             ``name`` (``users[*].email``). No numeric indexes; keys containing ``.`` and
@@ -142,7 +142,7 @@ def contains_key(ctx, dst: str, key_path: str):
     """
     dst_path, status = ctx.resolve_globfilepath(dst)
     if not dst_path:
-        return TestResult.failed([f'JSON file {dst} not found ({status})'])
+        return TestResult.error([f'JSON file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_path} will be used for test contains_key')
 
@@ -157,9 +157,9 @@ def contains_key(ctx, dst: str, key_path: str):
         return TestResult.failed([f'key path "{key_path}" does not exist'])
 
     except json.JSONDecodeError as e:
-        return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])
+        return TestResult.execution_error(e, f"Invalid JSON in file {dst_path}")
     except FileNotFoundError:
-        return TestResult.failed([f'JSON file {dst_path} does not exist'])
+        return TestResult.error([f'JSON file {dst_path} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSON file {dst_path}")
 
@@ -184,8 +184,8 @@ def value_matches(
     decides; a one-element array is unwrapped. Whole arrays cannot be compared.
 
     Args:
-        dst: Guest path to the JSON file; a glob must match exactly one path. A missing file,
-            invalid JSON or unresolvable path fails.
+        dst: Guest path to the JSON file; a glob must match exactly one path. A missing file or
+            invalid JSON is an error; an unresolvable key path fails.
         key_path: Dot path from the root object, e.g. ``user.profile.name``. ``*`` expands
             all values of an object (``config.*.enabled``), ``name[*]`` all elements of array
             ``name`` (``users[*].email``). No numeric indexes; keys containing ``.`` and
@@ -195,7 +195,7 @@ def value_matches(
         regex_match: Treat a string ``expected_value`` as a regex searched (``re.search``,
             unanchored) in ``str(value)``.
         wildcard_mode: ``any`` (default): one value must match; ``all``: every value must
-            match. Other values are an execution error (checked only for multiple values).
+            match. Other values are an error.
 
     Example:
         function: json.value_matches
@@ -206,7 +206,9 @@ def value_matches(
     """
     dst_path, status = ctx.resolve_globfilepath(dst)
     if not dst_path:
-        return TestResult.failed([f'JSON file {dst} not found ({status})'])
+        return TestResult.error([f'JSON file {dst} not found ({status})'])
+    if wildcard_mode not in ('any', 'all'):
+        return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
 
     log.debug(f'dst file {dst_path} will be used for test value_matches')
 
@@ -236,9 +238,9 @@ def value_matches(
         return TestResult.failed([message])
 
     except json.JSONDecodeError as e:
-        return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])
+        return TestResult.execution_error(e, f"Invalid JSON in file {dst_path}")
     except FileNotFoundError:
-        return TestResult.failed([f'JSON file {dst_path} does not exist'])
+        return TestResult.error([f'JSON file {dst_path} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSON file {dst_path}")
 
@@ -251,11 +253,11 @@ def value_matches(
 def array_contains(ctx, dst: str, array_path: str, expected_element: str | int | float | bool | dict | list = None):
     """Pass when the JSON array at ``array_path`` in ``dst`` contains ``expected_element``.
 
-    Use for: checking a list (recent files, bookmarks, accounts) includes an entry.
+    Use for: checking that a list in a JSON file includes an entry.
 
     Args:
-        dst: Guest path to the JSON file; a glob must match exactly one path. A missing file,
-            invalid JSON, unresolvable path or non-array value fails.
+        dst: Guest path to the JSON file; a glob must match exactly one path. A missing file or
+            invalid JSON is an error; an unresolvable path or non-array value fails.
         array_path: Dot path to the array (same syntax as json.value_matches ``key_path``);
             a wildcard yielding several values is treated as the array of those values.
         expected_element: Element tested with Python ``in`` (type-sensitive; dicts and lists
@@ -270,7 +272,7 @@ def array_contains(ctx, dst: str, array_path: str, expected_element: str | int |
     """
     dst_path, status = ctx.resolve_globfilepath(dst)
     if not dst_path:
-        return TestResult.failed([f'JSON file {dst} not found ({status})'])
+        return TestResult.error([f'JSON file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_path} will be used for test array_contains')
 
@@ -301,15 +303,15 @@ def array_contains(ctx, dst: str, array_path: str, expected_element: str | int |
                     except PLACEHOLDER_ERRORS:
                         continue  # Try next element
                 return TestResult.failed([f'no array element matches placeholder "{placeholder_name}"'])
-            return TestResult.failed([f'expected 1 placeholder for array comparison, got {len(placeholder_names)}'])
+            return TestResult.error([f'expected 1 placeholder for array comparison, got {len(placeholder_names)}'])
         # Regular direct comparison
         if expected_element in array:
             return TestResult.success([f'array contains expected element: {expected_element}'])
         return TestResult.failed([f'array does not contain expected element: {expected_element}'])
 
     except json.JSONDecodeError as e:
-        return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])
+        return TestResult.execution_error(e, f"Invalid JSON in file {dst_path}")
     except FileNotFoundError:
-        return TestResult.failed([f'JSON file {dst_path} does not exist'])
+        return TestResult.error([f'JSON file {dst_path} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSON file {dst_path}")

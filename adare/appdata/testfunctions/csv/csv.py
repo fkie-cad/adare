@@ -50,7 +50,7 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
 
     Args:
         dst: Guest path to the CSV file. A glob must match exactly one path; no/ambiguous
-            match or a missing file fails. Parsed with the default ``csv`` dialect (comma,
+            match, a missing file or a CSV parse error is an error. Parsed with the default ``csv`` dialect (comma,
             double quotes) in the guest's default encoding; the header row is a normal row.
         entry: Expected row as a list, one item per column; a row must have exactly this many
             columns. Items are compared as exact, case-sensitive strings (``str(item)``), or by
@@ -75,7 +75,7 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
         except (OSError, PermissionError, FileNotFoundError) as e:
             files_info = f"Could not list directory contents: {e}"
 
-        return TestResult.failed(
+        return TestResult.error(
             [
                 f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'
             ]
@@ -145,11 +145,11 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
             [f'no matching row found for pattern: {entry_pattern}', 'no rows found in CSV file to analyze']
         )
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
+        return TestResult.error([f'file with path {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read CSV file {dst_resolved}")
     except csv.Error as e:
-        return TestResult.failed([f"CSV parsing error in file {dst_resolved}: {e}"])
+        return TestResult.execution_error(e, f"CSV parsing error in file {dst_resolved}")
 
 
 @testfunction(
@@ -173,7 +173,7 @@ def compare_rows(
 
     Args:
         dst: Guest path to the CSV file. A glob must match exactly one path; no/ambiguous
-            match or a missing file fails. Default ``csv`` dialect; header row included.
+            match, a missing file or a CSV parse error is an error. Default ``csv`` dialect; header row included.
         reference_rows: Expected rows, a non-empty list of lists of strings (quote numbers in
             YAML). ``!re``/``!timestamp`` tags are matched by type; other cells exactly.
         columns: 0-based column indices to compare (others ignored; out-of-range indices are
@@ -205,7 +205,7 @@ def compare_rows(
         except (OSError, PermissionError, FileNotFoundError) as e:
             files_info = f"Could not list directory contents: {e}"
 
-        return TestResult.failed(
+        return TestResult.error(
             [
                 f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'
             ]
@@ -215,14 +215,14 @@ def compare_rows(
 
     # Validate reference_rows structure
     if not isinstance(reference_rows, list):
-        return TestResult.failed(['reference_rows must be a list of rows'])
+        return TestResult.error(['reference_rows must be a list of rows'])
 
     if not reference_rows:
-        return TestResult.failed(['reference_rows cannot be empty'])
+        return TestResult.error(['reference_rows cannot be empty'])
 
     for i, row in enumerate(reference_rows):
         if not isinstance(row, list):
-            return TestResult.failed([f'reference_rows[{i}] must be a list, got {type(row).__name__}'])
+            return TestResult.error([f'reference_rows[{i}] must be a list, got {type(row).__name__}'])
 
     try:
         # Increase CSV field size limit to handle large fields
@@ -260,11 +260,11 @@ def compare_rows(
         )
 
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
+        return TestResult.error([f'file with path {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read CSV file {dst_resolved}")
     except csv.Error as e:
-        return TestResult.failed([f"CSV parsing error in file {dst_resolved}: {e}"])
+        return TestResult.execution_error(e, f"CSV parsing error in file {dst_resolved}")
 
 
 @testfunction(
@@ -289,7 +289,7 @@ def compare_files(
 
     Args:
         actual: Guest path to the CSV under test; a glob must match exactly one path, a
-            missing or ambiguous file fails.
+            missing or ambiguous file (or a CSV parse error) is an error.
         reference: Guest path to the reference CSV, resolved like ``actual``.
         columns: 0-based column indices to compare; ``None`` compares all columns.
         ignore_order: ``False`` (default) compares row N with row N; ``True`` matches rows as a multiset.
@@ -315,7 +315,7 @@ def compare_files(
         except (OSError, PermissionError, FileNotFoundError) as e:
             files_info = f"Could not list directory contents: {e}"
 
-        return TestResult.failed(
+        return TestResult.error(
             [
                 f'actual file with path {actual} can\'t be used, because no unambiguous file could be identified (because {actual_status}). {files_info}'
             ]
@@ -333,7 +333,7 @@ def compare_files(
         except (OSError, PermissionError, FileNotFoundError) as e:
             files_info = f"Could not list directory contents: {e}"
 
-        return TestResult.failed(
+        return TestResult.error(
             [
                 f'reference file with path {reference} can\'t be used, because no unambiguous file could be identified (because {reference_status}). {files_info}'
             ]
@@ -387,9 +387,9 @@ def compare_files(
         # e.filename, not str(e): on Windows str(e) escapes the backslashes
         # of the path, so a substring search never matches there.
         if e.filename == actual_path:
-            return TestResult.failed([f'actual file with path {actual} does not exist'])
-        return TestResult.failed([f'reference file with path {reference} does not exist'])
+            return TestResult.error([f'actual file with path {actual} does not exist'])
+        return TestResult.error([f'reference file with path {reference} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, "Cannot read CSV files")
     except csv.Error as e:
-        return TestResult.failed([f"CSV parsing error: {e}"])
+        return TestResult.execution_error(e, "CSV parsing error")

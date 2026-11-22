@@ -116,7 +116,7 @@ class TestContainsKey:
         assert_test_failed(result)
         assert "does not exist" in result.details[0]
 
-    def test_contains_key_failure_malformed_json(self, tmp_path):
+    def test_contains_key_error_malformed_json(self, tmp_path):
         """Test failure with malformed JSON file."""
         json_file = tmp_path / "malformed.json"
         json_file.write_text("{invalid json content")
@@ -126,18 +126,18 @@ class TestContainsKey:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Invalid JSON" in result.details[0]
 
-    def test_contains_key_failure_file_not_found(self, tmp_path):
-        """Test failure when JSON file doesn't exist."""
+    def test_contains_key_error_file_not_found(self, tmp_path):
+        """Test error when JSON file doesn't exist."""
         test = ContainsKey(
             name="test_contains_key",
             parameter=ContainsKeyParameter(dst=str(tmp_path / "nonexistent.json"), key_path="name"),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_contains_key_success_with_null_value(self, create_json_file):
@@ -436,7 +436,7 @@ class TestValueMatches:
         assert_test_failed(result)
         assert "does not exist" in result.details[0]
 
-    def test_value_matches_failure_malformed_json(self, tmp_path):
+    def test_value_matches_error_malformed_json(self, tmp_path):
         """Test failure with malformed JSON file."""
         json_file = tmp_path / "malformed.json"
         json_file.write_text("{invalid: json}")
@@ -447,7 +447,7 @@ class TestValueMatches:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Invalid JSON" in result.details[0]
 
     def test_value_matches_success_nested_wildcard(self, create_json_file):
@@ -662,7 +662,7 @@ class TestArrayContains:
 
         assert_test_success(result)
 
-    def test_array_contains_failure_malformed_json(self, tmp_path):
+    def test_array_contains_error_malformed_json(self, tmp_path):
         """Test failure with malformed JSON file."""
         json_file = tmp_path / "malformed.json"
         json_file.write_text("[invalid json")
@@ -673,11 +673,11 @@ class TestArrayContains:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Invalid JSON" in result.details[0]
 
-    def test_array_contains_failure_file_not_found(self, tmp_path):
-        """Test failure when JSON file doesn't exist."""
+    def test_array_contains_error_file_not_found(self, tmp_path):
+        """Test error when JSON file doesn't exist."""
         test = ArrayContains(
             name="test_array_contains",
             parameter=ArrayContainsParameter(
@@ -686,5 +686,5 @@ class TestArrayContains:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]

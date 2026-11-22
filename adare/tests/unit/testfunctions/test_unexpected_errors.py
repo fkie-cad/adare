@@ -87,14 +87,14 @@ def test_bug_while_reading_a_workbook_is_an_error_not_a_failure(create_excel_fil
     assert result.status == StatusEnum.ERROR, result.details
 
 
-def test_unreadable_workbook_is_a_failure(tmp_path):
+def test_unreadable_workbook_is_an_error(tmp_path):
     path = tmp_path / 'corrupt.xlsx'
     path.write_bytes(b'this is not a zip archive')
 
     result = _sheet_exists(path).test()
 
-    assert result.status == StatusEnum.FAILED, result.details
-    assert 'Error reading Excel file' in result.details[0]
+    assert result.status == StatusEnum.ERROR, result.details
+    assert 'Cannot parse Excel file' in result.details[0]
 
 
 # --- placeholder comparisons ----------------------------------------------------
