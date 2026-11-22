@@ -79,7 +79,8 @@ def test_large_files(tmp_path, monkeypatch):
 
 def test_conflict_markers_and_private_keys(tmp_path):
     marker = '<' * 7
-    key = '-----BEGIN ' + 'OPENSSH PRIVATE KEY-----'
+    header = 'BEGIN ' + 'OPENSSH PRIVATE KEY'  # split, so this file passes the check itself
+    key = f'-----{header}-----'
     (tmp_path / 'conflict.py').write_text(f'a = 1\n{marker} HEAD\nb = 2\n')
     (tmp_path / 'heading.rst').write_text('Title\n=======\n\ntext with <<< and >>>\n')
     (tmp_path / 'id_ed25519').write_text(f'{key}\nabc\n')
@@ -87,5 +88,5 @@ def test_conflict_markers_and_private_keys(tmp_path):
     files = ['conflict.py', 'heading.rst', 'id_ed25519', 'blob.bin']
     assert hygiene.content_problems(tmp_path, files) == [
         'conflict.py:2: merge conflict marker',
-        'id_ed25519: private key (BEGIN OPENSSH PRIVATE KEY)',
+        f'id_ed25519: private key ({header})',
     ]
