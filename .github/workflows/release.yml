@@ -60,7 +60,7 @@ jobs:
     uses: ./.github/workflows/live-smoke.yml
 
   build:
-    name: Build ${{ needs.verify.outputs.package }}
+    name: Build package
     needs: [verify, tests]
     runs-on: ubuntu-latest
     timeout-minutes: 10
