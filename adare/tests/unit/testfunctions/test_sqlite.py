@@ -805,7 +805,7 @@ def wal_only_evidence(tmp_path):
     evidence = tmp_path / "evidence"
     live.mkdir()
     evidence.mkdir()
-    db = live / "places.sqlite"
+    db = live / "app.db"
 
     conn = sqlite3.connect(str(db))
     try:
@@ -816,11 +816,11 @@ def wal_only_evidence(tmp_path):
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.executemany("INSERT INTO test_table VALUES (?, ?)", [(1, "Alice"), (2, "Bob")])
         conn.commit()
-        shutil.copyfile(db, evidence / "places.sqlite")
-        shutil.copyfile(f"{db}-wal", evidence / "places.sqlite-wal")
+        shutil.copyfile(db, evidence / "app.db")
+        shutil.copyfile(f"{db}-wal", evidence / "app.db-wal")
     finally:
         conn.close()
-    return evidence / "places.sqlite"
+    return evidence / "app.db"
 
 
 class TestQueryResultSnapshot:
@@ -859,9 +859,9 @@ class TestQueryResultSnapshot:
         result = _query(wal_only_evidence, "SELECT * FROM test_table")
 
         assert_test_success(result)
-        assert f"queried snapshot: places.sqlite sha256={_sha256(wal_only_evidence)}" in result.details
+        assert f"queried snapshot: app.db sha256={_sha256(wal_only_evidence)}" in result.details
         wal = Path(f"{wal_only_evidence}-wal")
-        assert f"queried snapshot: places.sqlite-wal sha256={_sha256(wal)}" in result.details
+        assert f"queried snapshot: app.db-wal sha256={_sha256(wal)}" in result.details
         assert not any("warning" in d for d in result.details)
 
     def test_journal_sidecar_is_copied(self, create_sqlite_db):
