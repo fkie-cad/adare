@@ -71,6 +71,10 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - Testfunction docstring examples use neutral made-up paths instead of real application
   paths (browser profiles, office suites, registry keys); a unit test keeps it that way.
 
+### Fixed
+- `adare test dry-run` crashed on testfunctions with a `str | int | float ...` parameter
+  (e.g. `json.value_matches`). It now structures parameters like a real run.
+
 ## [adare 0.1.1] - 2026-11-22
 
 ### Added
