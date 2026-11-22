@@ -620,7 +620,7 @@ class TestLoader:
             # Structure the test using cattrs
             import cattrs
 
-            _register_primitive_union_hook()
+            register_primitive_union_hook()
             test_instance = cattrs.structure(resolved_test, test_class)
             # The placeholder metadata (!re, !timestamp) travels as `_VARIABLE_METADATA`, which
             # cattrs does not map onto `variable_metadata`; set it as the agent does.
@@ -640,7 +640,7 @@ class TestLoader:
 _PRIMITIVE_UNION_HOOK = False
 
 
-def _register_primitive_union_hook() -> None:
+def register_primitive_union_hook() -> None:
     """Let cattrs structure ``str | int | float`` style parameters (passed through unchanged).
 
     Test functions declare e.g. ``expected_time: str | int | float``. cattrs refuses such unions without

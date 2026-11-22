@@ -76,6 +76,12 @@ Test functions are used in the ``tests`` section of ADARE playbooks:
        description: "Verify error was logged"
 
 
+Files inside archives
+---------------------
+
+Every file test function can read a file inside a tar, zip, gzip, bzip2 or xz archive:
+``dst: /home/user/backup.tar.gz!/etc/app/config.json``. See :doc:`/guide/archives`.
+
 Overvies of all Test Functions
 -------------------------------
 

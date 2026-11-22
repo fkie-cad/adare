@@ -87,6 +87,11 @@ class TestActionsExecutor:
             )
             if not resolved_test:
                 return ActionResult(success=False, message=f"Test '{action.name}' not found in playbook tests")
+            # dst: {archive, member} -> 'archive!/member' before any path (guest, host mode,
+            # host side) sees it: every testfunction types dst as str.
+            from adarelib.testset.archive import normalize_test_parameters
+
+            resolved_test = normalize_test_parameters(resolved_test)
 
             # Check if this is a host-side test (visual tests with execute_on_host=True)
             test_class = self.test_loader.get_test_class(action.name)

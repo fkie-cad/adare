@@ -132,6 +132,26 @@ class SettingsValidator(PlaybookValidator):
         return result
 
 
+class ArchiveDstValidator(PlaybookValidator):
+    """Validates the mapping form of a test's ``dst`` (``{archive: ..., member: ...}``)."""
+
+    def validate(self, playbook: Playbook) -> ValidationResult:
+        from adarelib.testset.archive import mapping_errors
+
+        result = ValidationResult()
+        for test in getattr(playbook, 'tests', None) or []:
+            parameter = test.parameter if isinstance(test.parameter, dict) else {}
+            dst = parameter.get('dst')
+            if dst is not None and not isinstance(dst, (str, dict)):
+                result.add_error(
+                    f"test '{test.name}': dst must be a path or a mapping with 'archive' (and 'member')",
+                    field_name='parameter.dst',
+                )
+            for message in mapping_errors(dst):
+                result.add_error(f"test '{test.name}': {message}", field_name='parameter.dst')
+        return result
+
+
 class VariableUsageValidator(PlaybookValidator):
     """Extracts all variable references from playbook actions."""
 
@@ -874,6 +894,7 @@ def validate_playbook(playbook: Playbook) -> None:
     filter_validator = FilterValidator(usage_validator)
     settings_validator = SettingsValidator()
     machine_routing_validator = MachineRoutingValidator()
+    archive_dst_validator = ArchiveDstValidator()
 
     # on_failure steps are validated like main steps (variables, filters, machine routing):
     # validate a view where they follow the main actions. Their indices continue after the
@@ -894,6 +915,7 @@ def validate_playbook(playbook: Playbook) -> None:
         definition_validator,
         filter_validator,
         machine_routing_validator,
+        archive_dst_validator,
     ]
 
     # Collect all validation results
