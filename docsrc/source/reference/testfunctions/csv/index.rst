@@ -32,4 +32,4 @@ Test Functions
    :hidden:
 
    contains_line
-   line_count
+   row_count

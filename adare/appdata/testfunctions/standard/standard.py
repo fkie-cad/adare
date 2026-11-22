@@ -252,11 +252,12 @@ def dir_content(ctx, dst: str = '', files: list = None):
           files: [report.csv, images]
     """
     try:
+        dst_param = dst
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
             return TestResult.error(
                 [
-                    f'directory with path {dst} can\'t be used, because no unambiguous directory could be identified (because {status})'
+                    f'directory with path {dst_param} can\'t be used, because no unambiguous directory could be identified (because {status})'
                 ]
             )
 
@@ -304,10 +305,13 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
           dst: /home/user/notes.txt
           regex: '(?m)^Total: [0-9]+$'
     """
+    dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
         return TestResult.error(
-            [f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            [
+                f'file with path {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})'
+            ]
         )
 
     log.debug(f'dst file {dst} will be used for test')
@@ -371,10 +375,13 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
           dst: '{{ out_dir }}/exit_code.txt'
           content: '0'
     """
+    dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
         return TestResult.error(
-            [f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            [
+                f'file with path {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})'
+            ]
         )
 
     log.debug(f'dst file {dst} will be used for test')
@@ -455,10 +462,11 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
           dst: C:/Users/user/Downloads/setup.exe
           expected_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
     """
+    dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
         return TestResult.error(
-            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            [f'file {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})']
         )
 
     log.debug(f'dst file {dst} will be used for test')
@@ -528,10 +536,11 @@ def file_timestamps(
           comparison_type: within_last
           within_duration: 10m
     """
+    dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
         return TestResult.error(
-            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            [f'file {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})']
         )
 
     log.debug(f'dst file {dst} will be used for test')
@@ -626,10 +635,11 @@ def file_permissions(
           expected_permissions: '600'
           check_owner: user
     """
+    dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
         return TestResult.error(
-            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            [f'file {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})']
         )
 
     log.debug(f'dst file {dst} will be used for test')
@@ -695,7 +705,8 @@ def file_content_contains(
     r"""Pass when file ``dst`` contains ``content`` as a substring (text) or byte sequence.
 
     Use for: checking a value/marker was written into a file. For patterns use
-    standard.file_content_matches_regex.
+    standard.file_content_matches_regex; to count occurrences, search several encodings at
+    once or assert a value is gone from a binary file use text.occurrence_count.
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
@@ -704,8 +715,9 @@ def file_content_contains(
             mode ASCII characters stand for their byte and Python escapes (``\x00``, ``\n``,
             ``\\``) are decoded; a non-ASCII character or an unknown escape is an error (write
             ``\xNN``, or use ``string`` mode with an ``encoding``).
-        content_type: ``bytes`` searches the raw file bytes; any other value (default
-            ``string``) searches the decoded text.
+        content_type: ``string`` (default) searches the decoded text, ``bytes`` the raw file
+            bytes; other values are an error. A ``!re``/``!timestamp`` placeholder in ``content``
+            is an error (use standard.file_content_matches_regex).
         encoding: Codec for ``string`` mode; undecodable bytes are silently dropped.
             ``BOM`` detects UTF-8/16/32 from the byte-order mark and errors if there is none.
         strip_bom: Remove a leading U+FEFF from the decoded text (``string`` mode only).
@@ -716,10 +728,20 @@ def file_content_contains(
           dst: /home/user/.bash_history
           content: rm -rf ~/evidence
     """
+    if content_type not in ('string', 'bytes'):
+        return TestResult.error([f"invalid content_type {content_type!r} (allowed: string, bytes)"])
+    if isinstance(content, str) and ctx.has_placeholders(content):
+        return TestResult.error(
+            [
+                f'content {content!r} holds a !re or !timestamp placeholder, which is not supported here; '
+                'use standard.file_content_matches_regex'
+            ]
+        )
+    dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
         return TestResult.error(
-            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            [f'file {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})']
         )
 
     log.debug(f'dst file {dst} will be used for test')

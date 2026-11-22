@@ -108,13 +108,13 @@ def files(tmp_path):
 CORRUPT = [
     ('json.contains_key', 'bad_json', {'key_path': 'a'}),
     ('json.value_matches', 'bad_json', {'key_path': 'a', 'expected_value': 1}),
-    ('json.array_contains', 'bad_json', {'array_path': 'arr', 'expected_element': 1}),
+    ('json.array_contains', 'bad_json', {'array_path': 'arr', 'expected_value': 1}),
     ('jsonl.line_matches', 'bad_jsonl', {'conditions': {'a': 1}, 'skip_malformed': False}),
     ('jsonl.line_count', 'bad_jsonl', {'expected_count': 1, 'skip_malformed': False}),
     ('jsonl.value_in_any_line', 'bad_jsonl', {'key_path': 'a', 'expected_value': 1, 'skip_malformed': False}),
     ('xml.element_exists', 'bad_xml', {'xpath': './/item'}),
     ('xml.element_count', 'bad_xml', {'xpath': './/item', 'expected_count': 1}),
-    ('excel.sheet_exists', 'bad_xlsx', {'sheet_name': 'S'}),
+    ('excel.sheet_exists', 'bad_xlsx', {'sheet': 'S'}),
     ('excel.cell_value_matches', 'bad_xlsx', {'row': 0, 'column': 0, 'expected_value': 'a'}),
     ('excel.contains_row', 'bad_xlsx', {'entry': ['a', 'b']}),
     ('excel.validate_columns', 'bad_xlsx', {'expected_columns': ['a']}),
@@ -139,7 +139,7 @@ CORRUPT = [
     ('image.exif_value_count', 'bad_image', {'tag': 'Make', 'expected_count': 1}),
     ('image.dimensions_match', 'bad_image', {'width': 1}),
     ('json.value_count', 'bad_json', {'key_path': 'a', 'expected_count': 1}),
-    ('csv.line_count', 'bad_csv_bytes', {'entry': ['a', 'b'], 'expected_count': 1}),
+    ('csv.row_count', 'bad_csv_bytes', {'entry': ['a', 'b'], 'expected_count': 1}),
     ('text.line_count', 'bad_csv_bytes', {'content': 'a', 'expected_count': 1}),
 ]
 
@@ -202,7 +202,7 @@ BAD_PARAMS = [
     ('json.value_matches', 'json', {'key_path': 's', 'expected_value': '[unclosed', 'regex_match': True}),
     ('jsonl.line_matches', 'jsonl', {'conditions': {'a': '[unclosed'}, 'regex_match': True}),
     ('jsonl.line_count', 'jsonl', {'expected_count': 'two'}),
-    ('xml.element_text_matches', 'xml', {'xpath': './/item', 'expected_text': '[unclosed', 'regex_match': True}),
+    ('xml.element_text_matches', 'xml', {'xpath': './/item', 'expected_value': '[unclosed', 'regex_match': True}),
     (
         'xml.attribute_matches',
         'xml',
@@ -218,8 +218,8 @@ BAD_PARAMS = [
         'json',
         {'key_path': 's', 'expected_count': 1, 'expected_value': '[unclosed', 'regex_match': True},
     ),
-    ('csv.line_count', 'csv', {'entry': 'a,b', 'expected_count': 1}),
-    ('csv.line_count', 'csv', {'entry': ['a', 'b'], 'expected_count': 'one'}),
+    ('csv.row_count', 'csv', {'entry': 'a,b', 'expected_count': 1}),
+    ('csv.row_count', 'csv', {'entry': ['a', 'b'], 'expected_count': 'one'}),
     ('standard.file_size', 'txt', {'expected_size': -1}),
     ('standard.file_size', 'txt', {'expected_size': 1, 'comparison_type': 'roughly'}),
     ('standard.file_count', 'txt', {'expected_count': -1}),
@@ -227,7 +227,7 @@ BAD_PARAMS = [
     ('jsonl.line_count', 'jsonl', {'expected_count': {'min': 1}, 'comparison_type': 'greater'}),
     ('jsonl.line_count', 'jsonl', {'expected_count': 1, 'comparison_type': 'roughly'}),
     ('text.occurrence_count', 'txt', {'content': 'a', 'expected_count': 1, 'content_type': 'regex'}),
-    ('text.occurrence_count', 'txt', {'content': 'a', 'expected_count': 1, 'encodings': ['no-such-codec']}),
+    ('text.occurrence_count', 'txt', {'content': 'a', 'expected_count': 1, 'encoding': ['no-such-codec']}),
     ('text.occurrence_count', 'txt', {'content': 'zz', 'expected_count': 1, 'content_type': 'hex'}),
     ('text.line_count', 'txt', {'content': '[unclosed', 'expected_count': 1, 'regex_match': True}),
     ('text.line_count', 'txt', {'content': 'a', 'expected_count': 1, 'encoding': 'no-such-codec'}),
@@ -254,11 +254,11 @@ def test_json_array_contains_needs_exactly_one_placeholder(files):
         variable_metadata={**VARIABLES, 'VAR2': {'type': 'string', 'resolved_value': 'value2'}},
         dst=files['json'],
         array_path='arr',
-        expected_element='{{VAR1}}-{{VAR2}}',
+        expected_value='{{VAR1}}-{{VAR2}}',
     )
 
     _assert(result, StatusEnum.ERROR)
-    assert 'expected 1 placeholder' in result.details[0]
+    assert 'expected exactly one placeholder' in result.details[0]
 
 
 def test_excel_cell_value_needs_exactly_one_placeholder(files):
@@ -344,19 +344,19 @@ def test_jsonl_empty_file_still_fails_where_a_line_is_required(tmp_path, dotted,
 MISMATCH = [
     ('csv.contains_line', 'csv', {'entry': ['x', 'y']}),
     ('csv.compare_rows', 'csv', {'reference_rows': [['a', 'b'], ['x', 'y']]}),
-    ('excel.sheet_exists', 'xlsx', {'sheet_name': 'Other'}),
+    ('excel.sheet_exists', 'xlsx', {'sheet': 'Other'}),
     ('excel.cell_value_matches', 'xlsx', {'row': 0, 'column': 0, 'expected_value': 'z'}),
     ('excel.contains_row', 'xlsx', {'entry': ['x', 'y']}),
     ('excel.validate_columns', 'xlsx', {'expected_columns': ['x', 'y']}),
     ('excel.compare_rows', 'xlsx', {'reference_rows': [['a', 'b'], ['x', 'y']]}),
     ('json.contains_key', 'json', {'key_path': 'missing'}),
     ('json.value_matches', 'json', {'key_path': 'a', 'expected_value': 2}),
-    ('json.array_contains', 'json', {'array_path': 'arr', 'expected_element': 9}),
+    ('json.array_contains', 'json', {'array_path': 'arr', 'expected_value': 9}),
     ('jsonl.line_matches', 'jsonl', {'conditions': {'a': 9}}),
     ('jsonl.line_count', 'jsonl', {'expected_count': 5}),
     ('jsonl.value_in_any_line', 'jsonl', {'key_path': 'a', 'expected_value': 9}),
     ('xml.element_exists', 'xml', {'xpath': './/missing'}),
-    ('xml.element_text_matches', 'xml', {'xpath': './/item', 'expected_text': 'z'}),
+    ('xml.element_text_matches', 'xml', {'xpath': './/item', 'expected_value': 'z'}),
     ('xml.attribute_matches', 'xml', {'xpath': './/item', 'attribute': 'id', 'expected_value': '9'}),
     ('xml.element_count', 'xml', {'xpath': './/item', 'expected_count': 5}),
     ('standard.file_content_contains', 'txt', {'content': 'absent'}),
@@ -364,7 +364,7 @@ MISMATCH = [
     ('standard.file_content_matches_regex', 'txt', {'regex': '^absent$'}),
     ('standard.file_hash_matches', 'txt', {'expected_hash': '0' * 64}),
     ('json.value_count', 'json', {'key_path': 'arr[*]', 'expected_count': 5}),
-    ('csv.line_count', 'csv', {'entry': ['a', 'b'], 'expected_count': 2}),
+    ('csv.row_count', 'csv', {'entry': ['a', 'b'], 'expected_count': 2}),
     ('standard.file_size', 'txt', {'expected_size': 1}),
     ('standard.file_count', 'txt', {'expected_count': 2}),
     ('jsonl.line_count', 'jsonl', {'expected_count': 0, 'comparison_type': 'less'}),

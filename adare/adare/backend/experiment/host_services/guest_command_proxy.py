@@ -7,7 +7,6 @@ common system-state queries used by testfunctions.
 
 import contextlib
 import logging
-import shlex
 
 from adare.hypervisor.base.models import CommandResult
 
@@ -167,35 +166,6 @@ class GuestCommandProxy(VMOperationProxy):
                     stat_info['ctime'] = float(value)
 
         return stat_info
-
-    async def search_log_file(self, log_path: str, pattern: str, max_lines: int = 1000) -> tuple[bool, list[str]]:
-        """Search a log file for entries matching a regex pattern.
-
-        Args:
-            log_path: Path to the log file on the guest
-            pattern: Regex pattern to search for
-            max_lines: Maximum lines to search from end of file
-
-        Returns:
-            Tuple of (found: bool, matching_lines: list[str])
-        """
-        # Both values come from the playbook: quote them so the guest shell takes
-        # them literally instead of running whatever they contain.
-        max_lines = int(max_lines)
-        if self.is_windows:
-            cmd = (
-                f'Get-Content -LiteralPath {_ps_quote(log_path)} -Tail {max_lines} '
-                f'| Select-String -Pattern {_ps_quote(pattern)} '
-                f'| ForEach-Object {{ $_.Line }}'
-            )
-        else:
-            cmd = f'tail -n {max_lines} -- {shlex.quote(log_path)} | grep -E -- {shlex.quote(pattern)}'
-
-        result = await self.run(cmd, silent=True)
-        if result.returncode == 0 and result.stdout.strip():
-            lines = result.stdout.strip().splitlines()
-            return True, lines
-        return False, []
 
     async def registry_key_exists(self, key_path: str) -> bool:
         """Check if a Windows registry key exists.

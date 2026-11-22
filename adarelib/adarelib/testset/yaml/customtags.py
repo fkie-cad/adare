@@ -298,6 +298,15 @@ class YamlRegexString(YamlCustomTag):
 
     @classmethod
     def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode):
+        # A literal pattern is checked when the playbook loads; one with {{ variables }}
+        # can only be compiled after they are resolved (an invalid one is an ERROR then).
+        if '{{' not in node.value:
+            try:
+                re.compile(node.value)
+            except re.error as e:
+                raise yaml.constructor.ConstructorError(
+                    None, None, f'invalid regular expression in !re {node.value!r}: {e}', node.start_mark
+                ) from e
         return YamlRegexString(node.value)
 
     @classmethod

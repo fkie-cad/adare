@@ -14,7 +14,7 @@ from adarelib.event.event import TestResult
 
 # internal imports
 from adarelib.testset import archive
-from adarelib.testset.basictest import BasicTest, HostModeCategory, Parameter
+from adarelib.testset.basictest import BasicTest, HostModeCategory, Parameter, PlaceholderError
 
 log = logging.getLogger(__name__)
 
@@ -239,6 +239,8 @@ def _make_test_class(
             return TestResult.failed([str(e)])
         if isinstance(e, TestError):
             return TestResult.error([str(e)])
+        if isinstance(e, PlaceholderError):
+            return TestResult.error([f'placeholder error: {e}'])
         return TestResult.execution_error(e, f"Error in testfunction '{testname}'")
 
     # Every result goes through ctx._finish (archive provenance) and ctx.close removes

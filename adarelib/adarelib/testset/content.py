@@ -88,6 +88,42 @@ def decode_text(raw: bytes, encoding: str | None = None) -> str:
     return raw.decode(encoding)
 
 
+def text_encoding(path: str, encoding: str | None = None) -> tuple[str, int]:
+    """The encoding to read text file ``path`` with and the length of its BOM in bytes.
+
+    Same rules as :func:`decode_text`: a BOM always wins; without one ``encoding`` is used, and
+    ``None`` means BOM-less UTF-16 (recognised by its zero bytes) or else UTF-8.
+
+    :raises LookupError: unknown encoding name
+    :raises OSError: the file cannot be read
+    """
+    with open(path, 'rb') as f:
+        head = f.read(4)
+    bom_encoding, bom_length = detect_bom(head)
+    if bom_encoding is not None:
+        return bom_encoding, bom_length
+    if encoding is None:
+        even = os.path.getsize(path) % 2 == 0
+        encoding = (guess_utf16(head[:2]) if even else None) or 'utf-8'
+    return codecs.lookup(encoding).name, 0
+
+
+def open_text(path: str, encoding: str | None = None, newline: str | None = None, errors: str = 'strict'):
+    """Open ``path`` for streaming text reads with :func:`text_encoding`'s encoding, BOM skipped.
+
+    Pass ``newline=''`` for the ``csv`` module. Decoding errors surface while reading
+    (``UnicodeDecodeError``) unless ``errors`` says otherwise (``'replace'``).
+
+    :raises LookupError: unknown encoding name
+    :raises OSError: the file cannot be read
+    """
+    name, bom_length = text_encoding(path, encoding)
+    f = open(path, encoding=name, newline=newline, errors=errors)  # noqa: SIM115 - returned to the caller
+    if bom_length:
+        f.read(1)  # the BOM decodes to one U+FEFF character
+    return f
+
+
 # the escapes allowed in a byte string; anything else after a backslash is refused: an escape
 # unicode_escape does not know (``\q`` would silently stay two characters), a \u/\U/\N escape
 # (characters, not bytes), a backslash-newline (silently dropped)

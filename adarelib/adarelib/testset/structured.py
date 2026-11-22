@@ -185,6 +185,8 @@ def load_data(ctx: Any, dst: str, fmt: StructuredFormat) -> tuple[Any, TestResul
         return None, TestResult.error([f'{fmt.label} file {path} is a directory'])
     except UnicodeDecodeError as e:
         return None, TestResult.execution_error(e, f'Cannot decode {fmt.label} file {path}')
+    except LookupError as e:
+        return None, TestResult.error([f'unknown encoding for {fmt.label} file {path}: {e}'])
     except fmt.errors as e:
         return None, TestResult.execution_error(e, f'Invalid {fmt.label} in file {path}')
     except OSError as e:

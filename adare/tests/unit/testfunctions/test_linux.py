@@ -436,199 +436,105 @@ class TestUserExists:
 
 
 class TestLogEntryExists:
-    """Tests for LogEntryExists testfunction."""
+    """linux.log_entry_exists reads the log in Python: dst/globs/archives, regex or substring."""
 
-    @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_success_found(self, mock_platform, mock_subprocess_run, tmp_path):
-        """Test successful log entry search with matches found."""
-        log_file = tmp_path / "test.log"
-        log_file.write_text("line1\nerror occurred\nline3\n")
-
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='error occurred\n', stderr='')
-
-        test = LogEntryExists(
-            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="error", max_lines=1000)
-        )
-        result = test.test()
-
-        assert_test_success(result)
-        assert 'found 1 log entries' in result.details[0]
-        assert str(log_file) in result.details[0]
-
-        # Verify bash command construction
-        call_args = mock_subprocess_run.call_args
-        assert call_args[0][0] == ['bash', '-c', f"tail -n 1000 -- {shlex.quote(str(log_file))} | grep -E -- error"]
-        assert call_args[1]['timeout'] == 30
-
-    @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_quotes_shell_metacharacters(self, mock_platform, mock_subprocess_run, tmp_path):
-        """log_file and pattern reach bash single-quoted, never as shell syntax."""
-        log_file = tmp_path / "it's.log"
-        log_file.write_text("x\n")
-        mock_subprocess_run.return_value = MagicMock(returncode=1, stdout='', stderr='')
-        pattern = '"; touch /tmp/pwned; echo "$(id)`id`'
-
-        LogEntryExists(
-            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern=pattern, max_lines=1000)
+    @staticmethod
+    def _run(variable_metadata=None, **params):
+        return LogEntryExists(
+            name="test_log", parameter=LogEntryExistsParameter(**params), variable_metadata=variable_metadata or {}
         ).test()
 
-        import shlex
+    def test_regex_match_found(self, tmp_path):
+        log = tmp_path / "auth.log"
+        log.write_text("boot\nsession opened for user alice by (uid=0)\n")
 
-        command = mock_subprocess_run.call_args[0][0][2]
-        assert shlex.split(command) == ['tail', '-n', '1000', '--', str(log_file), '|', 'grep', '-E', '--', pattern]
+        result = self._run(dst=str(log), content=r"session opened for user \w+")
 
-    @pytest.mark.skipif(sys.platform == 'win32', reason='needs bash, tail and grep')
-    @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_injection_is_not_executed(self, mock_platform, tmp_path):
-        """Real bash run: an injected command in the pattern must not execute."""
-        log_file = tmp_path / "app.log"
-        log_file.write_text("hello\n")
+        assert_test_success(result)
+        assert "1 log entries" in result.details[0]
+
+    def test_substring_mode_takes_content_literally(self, tmp_path):
+        log = tmp_path / "app.log"
+        log.write_text("price: $(5) [x]\n")
+
+        assert_test_success(self._run(dst=str(log), content="$(5) [x]", regex_match=False))
+        assert_test_failed(self._run(dst=str(log), content="$(6)", regex_match=False))
+
+    def test_shell_metacharacters_are_not_executed(self, tmp_path):
         marker = tmp_path / "pwned"
+        log = tmp_path / "app.log"
+        log.write_text("nothing here\n")
 
-        result = LogEntryExists(
-            name="test_log",
-            parameter=LogEntryExistsParameter(
-                log_file=str(log_file), pattern=f'x"; touch "{marker}"; echo "', max_lines=1000
-            ),
-        ).test()
+        result = self._run(dst=str(log), content=f"x'; touch {marker}; echo '")
 
+        assert_test_failed(result)
         assert not marker.exists()
-        assert_test_failed(result)
 
-    @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_success_multiple_matches(self, mock_platform, mock_subprocess_run, tmp_path):
-        """Test successful log entry search with multiple matches."""
-        log_file = tmp_path / "test.log"
-        log_file.write_text("error1\nerror2\nerror3\n")
+    def test_no_match_fails(self, tmp_path):
+        log = tmp_path / "app.log"
+        log.write_text("all good\n")
 
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='error1\nerror2\nerror3\n', stderr='')
-
-        test = LogEntryExists(
-            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="error", max_lines=1000)
-        )
-        result = test.test()
-
-        assert_test_success(result)
-        assert 'found 3 log entries' in result.details[0]
-
-    @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_failure_no_match(self, mock_platform, mock_subprocess_run, tmp_path):
-        """Test failure when log pattern not found."""
-        log_file = tmp_path / "test.log"
-        log_file.write_text("line1\nline2\nline3\n")
-
-        mock_subprocess_run.return_value = MagicMock(returncode=1, stdout='', stderr='')
-
-        test = LogEntryExists(
-            name="test_log",
-            parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="notfound", max_lines=1000),
-        )
-        result = test.test()
+        result = self._run(dst=str(log), content="error")
 
         assert_test_failed(result)
-        assert 'no log entries matching pattern' in result.details[0]
+        assert "no log entry" in result.details[0]
 
-    @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_failure_log_not_found(self, mock_platform, tmp_path):
-        """Test failure when log file doesn't exist."""
-        log_file = tmp_path / "nonexistent.log"
+    def test_only_the_last_max_lines_are_searched(self, tmp_path):
+        log = tmp_path / "app.log"
+        log.write_text("error early\n" + "ok\n" * 5)
 
-        test = LogEntryExists(
-            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="error", max_lines=1000)
-        )
-        result = test.test()
+        assert_test_failed(self._run(dst=str(log), content="error", max_lines=5))
+        assert_test_success(self._run(dst=str(log), content="error", max_lines=6))
 
-        assert_test_failed(result)
-        assert 'does not exist' in result.details[0]
-        assert str(log_file) in result.details[0]
+    def test_missing_log_is_an_error(self, tmp_path):
+        result = self._run(dst=str(tmp_path / "missing.log"), content="error")
 
-    @patch('platform.system', return_value='Windows')
-    def test_log_entry_exists_not_linux(self, mock_platform):
-        """Test execution error when not running on Linux."""
-        test = LogEntryExists(
-            name="test_log",
-            parameter=LogEntryExistsParameter(log_file="/var/log/syslog", pattern="error", max_lines=1000),
-        )
-        result = test.test()
+        assert result.status == StatusEnum.ERROR, result.details
 
-        assert_test_execution_error(result)
-        assert 'only runs on Linux' in result.details[0]
+    def test_invalid_regex_is_an_error(self, tmp_path):
+        log = tmp_path / "app.log"
+        log.write_text("x\n")
 
-    @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_timeout(self, mock_platform, mock_subprocess_run, tmp_path):
-        """Test execution error when subprocess times out."""
-        log_file = tmp_path / "test.log"
-        log_file.write_text("test\n")
+        result = self._run(dst=str(log), content="[unclosed")
 
-        mock_subprocess_run.side_effect = subprocess.TimeoutExpired('bash', 30)
+        assert result.status == StatusEnum.ERROR, result.details
+        assert "invalid regex" in result.details[0]
 
-        test = LogEntryExists(
-            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="error", max_lines=1000)
-        )
-        result = test.test()
+    @pytest.mark.parametrize("max_lines", [0, -1, True])
+    def test_bad_max_lines_is_an_error(self, tmp_path, max_lines):
+        log = tmp_path / "app.log"
+        log.write_text("x\n")
 
-        assert_test_execution_error(result)
-        assert 'Timeout' in result.details[0]
-        assert str(log_file) in result.details[0]
+        result = self._run(dst=str(log), content="x", max_lines=max_lines)
 
-    @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_with_placeholder_log_file(
-        self, mock_platform, mock_subprocess_run, tmp_path, variable_metadata_simple
-    ):
-        """Test log search with placeholder in log file path."""
-        log_file = tmp_path / "value1.log"
-        log_file.write_text("error\n")
+        assert result.status == StatusEnum.ERROR, result.details
 
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='error\n', stderr='')
+    def test_glob_dst(self, tmp_path):
+        (tmp_path / "app.2026.log").write_text("error here\n")
 
-        test = LogEntryExists(
-            name="test_log",
-            parameter=LogEntryExistsParameter(log_file=str(tmp_path / "{{VAR1}}.log"), pattern="error", max_lines=1000),
-            variable_metadata=variable_metadata_simple,
-        )
-        result = test.test()
+        assert_test_success(self._run(dst=str(tmp_path / "app.*.log"), content="error"))
+
+    def test_compressed_rotated_log_via_archive_path(self, tmp_path):
+        import gzip
+
+        rotated = tmp_path / "syslog.2.gz"
+        rotated.write_bytes(gzip.compress(b"kernel: usb disconnect\n"))
+
+        assert_test_success(self._run(dst=f"{rotated}!", content="usb disconnect"))
+
+    def test_utf16_log_and_undecodable_bytes(self, tmp_path):
+        utf16 = tmp_path / "win.log"
+        utf16.write_bytes("\ufeffevent: login\n".encode("utf-16-le"))
+        broken = tmp_path / "bin.log"
+        broken.write_bytes(b"\x80\x81\xfa garbage\nevent: login\n")
+
+        assert_test_success(self._run(dst=str(utf16), content="event: login"))
+        assert_test_success(self._run(dst=str(broken), content="event: login"))
+
+    def test_placeholder_in_content_is_resolved(self, tmp_path, variable_metadata_simple):
+        log = tmp_path / "app.log"
+        log.write_text("user value2 logged in\n")
+
+        result = self._run(variable_metadata=variable_metadata_simple, dst=str(log), content="user {{VAR2}}")
 
         assert_test_success(result)
-        # Verify bash command uses resolved path
-        call_args = mock_subprocess_run.call_args
-        assert 'value1.log' in call_args[0][0][2]
-
-    @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_with_placeholder_pattern(
-        self, mock_platform, mock_subprocess_run, tmp_path, variable_metadata_simple
-    ):
-        """Test log search with placeholder in search pattern."""
-        log_file = tmp_path / "test.log"
-        log_file.write_text("value2\n")
-
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='value2\n', stderr='')
-
-        test = LogEntryExists(
-            name="test_log",
-            parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="{{VAR2}}", max_lines=1000),
-            variable_metadata=variable_metadata_simple,
-        )
-        result = test.test()
-
-        assert_test_success(result)
-        # Verify bash command uses resolved pattern
-        call_args = mock_subprocess_run.call_args
-        assert 'value2' in call_args[0][0][2]
-
-    @patch('platform.system', return_value='Linux')
-    def test_log_entry_exists_custom_max_lines(self, mock_platform, mock_subprocess_run, tmp_path):
-        """Test log search with custom max_lines parameter."""
-        log_file = tmp_path / "test.log"
-        log_file.write_text("error\n")
-
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout='error\n', stderr='')
-
-        test = LogEntryExists(
-            name="test_log", parameter=LogEntryExistsParameter(log_file=str(log_file), pattern="error", max_lines=500)
-        )
-        result = test.test()
-
-        assert_test_success(result)
-        # Verify bash command uses custom max_lines
-        call_args = mock_subprocess_run.call_args
-        assert 'tail -n 500' in call_args[0][0][2]

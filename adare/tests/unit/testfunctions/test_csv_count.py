@@ -1,4 +1,4 @@
-"""Unit tests for csv.line_count (test_csv.py is at its size budget).
+"""Unit tests for csv.row_count (test_csv.py is at its size budget).
 
 Runs on the guests' Python 3.10 too (``make test-testfunctions-guest``).
 """
@@ -14,8 +14,8 @@ pytestmark = pytest.mark.unit
 
 COLLECTIONS = Path(__file__).resolve().parents[3] / 'appdata' / 'testfunctions'
 csv_module = import_module_from_pyfile(COLLECTIONS / 'csv' / 'csv.py')
-LineCount = csv_module.line_count._test_class
-LineCountParameter = csv_module.line_count._parameter_class
+LineCount = csv_module.row_count._test_class
+LineCountParameter = csv_module.row_count._parameter_class
 
 ROWS = [
     ['name', 'size', 'action'],

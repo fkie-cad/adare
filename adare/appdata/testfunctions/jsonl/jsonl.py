@@ -1,7 +1,6 @@
 # external imports
 from pathlib import Path
 import json
-import re
 import os
 from typing import Optional
 
@@ -9,8 +8,9 @@ from typing import Optional
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
-from adarelib.testset.compare import compare_with_single_placeholder, get_nested_value
-from adarelib.testset.structured import compare_count, count_parameter_errors
+from adarelib.testset.compare import get_nested_value
+from adarelib.testset.content import open_text
+from adarelib.testset.structured import compare_count, compare_value, count_parameter_errors
 
 # configure logging
 import logging
@@ -19,48 +19,30 @@ log = logging.getLogger(__name__)
 
 
 def _compare_values(test_instance, actual_value, expected_value, regex_match=False):
-    """Compare values using placeholder system from BasicTest"""
+    """Compare one value like structured.compare_value; with ``regex_match`` the value ``"*"`` means "key exists"."""
+    if regex_match and expected_value == "*":
+        return True, f'field exists with value "{actual_value}"'
+    return compare_value(test_instance, actual_value, expected_value, regex_match=regex_match)
 
-    # Check for YamlRegexString objects (!re syntax)
-    try:
-        from adarelib.testset.yaml.customtags import YamlRegexString
 
-        if isinstance(expected_value, YamlRegexString):
-            try:
-                pattern = re.compile(expected_value.string)
-                if pattern.match(str(actual_value)):
-                    return True, f'value "{actual_value}" matches regex "{expected_value.string}"'
-                return False, f'value "{actual_value}" does not match regex "{expected_value.string}"'
-            except re.error as e:
-                raise re.error(f'invalid regex pattern {expected_value.string!r}: {e}') from e
-    except ImportError:
-        pass
+def _count_range(expected_count) -> tuple[int, float] | None:
+    """``(min, max)`` of a ``{min, max}`` expected_count, or None when it is not a valid range."""
+    if not isinstance(expected_count, dict) or not expected_count or set(expected_count) - {'min', 'max'}:
+        return None
+    bounds = [expected_count.get('min', 0), expected_count.get('max', 0)]
+    if any(isinstance(b, bool) or not isinstance(b, int) or b < 0 for b in bounds):
+        return None
+    low, high = expected_count.get('min', 0), expected_count.get('max', float('inf'))
+    return (low, high) if low <= high else None
 
-    expected_str = str(expected_value)
 
-    if not test_instance.has_placeholders(expected_str):
-        # No placeholders - check for regex_match flag
-        if regex_match and isinstance(expected_value, str):
-            # Special case: "*" means "field exists" (any value)
-            if expected_value == "*":
-                return True, f'field exists with value "{actual_value}"'
+_ENCODING_ERRORS = (LookupError, UnicodeDecodeError)
 
-            # Regex matching
-            try:
-                pattern = re.compile(expected_value)
-                if pattern.search(str(actual_value)):
-                    return True, f'value "{actual_value}" matches regex "{expected_value}"'
-                return False, f'value "{actual_value}" does not match regex "{expected_value}"'
-            except re.error as e:
-                raise re.error(f'invalid regex pattern {expected_value!r}: {e}') from e
-        else:
-            # Direct value comparison
-            if actual_value == expected_value:
-                return True, f'value matches expected: {actual_value}'
-            return False, f'expected "{expected_value}", got "{actual_value}"'
-    else:
-        # Has placeholders - use placeholder system
-        return compare_with_single_placeholder(test_instance, expected_str, str(actual_value))
+
+def _encoding_error(e: Exception, dst: str, encoding: str | None) -> TestResult:
+    if isinstance(e, UnicodeDecodeError):
+        return TestResult.execution_error(e, f'Cannot decode JSONL file {dst} as {encoding or "UTF-8/UTF-16"}')
+    return TestResult.error([f'unknown encoding {encoding!r}: {e}'])
 
 
 @testfunction(
@@ -72,9 +54,10 @@ def line_matches(
     ctx: TestContext,
     dst: str = '',
     conditions: dict[str, str | int | float | bool | None] = None,
-    match_mode: str = "any",
+    wildcard_mode: str = "any",
     regex_match: bool = False,
     skip_malformed: bool = True,
+    encoding: str | None = None,
 ):
     """Pass when one line (``any``) or every valid line (``all``) of JSONL file ``dst`` meets all ``conditions``.
 
@@ -87,13 +70,16 @@ def line_matches(
         conditions: Required mapping ``key_path -> expected value``; a line matches when every
             condition holds. If a path yields several values (wildcard or JSON array), one
             matching element suffices. Missing keys fail the line.
-        match_mode: ``any`` (default) or ``all`` (every valid line must match; no valid lines
-            fails). Other values are an execution error.
+        wildcard_mode: ``any`` (default) or ``all`` (every valid line must match; no valid lines
+            fails). Other values are an error.
         regex_match: Treat string expected values as regexes searched (``re.search``) in
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
             makes the first malformed line an error.
+        encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
+            reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable
+            content are an error.
 
     Example:
         function: jsonl.line_matches
@@ -110,11 +96,11 @@ def line_matches(
 
     log.debug(f'dst file {dst} will be used for test line_matches')
 
-    match_mode = match_mode or "any"
+    wildcard_mode = wildcard_mode or "any"
     regex_match = regex_match or False
 
-    if match_mode not in ['any', 'all']:
-        return TestResult.execution_error(None, f"Invalid match_mode: {match_mode}. Must be 'any' or 'all'")
+    if wildcard_mode not in ['any', 'all']:
+        return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
 
     try:
         # Check if file is empty (edge case handling)
@@ -125,7 +111,7 @@ def line_matches(
         malformed_lines = []
         line_num = 0
 
-        with open(dst) as f:
+        with open_text(dst, encoding) as f:
             for line in f:
                 line_num += 1
                 line = line.strip()
@@ -185,8 +171,8 @@ def line_matches(
         if malformed_lines:
             log.warning(f"Skipped {len(malformed_lines)} malformed JSON lines in {dst}")
 
-        # Determine success based on match_mode
-        if match_mode == "any":
+        # Determine success based on wildcard_mode
+        if wildcard_mode == "any":
             if matching_lines:
                 messages = [
                     f'Found {len(matching_lines)} matching line(s) out of {line_num} total lines (mode: any)',
@@ -205,7 +191,7 @@ def line_matches(
                 for ln, _data, failed in non_matching_lines[:3]:
                     messages.append(f'  Line {ln}: failed {failed}')
             return TestResult.failed(messages)
-        # match_mode == "all"
+        # wildcard_mode == "all"
         total_valid_lines = len(matching_lines) + len(non_matching_lines)
         if total_valid_lines == 0:
             return TestResult.failed(['No valid JSON lines found in file'])
@@ -226,6 +212,8 @@ def line_matches(
 
     except FileNotFoundError:
         return TestResult.error([f'JSONL file {dst} does not exist'])
+    except _ENCODING_ERRORS as e:
+        return _encoding_error(e, dst, encoding)
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSONL file {dst}")
 
@@ -243,6 +231,7 @@ def line_count(
     regex_match: bool = False,
     skip_malformed: bool = True,
     comparison_type: str = 'equals',
+    encoding: str | None = None,
 ):
     """Pass when the number of JSONL lines meeting all ``conditions`` is within ``expected_count``.
 
@@ -256,12 +245,16 @@ def line_count(
             paths one matching element suffices). ``None``/empty counts every valid JSON line.
         expected_count: Non-negative ``int`` compared with ``comparison_type``, ``{min: N, max: M}``
             for a range (either bound optional: min defaults to 0, max to unbounded), or ``None``
-            for "at least 1". Anything else (a negative number, a boolean) is an error.
+            for "at least 1". Anything else (a negative number, a boolean, other keys,
+            min > max) is an error.
         regex_match: Treat string expected values as regexes searched (``re.search``) in
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
             makes the first malformed line an error.
+        encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
+            reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable
+            content are an error.
         comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
             ``less_equal``, applied to an ``int`` ``expected_count``. With the range form or
             ``None`` only ``equals`` is allowed; other values are an error.
@@ -275,6 +268,11 @@ def line_count(
     """
     if isinstance(expected_count, int) and not isinstance(expected_count, bool):
         problems = count_parameter_errors(expected_count, comparison_type)
+    elif expected_count is not None and _count_range(expected_count) is None:
+        problems = [
+            f'expected_count must be a non-negative integer, {{min: N, max: M}} (only these keys, '
+            f'non-negative integers, min <= max) or None; got {expected_count!r}'
+        ]
     elif comparison_type != 'equals':
         problems = [
             f'comparison_type {comparison_type!r} needs an integer expected_count; '
@@ -302,13 +300,8 @@ def line_count(
     elif isinstance(expected_count, int) and not isinstance(expected_count, bool):
         min_count = expected_count
         max_count = expected_count
-    elif isinstance(expected_count, dict):
-        min_count = expected_count.get('min', 0)
-        max_count = expected_count.get('max', float('inf'))
     else:
-        return TestResult.execution_error(
-            None, "expected_count must be int, dict with 'min'/'max', or None (at least 1)"
-        )
+        min_count, max_count = _count_range(expected_count)
 
     try:
         # A 0-byte file is read like any other: it has 0 matching lines, which passes
@@ -317,7 +310,7 @@ def line_count(
         total_lines = 0
         malformed_count = 0
 
-        with open(dst) as f:
+        with open_text(dst, encoding) as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
 
@@ -414,6 +407,8 @@ def line_count(
 
     except FileNotFoundError:
         return TestResult.error([f'JSONL file {dst} does not exist'])
+    except _ENCODING_ERRORS as e:
+        return _encoding_error(e, dst, encoding)
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSONL file {dst}")
 
@@ -430,6 +425,7 @@ def value_in_any_line(
     expected_value: str | int | float | bool | None = None,
     regex_match: bool = False,
     skip_malformed: bool = True,
+    encoding: str | None = None,
 ):
     """Pass when ``key_path`` has a value matching ``expected_value`` in at least one JSONL line.
 
@@ -447,6 +443,9 @@ def value_in_any_line(
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
             makes the first malformed line an error.
+        encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
+            reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable
+            content are an error.
 
     Example:
         function: jsonl.value_in_any_line
@@ -474,7 +473,7 @@ def value_in_any_line(
         malformed_count = 0
         lines_with_key = 0
 
-        with open(dst) as f:
+        with open_text(dst, encoding) as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
 
@@ -540,5 +539,7 @@ def value_in_any_line(
 
     except FileNotFoundError:
         return TestResult.error([f'JSONL file {dst} does not exist'])
+    except _ENCODING_ERRORS as e:
+        return _encoding_error(e, dst, encoding)
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSONL file {dst}")

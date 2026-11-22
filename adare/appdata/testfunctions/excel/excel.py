@@ -1,9 +1,5 @@
 # external imports
 from pathlib import Path
-import zipfile
-import pandas as pd
-from openpyxl.utils.exceptions import InvalidFileException
-from typing import Optional
 import re
 
 # internal imports
@@ -12,24 +8,18 @@ from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
 from adarelib.testset.compare import compare_row_sequences, compare_row_sets, extract_columns, row_matches_pattern
+from adarelib.testset.workbook import (
+    UNREADABLE_WORKBOOK_ERRORS,
+    SheetNotFoundError,
+    Workbook,
+    format_sheet_diff_report,
+    match_sheets,
+    read_sheet,
+    validate_columns as check_columns,
+)
 
 # configure logging
 import logging
-
-# What pandas/openpyxl raise for a file that is not a readable workbook (wrong
-# format, corrupt archive). The test cannot be evaluated, so these are errors;
-# anything else is a bug and surfaces as an ERROR result through the testfunction decorator.
-UNREADABLE_WORKBOOK_ERRORS = (ValueError, KeyError, zipfile.BadZipFile, InvalidFileException)
-
-
-class SheetNotFoundError(LookupError):
-    """The workbook was read but has no sheet with the requested name or index.
-
-    Kept apart from ``ValueError`` (which pandas/openpyxl raise for unreadable
-    workbooks): a missing sheet in the file under test is a finding (FAILED), an
-    unreadable workbook is not (ERROR).
-    """
-
 
 log = logging.getLogger(__name__)
 
@@ -37,26 +27,6 @@ log = logging.getLogger(__name__)
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
-
-
-def _normalize_cell_value(value) -> str:
-    """
-    Convert Excel cell values to strings for comparison.
-
-    - NaN/None → empty string
-    - Dates → ISO format string
-    - Numbers → string representation
-    - Everything else → string
-    """
-    if pd.isna(value) or value is None:
-        return ""
-
-    # Handle datetime objects
-    if isinstance(value, pd.Timestamp):
-        return value.isoformat()
-
-    # Convert to string
-    return str(value)
 
 
 def _unresolved_path_error(label: str, path: str, status: str) -> TestResult:
@@ -77,211 +47,6 @@ def _unresolved_path_error(label: str, path: str, status: str) -> TestResult:
     )
 
 
-def _get_sheet_names(filepath: str) -> list[str]:
-    """Get list of all sheet names in Excel file."""
-    return pd.ExcelFile(filepath, engine='openpyxl').sheet_names
-
-
-def _resolve_sheet_identifier(filepath: str, sheet: str | int) -> str:
-    """
-    Resolve sheet identifier (name or index) to sheet name.
-
-    Args:
-        filepath: Path to Excel file
-        sheet: Sheet name (str) or index (int)
-
-    Returns:
-        Sheet name as string
-
-    Raises:
-        SheetNotFoundError: If the sheet is not in the workbook
-    """
-    sheet_names = _get_sheet_names(filepath)
-
-    if isinstance(sheet, int):
-        # Resolve by index
-        if sheet < 0 or sheet >= len(sheet_names):
-            raise SheetNotFoundError(
-                f"Sheet index {sheet} out of range (file has {len(sheet_names)} sheets: {sheet_names})"
-            )
-        return sheet_names[sheet]
-    # Resolve by name
-    if sheet not in sheet_names:
-        raise SheetNotFoundError(f"Sheet '{sheet}' not found (available sheets: {sheet_names})")
-    return sheet
-
-
-def _read_excel_sheet(filepath: str, sheet: str | int = 0, header_row: int | None = None) -> list[list[str]]:
-    """
-    Read Excel sheet and return as list of string lists.
-
-    Args:
-        filepath: Path to Excel file
-        sheet: Sheet name or index (default 0)
-        header_row: If specified, skip this many rows from the top
-
-    Returns:
-        List of rows, where each row is a list of strings
-    """
-    # Resolve sheet identifier to name
-    sheet_name = _resolve_sheet_identifier(filepath, sheet)
-
-    # Read the sheet
-    df = pd.read_excel(
-        filepath,
-        sheet_name=sheet_name,
-        header=None,  # Don't use first row as header
-        engine='openpyxl',
-    )
-
-    # Skip header rows if specified
-    if header_row is not None and header_row > 0:
-        df = df.iloc[header_row:]
-
-    # Convert to list of lists with normalized values
-    rows = []
-    for _, row in df.iterrows():
-        normalized_row = [_normalize_cell_value(cell) for cell in row]
-        rows.append(normalized_row)
-
-    return rows
-
-
-def _match_sheets(
-    actual_sheets: list[str], reference_sheets: list[str], mode: str, specific_sheets: list[str] | None = None
-) -> list[tuple[str, str]]:
-    """
-    Match sheets between actual and reference files based on mode.
-
-    Args:
-        actual_sheets: List of sheet names in actual file
-        reference_sheets: List of sheet names in reference file
-        mode: "by_name", "by_index", or "specific"
-        specific_sheets: List of specific sheet names (for mode="specific")
-
-    Returns:
-        List of (actual_sheet, reference_sheet) tuples to compare
-    """
-    if mode == "by_name":
-        # Match sheets with same name
-        matches = []
-        for sheet_name in reference_sheets:
-            if sheet_name in actual_sheets:
-                matches.append((sheet_name, sheet_name))
-        return matches
-
-    if mode == "by_index":
-        # Match sheets by position
-        matches = []
-        for i in range(min(len(actual_sheets), len(reference_sheets))):
-            matches.append((actual_sheets[i], reference_sheets[i]))
-        return matches
-
-    if mode == "specific":
-        # Match only specified sheets
-        if not specific_sheets:
-            return []
-        matches = []
-        for sheet_name in specific_sheets:
-            if sheet_name in actual_sheets and sheet_name in reference_sheets:
-                matches.append((sheet_name, sheet_name))
-        return matches
-
-    raise ValueError(f"Invalid sheet_mode '{mode}'. Must be 'by_name', 'by_index', or 'specific'")
-
-
-def _format_sheet_diff_report(sheet_name: str, row_comparison_details: list[str]) -> list[str]:
-    """Format sheet comparison report with sheet name prefix."""
-    details = [f"Sheet '{sheet_name}':"]
-    for line in row_comparison_details:
-        details.append(f"  {line}")
-    return details
-
-
-def _validate_columns(
-    actual_columns: list[str], expected_columns: list[str], allow_extra: bool, allow_missing: bool, ignore_order: bool
-) -> tuple[bool, list[str]]:
-    """
-    Validate column headers.
-
-    Args:
-        actual_columns: Column headers from actual sheet
-        expected_columns: Expected column headers
-        allow_extra: Allow extra columns in actual
-        allow_missing: Allow missing columns in actual
-        ignore_order: Ignore column order
-
-    Returns:
-        (success, error_details) tuple where error_details is a list of strings
-    """
-    # Normalize column names (strip whitespace)
-    actual_normalized = [str(col).strip() for col in actual_columns]
-    expected_normalized = [str(col).strip() for col in expected_columns]
-
-    # Find missing columns (in expected but not in actual)
-    missing_columns = [col for col in expected_normalized if col not in actual_normalized]
-
-    # Find extra columns (in actual but not in expected)
-    extra_columns = [col for col in actual_normalized if col not in expected_normalized]
-
-    # Check order if ignore_order=False
-    order_mismatch = False
-    if not ignore_order and not missing_columns and not extra_columns:
-        # Only check order if sets match
-        if actual_normalized != expected_normalized:
-            order_mismatch = True
-
-    # Determine if validation passes
-    has_failures = False
-    if missing_columns and not allow_missing:
-        has_failures = True
-    if extra_columns and not allow_extra:
-        has_failures = True
-    if order_mismatch:
-        has_failures = True
-
-    if not has_failures:
-        return True, []
-
-    # Generate detailed error report
-    error_details = []
-
-    # Summary
-    summary_parts = []
-    if missing_columns and not allow_missing:
-        summary_parts.append(f"{len(missing_columns)} missing column{'s' if len(missing_columns) != 1 else ''}")
-    if extra_columns and not allow_extra:
-        summary_parts.append(f"{len(extra_columns)} extra column{'s' if len(extra_columns) != 1 else ''}")
-    if order_mismatch:
-        summary_parts.append("column order mismatch")
-
-    error_details.append("Column validation failed: " + ", ".join(summary_parts))
-    error_details.append(f"Actual: {len(actual_columns)} columns, Expected: {len(expected_columns)} columns")
-
-    # Missing columns section
-    if missing_columns and not allow_missing:
-        error_details.append("")
-        error_details.append("Missing columns (in expected but not in actual):")
-        for col in missing_columns:
-            error_details.append(f"  - {col}")
-
-    # Extra columns section
-    if extra_columns and not allow_extra:
-        error_details.append("")
-        error_details.append("Extra columns (in actual but not in expected):")
-        for col in extra_columns:
-            error_details.append(f"  - {col}")
-
-    # Order mismatch section
-    if order_mismatch:
-        error_details.append("")
-        error_details.append("Column order mismatch:")
-        error_details.append(f"  Actual:   {actual_normalized}")
-        error_details.append(f"  Expected: {expected_normalized}")
-
-    return False, error_details
-
-
 # ============================================================================
 # TESTFUNCTION 1: sheet_exists
 # ============================================================================
@@ -292,23 +57,23 @@ def _validate_columns(
     description='tests if a sheet exists in an Excel file',
     category=HostModeCategory.FILE_CONTENT,
 )
-def sheet_exists(ctx: TestContext, dst: str = '', sheet_name: str = '', regex_match: bool = False):
-    """Pass when workbook ``dst`` (.xlsx, read with openpyxl) has a sheet named ``sheet_name``.
+def sheet_exists(ctx: TestContext, dst: str, sheet: str, regex_match: bool = False):
+    """Pass when workbook ``dst`` (.xlsx, read with openpyxl) has a sheet named ``sheet``.
 
     Use for: checking a GUI action added/renamed a worksheet.
 
     Args:
         dst: Guest path to the .xlsx; a glob must match exactly one path. A missing or
             unreadable file is an error.
-        sheet_name: Exact, case-sensitive sheet name, or a regex if ``regex_match``.
-        regex_match: Treat ``sheet_name`` as a Python regex applied with ``re.match``
-            (anchored at the start only); an invalid regex fails.
+        sheet: Exact, case-sensitive sheet name, or a regex if ``regex_match``.
+        regex_match: Treat ``sheet`` as a Python regex searched in each sheet name
+            (``re.search``, unanchored; ``^...$`` for the whole name); an invalid regex is an error.
 
     Example:
         function: excel.sheet_exists
         parameter:
           dst: /home/user/Documents/budget.xlsx
-          sheet_name: Q3
+          sheet: Q3
     """
     # Resolve file path
     dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -319,7 +84,8 @@ def sheet_exists(ctx: TestContext, dst: str = '', sheet_name: str = '', regex_ma
 
     try:
         # Get all sheet names
-        sheet_names = _get_sheet_names(dst_resolved)
+        with Workbook(dst_resolved) as wb:
+            sheet_names = wb.sheet_names
 
         if not sheet_names:
             return TestResult.failed(['Excel file contains no sheets'])
@@ -327,18 +93,16 @@ def sheet_exists(ctx: TestContext, dst: str = '', sheet_name: str = '', regex_ma
         # Check if sheet exists
         if regex_match:
             # Regex matching
-            pattern = re.compile(sheet_name)
-            matching_sheets = [name for name in sheet_names if pattern.match(name)]
+            pattern = re.compile(sheet)
+            matching_sheets = [name for name in sheet_names if pattern.search(name)]
 
             if matching_sheets:
                 return TestResult.success()
-            return TestResult.failed(
-                [f'no sheet matches regex pattern: {sheet_name}', f'available sheets: {sheet_names}']
-            )
+            return TestResult.failed([f'no sheet matches regex pattern: {sheet}', f'available sheets: {sheet_names}'])
         # Exact name matching
-        if sheet_name in sheet_names:
+        if sheet in sheet_names:
             return TestResult.success()
-        return TestResult.failed([f'sheet "{sheet_name}" not found', f'available sheets: {sheet_names}'])
+        return TestResult.failed([f'sheet "{sheet}" not found', f'available sheets: {sheet_names}'])
 
     except FileNotFoundError:
         return TestResult.error([f'file with path {dst} does not exist'])
@@ -382,7 +146,8 @@ def cell_value_matches(
         expected_value: Compared exactly with ``str(expected_value)`` (``None`` -> ``''``).
             A single ``!re``/``!timestamp`` tag is matched by type.
         sheet: Sheet name (str) or 0-based sheet index (int); unknown sheets fail.
-        regex_match: Treat ``expected_value`` as a regex applied with ``re.match`` (start-anchored).
+        regex_match: Treat ``expected_value`` as a regex searched in the cell value (``re.search``,
+            unanchored; ``^...$`` for the whole value); an invalid regex is an error.
 
     Example:
         function: excel.cell_value_matches
@@ -401,7 +166,7 @@ def cell_value_matches(
 
     try:
         # Read sheet
-        rows = _read_excel_sheet(dst_resolved, sheet=sheet)
+        rows = read_sheet(dst_resolved, sheet=sheet)
 
         # Validate row and column indices
         if row < 0 or row >= len(rows):
@@ -446,7 +211,7 @@ def cell_value_matches(
         # Regex matching
         if regex_match:
             pattern = re.compile(expected_str)
-            if pattern.match(actual_value):
+            if pattern.search(actual_value):
                 return TestResult.success()
             return TestResult.failed(
                 [
@@ -517,7 +282,7 @@ def contains_row(
 
     try:
         # Read sheet
-        rows = _read_excel_sheet(dst_resolved, sheet=sheet, header_row=header_row)
+        rows = read_sheet(dst_resolved, sheet=sheet, header_row=header_row)
 
         # Track best matching rows for detailed error reporting
         match_results = []
@@ -632,7 +397,7 @@ def validate_columns(
 
     try:
         # Read sheet
-        rows = _read_excel_sheet(dst_resolved, sheet=sheet)
+        rows = read_sheet(dst_resolved, sheet=sheet)
 
         # Validate column_row index
         if column_row < 0 or column_row >= len(rows):
@@ -651,7 +416,7 @@ def validate_columns(
             return TestResult.failed([f'column_row {column_row} is empty', 'cannot validate columns from an empty row'])
 
         # Validate columns
-        success, error_details = _validate_columns(
+        success, error_details = check_columns(
             actual_columns=actual_columns,
             expected_columns=expected_columns,
             allow_extra=allow_extra_columns,
@@ -745,7 +510,7 @@ def compare_rows(
             return TestResult.error([f'reference_file {reference_file} not found (because {ref_status})'])
 
         try:
-            ref_rows = _read_excel_sheet(ref_file_path, sheet=reference_sheet, header_row=reference_header_row)
+            ref_rows = read_sheet(ref_file_path, sheet=reference_sheet, header_row=reference_header_row)
         except SheetNotFoundError as e:
             # The expectation cannot be built, so this is no finding about dst.
             return TestResult.error([f'reference_file {reference_file}: {e}'])
@@ -772,7 +537,7 @@ def compare_rows(
 
     try:
         # Read sheet
-        actual_rows = _read_excel_sheet(dst_resolved, sheet=sheet, header_row=header_row)
+        actual_rows = read_sheet(dst_resolved, sheet=sheet, header_row=header_row)
 
         # Log contents for debugging
         log.debug(f"Excel sheet contains {len(actual_rows)} rows")
@@ -871,9 +636,9 @@ def compare_sheets(
 
     try:
         # Read sheets
-        actual_rows = _read_excel_sheet(actual_path, sheet=actual_sheet, header_row=header_row)
+        actual_rows = read_sheet(actual_path, sheet=actual_sheet, header_row=header_row)
         try:
-            reference_rows = _read_excel_sheet(reference_path, sheet=reference_sheet, header_row=header_row)
+            reference_rows = read_sheet(reference_path, sheet=reference_sheet, header_row=header_row)
         except SheetNotFoundError as e:
             # A missing reference sheet leaves nothing to compare against: no finding about actual.
             return TestResult.error([f'reference file {reference}: {e}'])
@@ -979,17 +744,20 @@ def compare_files(
 
     log.debug(f'comparing Excel files: {actual_path} vs {reference_path} for test compare_files')
 
+    actual_wb = reference_wb = None
     try:
-        # Get sheet names
-        actual_sheets = _get_sheet_names(actual_path)
-        reference_sheets = _get_sheet_names(reference_path)
+        # each workbook is opened once; every sheet is read from that handle
+        actual_wb = Workbook(actual_path)
+        reference_wb = Workbook(reference_path)
+        actual_sheets = actual_wb.sheet_names
+        reference_sheets = reference_wb.sheet_names
 
         log.debug(f"Actual file has {len(actual_sheets)} sheets: {actual_sheets}")
         log.debug(f"Reference file has {len(reference_sheets)} sheets: {reference_sheets}")
 
         # Match sheets based on mode
         try:
-            sheet_matches = _match_sheets(actual_sheets, reference_sheets, sheet_mode, specific_sheets)
+            sheet_matches = match_sheets(actual_sheets, reference_sheets, sheet_mode, specific_sheets)
         except ValueError as e:
             # Invalid sheet_mode parameter
             return TestResult.error([str(e)])
@@ -1037,8 +805,8 @@ def compare_files(
         for act_sheet, ref_sheet in sheet_matches:
             try:
                 # Read sheets
-                actual_rows = _read_excel_sheet(actual_path, sheet=act_sheet, header_row=header_row)
-                reference_rows = _read_excel_sheet(reference_path, sheet=ref_sheet, header_row=header_row)
+                actual_rows = actual_wb.rows(act_sheet, header_row)
+                reference_rows = reference_wb.rows(ref_sheet, header_row)
 
                 # Compare rows
                 if ignore_order:
@@ -1101,7 +869,7 @@ def compare_files(
             failure_details.append("Sheet comparison failures:")
             for failure in sheet_comparison_failures:
                 failure_details.append("")
-                failure_details.extend(_format_sheet_diff_report(failure['sheet'], failure['details']))
+                failure_details.extend(format_sheet_diff_report(failure['sheet'], failure['details']))
 
         return TestResult.failed(failure_details)
 
@@ -1114,3 +882,7 @@ def compare_files(
         return TestResult.execution_error(e, "Cannot read Excel files")
     except UNREADABLE_WORKBOOK_ERRORS as e:
         return TestResult.execution_error(e, "Cannot parse Excel files")
+    finally:
+        for wb in (actual_wb, reference_wb):
+            if wb is not None:
+                wb.close()

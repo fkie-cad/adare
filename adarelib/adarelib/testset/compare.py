@@ -12,24 +12,38 @@ import logging
 from typing import Any
 
 from adarelib.event.event import TestResult
+from adarelib.testset.basictest import PlaceholderError
 
 log = logging.getLogger(__name__)
 
 # What a placeholder comparison raises for a value it cannot interpret (an
-# unparsable timestamp, an unknown placeholder, a non-string value). Anything
-# else is a bug and must surface as an ERROR result.
+# unparsable timestamp, a malformed interval, a non-string value). It is a
+# problem of the test definition, so the helpers below turn it into a
+# PlaceholderError, which the @testfunction decorator reports as ERROR.
 PLACEHOLDER_ERRORS = (KeyError, ValueError, TypeError)
 
 
+def compare_placeholder(ctx: Any, placeholder_name: str, actual: str) -> tuple[bool, str]:
+    """``ctx.compare_with_placeholder`` with every evaluation problem raised as ``PlaceholderError``."""
+    try:
+        return ctx.compare_with_placeholder(placeholder_name, actual)
+    except PLACEHOLDER_ERRORS as e:
+        raise PlaceholderError(f"cannot evaluate '{{{{ {placeholder_name} }}}}': {e}") from e
+
+
 def compare_with_single_placeholder(ctx: Any, expected_str: str, actual: str) -> tuple[bool, str]:
-    """Compare ``actual`` against an expected string that must contain exactly one placeholder."""
+    """Compare ``actual`` against an expected string that must contain exactly one placeholder.
+
+    Raises ``PlaceholderError`` (an ERROR result) when ``expected_str`` has more than one
+    placeholder, names an unknown one or holds an invalid regular expression.
+    """
     placeholder_names = ctx.get_placeholders(expected_str)
     if len(placeholder_names) != 1:
-        return False, f"expected 1 placeholder for single value comparison, got {len(placeholder_names)}"
-    try:
-        return ctx.compare_with_placeholder(placeholder_names[0], actual)
-    except PLACEHOLDER_ERRORS as e:
-        return False, f"placeholder comparison error: {e}"
+        raise PlaceholderError(
+            f"expected exactly one placeholder in {expected_str!r}, got {len(placeholder_names)}: "
+            "a value is compared against a single !re or !timestamp"
+        )
+    return compare_placeholder(ctx, placeholder_names[0], actual)
 
 
 def parse_key_path(key_path: str) -> list[tuple[str, Any]]:
@@ -199,21 +213,9 @@ def row_matches_pattern(test_instance, row, entry_pattern):
         expected_str = str(expected_pattern)
 
         if test_instance.has_placeholders(expected_str):
-            # Has placeholder - use tolerance comparison
-            placeholder_names = test_instance.get_placeholders(expected_str)
-            if len(placeholder_names) == 1:
-                placeholder_name = placeholder_names[0]
-                try:
-                    success, message = test_instance.compare_with_placeholder(placeholder_name, actual_value)
-                    if not success:
-                        failed_columns.append(f"col{i}({message})")
-                except PLACEHOLDER_ERRORS as e:
-                    log.error(f"Error in placeholder comparison for column {i}: {e}")
-                    failed_columns.append(f"col{i}(placeholder_error: {e})")
-            else:
-                failed_columns.append(
-                    f"col{i}(invalid_placeholder: expected 1 placeholder, got {len(placeholder_names)})"
-                )
+            success, message = compare_with_single_placeholder(test_instance, expected_str, actual_value)
+            if not success:
+                failed_columns.append(f"col{i}({message})")
         else:
             # Direct string comparison
             if actual_value != expected_str:

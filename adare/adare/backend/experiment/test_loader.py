@@ -13,6 +13,8 @@ from typing import Any
 import jinja2
 import yaml
 
+from adarelib.testset.renames import rename_problems
+
 log = logging.getLogger(__name__)
 
 
@@ -611,6 +613,9 @@ class TestLoader:
         Raises:
             ValueError: If test cannot be structured
         """
+        renamed = rename_problems(resolved_test.get('function'), resolved_test.get('parameter'))
+        if renamed:
+            raise ValueError(f"Invalid test '{test_name}': {'; '.join(renamed)}")
         try:
             # Get test class
             test_class = self.get_test_class(test_name)

@@ -18,6 +18,15 @@ if TYPE_CHECKING:
     import datetime
 
 
+class PlaceholderError(Exception):
+    """A placeholder the test cannot evaluate: unknown name or invalid regular expression.
+
+    This is a problem of the test definition, not of the artifact, so the ``@testfunction``
+    decorator reports it as ERROR. It is deliberately not a ``ValueError``: code that treats
+    a ``ValueError`` as "this value does not match" must not swallow it.
+    """
+
+
 class HostModeCategory(str, Enum):
     """How a test should execute in host-mode (no in-guest agent)."""
 
@@ -196,30 +205,34 @@ class BasicTest:
         return 'tolerance' in metadata and bool(metadata['tolerance'])
 
     def compare_with_placeholder(self, placeholder_name: str, actual_value: str) -> tuple[bool, str]:
-        """Compare actual value with placeholder based on its type (regex, timestamp, string)."""
+        """Compare actual value with placeholder based on its type (regex, timestamp, string).
+
+        Raises ``PlaceholderError`` for an unknown placeholder or an invalid regular expression.
+        """
         metadata = self.get_placeholder_metadata(placeholder_name)
+        if not metadata:
+            raise PlaceholderError(f"unknown placeholder '{{{{ {placeholder_name} }}}}': it has no metadata")
         placeholder_type = metadata.get('type', 'string')
 
         if placeholder_type == 'regex':
-            import re
-
+            regex_pattern = metadata.get('resolved_value', metadata.get('raw_value'))
+            if regex_pattern is None:
+                raise PlaceholderError(f"regex placeholder '{placeholder_name}' has no pattern")
             try:
-                regex_pattern = metadata.get('resolved_value', metadata.get('raw_value', '.*'))
                 compiled_regex = re.compile(regex_pattern)
-                if compiled_regex.match(actual_value):
-                    return True, f"Regex match: '{actual_value}' matches pattern '{regex_pattern}'"
-                return False, f"Regex no match: '{actual_value}' doesn't match pattern '{regex_pattern}'"
             except re.error as e:
-                return False, f"Regex error: Invalid pattern '{regex_pattern}' - {e}"
+                raise PlaceholderError(f"invalid regular expression {regex_pattern!r}: {e}") from e
+            if compiled_regex.match(actual_value):
+                return True, f"Regex match: '{actual_value}' matches pattern '{regex_pattern}'"
+            return False, f"Regex no match: '{actual_value}' doesn't match pattern '{regex_pattern}'"
 
-        elif placeholder_type == 'timestamp':
+        if placeholder_type == 'timestamp':
             return self._compare_timestamp_with_tolerance(metadata, actual_value)
 
-        else:
-            # Default: exact string comparison
-            expected = metadata.get('resolved_value', '')
-            success = actual_value == expected
-            return success, f"Exact comparison: {'match' if success else 'no match'}"
+        # Default: exact string comparison
+        expected = metadata.get('resolved_value', '')
+        success = actual_value == expected
+        return success, f"Exact comparison: {'match' if success else 'no match'}"
 
     def _compare_timestamp_with_tolerance(self, metadata: dict, actual_value: str) -> tuple[bool, str]:
         """Compare timestamp values with tolerance."""

@@ -27,6 +27,15 @@ _BOM_CODECS = {
 Pattern = bytes | re.Pattern
 
 
+def _placeholder_problems(ctx: TestContext, content, instead: str) -> list[str]:
+    """An error for ``content`` holding a ``!re``/``!timestamp`` placeholder: it would be searched literally."""
+    if isinstance(content, str) and ctx.has_placeholders(content):
+        return [
+            f'content {content!r} holds a !re or !timestamp placeholder, which is not supported here; use {instead}'
+        ]
+    return []
+
+
 def _expand_encodings(encodings: list[str] | str | None) -> list[str]:
     """Concrete codec names for ``encodings``.
 
@@ -38,11 +47,13 @@ def _expand_encodings(encodings: list[str] | str | None) -> list[str]:
     if isinstance(encodings, str):
         encodings = [encodings]
     if not isinstance(encodings, list) or not encodings or not all(isinstance(e, str) for e in encodings):
-        raise ValueError(f'encodings must be a non-empty list of encoding names, got {encodings!r}')
+        raise ValueError(f'encoding must be a name or a non-empty list of names, got {encodings!r}')
     if len(encodings) > 1 and all(len(e) == 1 for e in encodings):
         # a playbook string (encodings: utf-8) arrives split into characters
         joined = ''.join(encodings)
-        raise ValueError(f'encodings must be a list of names, got the single string {joined!r}; put it in a list')
+        raise ValueError(
+            f'encoding must be a name or a list of names, got the characters of {joined!r}; write the name as one string'
+        )
     names: list[str] = []
     for encoding in encodings:
         name = codecs.lookup(encoding).name
@@ -187,7 +198,7 @@ def occurrence_count(
     content: str,
     expected_count: int,
     content_type: str = 'string',
-    encodings: list[str] | str | None = None,
+    encoding: list[str] | str | None = None,
     case_sensitive: bool = True,
     comparison_type: str = 'equals',
 ):
@@ -201,14 +212,16 @@ def occurrence_count(
         dst: Guest path to the file; a glob must match exactly one path. A missing file is an
             error. The raw bytes are searched, nothing is decoded.
         content: What to find; must not be empty. Its meaning depends on ``content_type``.
+            A ``!re`` or ``!timestamp`` placeholder is an error: for patterns use
+            text.line_count with ``regex_match``.
         expected_count: Non-negative integer to compare against; anything else is an error.
-        content_type: ``string`` (default): ``content`` encoded in each of ``encodings``.
+        content_type: ``string`` (default): ``content`` encoded in each of ``encoding``.
             ``bytes``: ASCII characters stand for their byte, Python escapes (``\x00``, ``\n``,
             ``\\``) are decoded; a non-ASCII character or an unknown escape is an error (write
             ``\xNN``, or use ``string`` with an encoding). ``hex``: hex digits, whitespace
             allowed (``4d 5a 90 00``).
-        encodings: Encodings for ``string`` mode: a list (default ``[utf-8]``), e.g.
-            ``[utf-8, utf-16-le]``, or one name (``utf-16-le``). Occurrences of the distinct encoded forms are summed (the
+        encoding: Encoding(s) for ``string`` mode: one name (``utf-16-le``) or a list (default ``[utf-8]``), e.g.
+            ``[utf-8, utf-16-le]``. Occurrences of the distinct encoded forms are summed (the
             same text stored once in each of two forms counts twice); a match on bytes already
             counted for an earlier form is skipped. ``utf-16``/``utf-32`` search both byte
             orders without BOM. Forms are matched at any byte offset, not aligned to
@@ -224,14 +237,15 @@ def occurrence_count(
         parameter:
           dst: /home/user/data/cache.bin
           content: secret-token
-          encodings: [utf-8, utf-16-le]
+          encoding: [utf-8, utf-16-le]
           expected_count: 0
     """
     problems = count_parameter_errors(expected_count, comparison_type)
+    problems += _placeholder_problems(ctx, content, 'text.line_count with regex_match')
     if problems:
         return TestResult.error(problems)
     try:
-        patterns = _search_patterns(content, content_type, encodings, case_sensitive)
+        patterns = _search_patterns(content, content_type, encoding, case_sensitive)
     except (ValueError, LookupError) as e:
         return TestResult.error([str(e)])
     path, status = ctx.resolve_globfilepath(dst)
@@ -281,7 +295,8 @@ def line_count(
             Lines end at ``\\n``, ``\\r\\n`` or ``\\r``.
         content: Substring a line must contain (case-sensitive); an empty string counts
             every line. With ``regex_match`` a regex searched in each line (``re.search``;
-            ``(?i)`` for case-insensitive); an invalid regex is an error.
+            ``(?i)`` for case-insensitive); an invalid regex is an error. A ``!re`` or
+            ``!timestamp`` placeholder is an error: write the pattern with ``regex_match``.
         expected_count: Non-negative integer to compare against; anything else is an error.
         comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
             ``less_equal``; other values are an error.
@@ -301,6 +316,8 @@ def line_count(
     problems = count_parameter_errors(expected_count, comparison_type)
     if not isinstance(content, str):
         problems.append(f'content must be a string, got {content!r}')
+    else:
+        problems += _placeholder_problems(ctx, content, 'regex_match: true with a plain pattern')
     if problems:
         return TestResult.error(problems)
     try:

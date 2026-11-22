@@ -503,12 +503,12 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="names", expected_element="Bob"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="names", expected_value="Bob"),
         )
         result = test.test()
 
         assert_test_success(result)
-        assert "contains expected element" in result.details[0]
+        assert "matches" in result.details[0]
         assert "Bob" in result.details[0]
 
     def test_array_contains_success_number(self, create_json_file):
@@ -517,7 +517,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="scores", expected_element=95),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="scores", expected_value=95),
         )
         result = test.test()
 
@@ -529,7 +529,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="flags", expected_element=False),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="flags", expected_value=False),
         )
         result = test.test()
 
@@ -541,7 +541,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="data.results.values", expected_element=20),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="data.results.values", expected_value=20),
         )
         result = test.test()
 
@@ -554,7 +554,7 @@ class TestArrayContains:
         test = ArrayContains(
             name="test_array_contains",
             parameter=ArrayContainsParameter(
-                dst=str(json_file), array_path="users", expected_element={"name": "Alice", "age": 30}
+                dst=str(json_file), array_path="users", expected_value={"name": "Alice", "age": 30}
             ),
         )
         result = test.test()
@@ -567,7 +567,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="matrix", expected_element=[3, 4]),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="matrix", expected_value=[3, 4]),
         )
         result = test.test()
 
@@ -579,12 +579,12 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="names", expected_element="David"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="names", expected_value="David"),
         )
         result = test.test()
 
         assert_test_failed(result)
-        assert "does not contain" in result.details[0]
+        assert "has no element matching" in result.details[0]
 
     def test_array_contains_failure_not_array(self, create_json_file):
         """Test failure when path points to non-array value."""
@@ -592,7 +592,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="name", expected_element="Alice"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="name", expected_value="Alice"),
         )
         result = test.test()
 
@@ -605,7 +605,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="values", expected_element="test"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="values", expected_value="test"),
         )
         result = test.test()
 
@@ -618,13 +618,13 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="results", expected_element="{{VAR1}}"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="results", expected_value="{{VAR1}}"),
             variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
         assert_test_success(result)
-        assert "matches placeholder" in result.details[0]
+        assert "matches" in result.details[0]
 
     def test_array_contains_failure_placeholder_mismatch(self, create_json_file, variable_metadata_simple):
         """Test failure when placeholder doesn't match any array element."""
@@ -632,13 +632,13 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="results", expected_element="{{VAR1}}"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="results", expected_value="{{VAR1}}"),
             variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
         assert_test_failed(result)
-        assert "no array element matches" in result.details[0]
+        assert "has no element matching" in result.details[0]
 
     def test_array_contains_empty_array(self, create_json_file):
         """Test behavior with empty array."""
@@ -646,12 +646,12 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="items", expected_element="anything"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="items", expected_value="anything"),
         )
         result = test.test()
 
         assert_test_failed(result)
-        assert "does not contain" in result.details[0]
+        assert "has no element matching" in result.details[0]
 
     def test_array_contains_success_null_element(self, create_json_file):
         """Test successful null element membership."""
@@ -659,7 +659,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="values", expected_element=None),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="values", expected_value=None),
         )
         result = test.test()
 
@@ -672,7 +672,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="items", expected_element="test"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="items", expected_value="test"),
         )
         result = test.test()
 
@@ -684,7 +684,7 @@ class TestArrayContains:
         test = ArrayContains(
             name="test_array_contains",
             parameter=ArrayContainsParameter(
-                dst=str(tmp_path / "nonexistent.json"), array_path="items", expected_element="test"
+                dst=str(tmp_path / "nonexistent.json"), array_path="items", expected_value="test"
             ),
         )
         result = test.test()

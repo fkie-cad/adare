@@ -54,33 +54,33 @@ class TestOccurrenceCount:
     def test_utf16_text_is_not_counted_again_in_the_other_byte_order(self, tmp_path):
         # 'xab' in UTF-16-LE also contains 'ab' in UTF-16-BE, shifted by one byte
         path = _file(tmp_path, 'xab'.encode('utf-16-le'))
-        result = _occurrences(path, content='ab', expected_count=1, encodings=['utf-16'])
+        result = _occurrences(path, content='ab', expected_count=1, encoding=['utf-16'])
         assert result.status == StatusEnum.SUCCESS, result.details
 
     def test_single_encoding_name(self, tmp_path):
         """``encodings: utf-16-le`` in a playbook is one name, not a list of characters."""
         path = _file(tmp_path, 'token'.encode('utf-16-le'))
-        result = _occurrences(path, content='token', expected_count=1, encodings='utf-16-le')
+        result = _occurrences(path, content='token', expected_count=1, encoding='utf-16-le')
         assert result.status == StatusEnum.SUCCESS, result.details
 
     def test_encoding_name_split_into_characters_is_an_error(self, tmp_path):
         # a safety net: what a list[str]-only structuring would make of `encodings: utf-8`
-        result = _occurrences(_file(tmp_path, b'token'), content='token', expected_count=1, encodings=list('utf-8'))
+        result = _occurrences(_file(tmp_path, b'token'), content='token', expected_count=1, encoding=list('utf-8'))
         assert result.status == StatusEnum.ERROR
-        assert "single string 'utf-8'" in result.details[0]
+        assert "characters of 'utf-8'" in result.details[0]
 
     @pytest.mark.parametrize(
         ('params', 'count'),
         [
             ({'content': 'token'}, 3),
-            ({'content': 'token', 'encodings': ['utf-16-le']}, 1),
-            ({'content': 'token', 'encodings': 'utf-16-le'}, 1),
-            ({'content': 'token', 'encodings': ['utf-8', 'utf-16-le']}, 4),
+            ({'content': 'token', 'encoding': ['utf-16-le']}, 1),
+            ({'content': 'token', 'encoding': 'utf-16-le'}, 1),
+            ({'content': 'token', 'encoding': ['utf-8', 'utf-16-le']}, 4),
             # utf-16 = both byte orders without BOM; duplicates are counted once
-            ({'content': 'TOKEN', 'encodings': ['utf-16', 'utf-16-be']}, 1),
-            ({'content': 'token', 'encodings': ['utf-8', 'utf8', 'UTF-8']}, 3),
+            ({'content': 'TOKEN', 'encoding': ['utf-16', 'utf-16-be']}, 1),
+            ({'content': 'token', 'encoding': ['utf-8', 'utf8', 'UTF-8']}, 3),
             ({'content': 'token', 'case_sensitive': False}, 4),
-            ({'content': 'token', 'case_sensitive': False, 'encodings': ['utf-16']}, 2),
+            ({'content': 'token', 'case_sensitive': False, 'encoding': ['utf-16']}, 2),
             ({'content': 'grüße', 'case_sensitive': False}, 1),  # no ß -> SS mapping
             ({'content': 'tokentoken'}, 1),
             ({'content': r'\x00\x01token', 'content_type': 'bytes'}, 1),
@@ -113,7 +113,7 @@ class TestOccurrenceCount:
         assert (
             _occurrences(path, content=r'caf\xe9', content_type='bytes', expected_count=1).status == StatusEnum.SUCCESS
         )
-        assert _occurrences(path, content='café', encodings=['latin-1'], expected_count=1).status == StatusEnum.SUCCESS
+        assert _occurrences(path, content='café', encoding=['latin-1'], expected_count=1).status == StatusEnum.SUCCESS
         assert _occurrences(path, content='café', expected_count=0).status == StatusEnum.SUCCESS  # utf-8 form
 
     @pytest.mark.parametrize(
@@ -154,10 +154,10 @@ class TestOccurrenceCount:
             {'content': 'x', 'expected_count': 1, 'comparison_type': 'roughly'},
             {'content': '', 'expected_count': 0},
             {'content': 'x', 'expected_count': 0, 'content_type': 'regex'},
-            {'content': 'x', 'expected_count': 0, 'encodings': ['no-such-codec']},
-            {'content': 'x', 'expected_count': 0, 'encodings': []},
-            {'content': 'x', 'expected_count': 0, 'encodings': [1]},
-            {'content': '€', 'expected_count': 0, 'encodings': ['latin-1']},
+            {'content': 'x', 'expected_count': 0, 'encoding': ['no-such-codec']},
+            {'content': 'x', 'expected_count': 0, 'encoding': []},
+            {'content': 'x', 'expected_count': 0, 'encoding': [1]},
+            {'content': '€', 'expected_count': 0, 'encoding': ['latin-1']},
             {'content': '€', 'expected_count': 0, 'content_type': 'bytes'},
             {'content': r'\x4', 'expected_count': 0, 'content_type': 'bytes'},
             {'content': r'€', 'expected_count': 0, 'content_type': 'bytes'},

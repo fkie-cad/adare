@@ -50,7 +50,7 @@ def _judge(ledger, test_def, result=None, test_class=None):
         {'function': 'xml.element_count', 'parameter': {'expected_count': 0, 'comparison_type': 'less_equal'}},
         {'function': 'text.occurrence_count', 'parameter': {'expected_count': 1, 'comparison_type': 'less'}},
         {'function': 'jsonl.line_count', 'parameter': {'expected_count': {'max': 0}}},
-        {'function': 'sqlite.query_result', 'parameter': {'query': 'q', 'expected_rows': 0}},
+        {'function': 'sqlite.query_result', 'parameter': {'query': 'q', 'expected_count': 0}},
     ],
 )
 def test_negative_tests(test_def):
@@ -286,18 +286,7 @@ def test_transport_error_is_error():
     assert not result.success and result.data['test_status'] == 'ERROR'
 
 
-def test_default_expected_count_of_zero_is_negative():
-    import attrs
-
-    @attrs.define
-    class _Param:
-        dst: str = ''
-        expected_count: int = 0
-
-    @attrs.define
-    class _Count:
-        parameter: _Param
-
-    assert is_negative_test({'function': 'xml.element_count', 'parameter': {'xpath': 'a'}}, _Count)
-    assert not is_negative_test({'function': 'xml.element_count', 'parameter': {'expected_count': 2}}, _Count)
-    assert not is_negative_test({'function': 'x.y', 'parameter': {}}, SimpleNamespace())  # not attrs: no default
+def test_count_functions_need_an_explicit_zero():
+    # no testfunction defaults expected_count to 0 any more: a missing count is not an absence
+    assert not is_negative_test({'function': 'xml.element_count', 'parameter': {'xpath': 'a'}})
+    assert not is_negative_test({'function': 'xml.element_count', 'parameter': {'expected_count': 2}})

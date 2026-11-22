@@ -208,6 +208,9 @@ class GuestFileProxy(VMOperationProxy):
 
         Returns:
             List of matching absolute paths on guest
+
+        Raises:
+            RuntimeError: the guest command failed (an empty list always means "no match")
         """
         if self.is_windows:
             cmd = (
@@ -219,8 +222,7 @@ class GuestFileProxy(VMOperationProxy):
 
         result = await self.vm.run_command(cmd, silent=True)
         if result.returncode != 0:
-            log.warning(f"GuestFileProxy: glob resolution failed for '{pattern}': {result.stderr}")
-            return []
+            raise RuntimeError(f"glob resolution failed for '{pattern}' (exit {result.returncode}): {result.stderr}")
 
         paths = [p.strip() for p in result.stdout.strip().split('\n') if p.strip()]
         log.debug(f"GuestFileProxy: glob '{pattern}' resolved to {len(paths)} paths")
@@ -230,7 +232,7 @@ class GuestFileProxy(VMOperationProxy):
         """Existing guest paths matching ``pattern`` (glob or plain path) with their kind.
 
         Kinds: ``file`` (regular file, also through a symlink), ``dir`` (also through a
-        symlink), ``other`` (broken symlink, device, socket, ...). Unlike
+        symlink), ``other`` (broken symlink, device, socket, ...). Like
         :meth:`resolve_guest_glob`, a failed command raises instead of looking like no match,
         so a count can never pass on a transport error.
 

@@ -20,6 +20,7 @@ compares two CSV files with full diff reporting
 | ignore_order | `bool` | `False` | ``False`` (default) compares row N with row N; ``True`` matches rows as a multiset. |
 | allow_extra_rows | `bool` | `False` | Do not fail on rows only in ``actual`` (ordered mode: trailing rows only). |
 | allow_missing_rows | `bool` | `False` | Do not fail on rows only in ``reference`` (ordered mode: trailing rows only). |
+| encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name (``cp1252``) reads BOM-less files (both) with it. A BOM always wins. Unknown names or undecodable content are an error. |
 
 ```yaml
 tests:
@@ -44,6 +45,7 @@ compares all rows in CSV against embedded reference data
 | ignore_order | `bool` | `False` | ``False`` (default) compares row N with row N; ``True`` matches rows as a multiset regardless of position. |
 | allow_extra_rows | `bool` | `False` | Do not fail on actual rows without a reference counterpart (in ordered mode only trailing rows count as extra). |
 | allow_missing_rows | `bool` | `False` | Do not fail on reference rows missing from the file (in ordered mode only trailing rows count as missing). |
+| encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name (``cp1252``) reads BOM-less files with it. A BOM always wins. Unknown names or undecodable content are an error. |
 
 ```yaml
 tests:
@@ -61,8 +63,9 @@ tests if row in a csv file exists that matches the given entry layout
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the CSV file. A glob must match exactly one path; no/ambiguous match, a missing file or a CSV parse error is an error. Parsed with the default ``csv`` dialect (comma, double quotes) in the guest's default encoding; the header row is a normal row. |
+| **dst** | `str` |  | Guest path to the CSV file. A glob must match exactly one path; no/ambiguous match, a missing file or a CSV parse error is an error. Parsed with the default ``csv`` dialect (comma, double quotes); the header row is a normal row. |
 | entry | `list` | `None` | Expected row as a list, one item per column; a row must have exactly this many columns. Items are compared as exact, case-sensitive strings (``str(item)``), or by type for ``!re``/``!timestamp`` tags (``!re`` uses ``re.match``, anchored at the start). Required in practice: omitting it is an execution error unless the file is empty. |
+| encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name (``cp1252``) reads BOM-less files with it. A BOM always wins. Unknown names or undecodable content are an error. |
 
 ```yaml
 tests:
@@ -72,23 +75,24 @@ tests:
     dst: <str>
 ```
 
-### `csv.line_count`
+### `csv.row_count`
 
-tests the number of rows in a CSV file that match the given entry layout
+tests the number of rows (records) in a CSV file that match the given entry layout
 
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the CSV file. A glob must match exactly one path; no/ambiguous match, a missing file, undecodable content or a CSV parse error is an error. Parsed like csv.contains_line (default ``csv`` dialect, guest's default encoding; the header row is a normal row). |
+| **dst** | `str` |  | Guest path to the CSV file. A glob must match exactly one path; no/ambiguous match, a missing file, undecodable content or a CSV parse error is an error. Parsed like csv.contains_line (default ``csv`` dialect; the header row is a normal row). |
 | **entry** | `list` |  | Expected row as a list, matched exactly like csv.contains_line: one item per column (a row with another column count never matches), exact case-sensitive strings or ``!re``/``!timestamp`` tags. A non-list is an error. |
 | **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+| encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name (``cp1252``) reads BOM-less files with it. A BOM always wins. Unknown names or undecodable content are an error. |
 
 ```yaml
 tests:
-- name: check_line_count
-  function: csv.line_count
+- name: check_row_count
+  function: csv.row_count
   parameter:
     dst: <str>
     entry: <list>
@@ -110,7 +114,7 @@ validates specific cell value with placeholder support
 | column | `int` | `0` | 0-based column index (A = 0); out of range fails. |
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Compared exactly with ``str(expected_value)`` (``None`` -> ``''``). A single ``!re``/``!timestamp`` tag is matched by type. |
 | sheet | `str \| int` | `0` | Sheet name (str) or 0-based sheet index (int); unknown sheets fail. |
-| regex_match | `bool` | `False` | Treat ``expected_value`` as a regex applied with ``re.match`` (start-anchored). |
+| regex_match | `bool` | `False` | Treat ``expected_value`` as a regex searched in the cell value (``re.search``, unanchored; ``^...$`` for the whole value); an invalid regex is an error. |
 
 ```yaml
 tests:
@@ -233,9 +237,9 @@ tests if a sheet exists in an Excel file
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error. |
-| sheet_name | `str` | `''` | Exact, case-sensitive sheet name, or a regex if ``regex_match``. |
-| regex_match | `bool` | `False` | Treat ``sheet_name`` as a Python regex applied with ``re.match`` (anchored at the start only); an invalid regex fails. |
+| **dst** | `str` |  | Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error. |
+| **sheet** | `str` |  | Exact, case-sensitive sheet name, or a regex if ``regex_match``. |
+| regex_match | `bool` | `False` | Treat ``sheet`` as a Python regex searched in each sheet name (``re.search``, unanchored; ``^...$`` for the whole name); an invalid regex is an error. |
 
 ```yaml
 tests:
@@ -243,7 +247,7 @@ tests:
   function: excel.sheet_exists
   parameter:
     dst: <str>
-    sheet_name: <str>
+    sheet: <str>
 ```
 
 ### `excel.validate_columns`
@@ -503,7 +507,8 @@ tests if JSON array at specified path contains expected element
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error; an unresolvable path or non-array value fails. ``x.jsonlz4!`` reads LZ4-compressed JSON. |
 | **array_path** | `str` |  | Dot path to the array (same syntax as json.value_matches ``key_path``); a wildcard yielding several values is treated as the array of those values. |
-| expected_element | `str \| int \| float \| bool \| dict \| list` | `None` | Element tested with Python ``in`` (type-sensitive; dicts and lists must match exactly). A ``!re``/``!timestamp`` tag passes if any element's ``str()`` matches. |
+| **expected_value** | `str \| int \| float \| bool \| dict \| list \| None` |  | Required. An element equal to it (type-sensitive ``==``; dicts and lists must match exactly). A ``!re``/``!timestamp`` tag passes if any element's ``str()`` matches; an invalid regex or unknown placeholder is an error. |
+| encoding | `str \| None` | `None` | ``None`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. Unknown names are an error. |
 
 ```yaml
 tests:
@@ -512,6 +517,7 @@ tests:
   parameter:
     dst: <str>
     array_path: <str>
+    expected_value: <str | int | float | bool | dict | list | None>
 ```
 
 ### `json.contains_key`
@@ -522,8 +528,9 @@ tests if JSON file contains specified key path (supports dot notation like "user
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error. Read with the guest's default encoding. LZ4-compressed JSON is read through the archive separator (``/home/user/data/store.jsonlz4!``). |
+| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error. LZ4-compressed JSON is read through the archive separator (``/home/user/data/store.jsonlz4!``). |
 | **key_path** | `str` |  | Dot path from the root, e.g. ``user.profile.name``. ``*`` expands all values of an object (``config.*.enabled``), ``[*]`` all elements of an array (``users[*].email``), ``[n]`` one element (``items[0]``; ``items[-1]`` = last). A leading bracket addresses a top-level array (``[0].name``, ``[*].id``); ``['a.b']`` quotes a key that contains dots or brackets. |
+| encoding | `str \| None` | `None` | ``None`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. Unknown names are an error. |
 
 ```yaml
 tests:
@@ -545,9 +552,10 @@ tests the number of JSON values at a key path (optionally only those matching a 
 | **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error. ``x.jsonlz4!`` reads LZ4-compressed JSON. |
 | **key_path** | `str` |  | Dot path from the root, e.g. ``user.profile.name``. ``*`` expands all values of an object (``config.*.enabled``), ``[*]`` all elements of an array (``users[*].email``), ``[n]`` one element (``items[0]``; ``items[-1]`` = last). A leading bracket addresses a top-level array (``[0].name``, ``[*].id``); ``['a.b']`` quotes a key that contains dots or brackets. |
 | **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
-| expected_value | `str \| int \| float \| bool \| None` | `None` | ``None`` (default) counts the values the path selects (a ``null`` value counts; an array is one value, ``items[*]`` counts its elements). Otherwise counts the values equal to it (type-sensitive ``==``; ``!re``/``!timestamp`` tags compare ``str(value)``); a path that selects exactly one array compares its elements one by one. |
+| expected_value | `str \| int \| float \| bool \| None` | `None` | ``None`` (default) counts the values the path selects (a ``null`` value counts; an array is one value, ``items[*]`` counts its elements). Otherwise counts the values equal to it (type-sensitive ``==``; ``!re``/``!timestamp`` tags compare ``str(value)``; an invalid regex or unknown placeholder is an error); a path that selects exactly one array compares its elements one by one. |
 | regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``; an invalid regex is an error. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+| encoding | `str \| None` | `None` | ``None`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. Unknown names are an error. |
 
 ```yaml
 tests:
@@ -569,9 +577,10 @@ tests if JSON value at key path matches expected value using placeholders (suppo
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error; an unresolvable key path fails. ``x.jsonlz4!`` reads LZ4-compressed JSON. |
 | **key_path** | `str` |  | Dot path from the root, e.g. ``user.profile.name``. ``*`` expands all values of an object (``config.*.enabled``), ``[*]`` all elements of an array (``users[*].email``), ``[n]`` one element (``items[0]``; ``items[-1]`` = last). A leading bracket addresses a top-level array (``[0].name``, ``[*].id``); ``['a.b']`` quotes a key that contains dots or brackets. |
-| expected_value | `str \| int \| float \| bool \| None` | `None` | Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``; ``null`` needs ``None``/``null``). A ``!re``/``!timestamp`` tag compares ``str(value)`` by type. |
+| **expected_value** | `str \| int \| float \| bool \| None` |  | Required. Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``; a JSON ``null`` needs ``expected_value: null``). A ``!re``/``!timestamp`` tag compares ``str(value)`` by type; an invalid regex or unknown placeholder is an error. |
 | regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``. |
 | wildcard_mode | `str` | `'any'` | ``any`` (default): one value must match; ``all``: every value must match. Other values are an error. |
+| encoding | `str \| None` | `None` | ``None`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. Unknown names are an error. |
 
 ```yaml
 tests:
@@ -580,6 +589,7 @@ tests:
   parameter:
     dst: <str>
     key_path: <str>
+    expected_value: <str | int | float | bool | None>
 ```
 
 ## jsonl
@@ -594,10 +604,11 @@ counts lines in JSONL file matching conditions and validates against expected co
 |---|---|---|---|
 | dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file has 0 lines (passes ``expected_count: 0``). |
 | conditions | `dict[str, str \| int \| float \| bool \| None] \| None` | `None` | Mapping ``key_path -> expected value`` (all must hold; for multi-value paths one matching element suffices). ``None``/empty counts every valid JSON line. |
-| expected_count | `int \| dict[str, int] \| None` | `None` | Non-negative ``int`` compared with ``comparison_type``, ``{min: N, max: M}`` for a range (either bound optional: min defaults to 0, max to unbounded), or ``None`` for "at least 1". Anything else (a negative number, a boolean) is an error. |
+| expected_count | `int \| dict[str, int] \| None` | `None` | Non-negative ``int`` compared with ``comparison_type``, ``{min: N, max: M}`` for a range (either bound optional: min defaults to 0, max to unbounded), or ``None`` for "at least 1". Anything else (a negative number, a boolean, other keys, min > max) is an error. |
 | regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
 | skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``, applied to an ``int`` ``expected_count``. With the range form or ``None`` only ``equals`` is allowed; other values are an error. |
+| encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
 
 ```yaml
 tests:
@@ -617,9 +628,10 @@ tests if lines in JSONL file match specified conditions (supports any/all modes)
 |---|---|---|---|
 | dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails. |
 | conditions | `dict[str, str \| int \| float \| bool \| None]` | `None` | Required mapping ``key_path -> expected value``; a line matches when every condition holds. If a path yields several values (wildcard or JSON array), one matching element suffices. Missing keys fail the line. |
-| match_mode | `str` | `'any'` | ``any`` (default) or ``all`` (every valid line must match; no valid lines fails). Other values are an execution error. |
+| wildcard_mode | `str` | `'any'` | ``any`` (default) or ``all`` (every valid line must match; no valid lines fails). Other values are an error. |
 | regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
 | skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
+| encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
 
 ```yaml
 tests:
@@ -642,6 +654,7 @@ tests if specified key path with expected value exists in any line of JSONL file
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Value to find; see ``regex_match`` for how it is compared. |
 | regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
 | skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
+| encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
 
 ```yaml
 tests:
@@ -656,23 +669,24 @@ tests:
 
 ### `linux.log_entry_exists`
 
-tests if a log file contains entries matching a pattern (Linux only)
+tests if one of the last lines of a text log contains a string or matches a regex
 
-*QGA_PROBE*, os: linux
+*FILE_CONTENT*, os: linux
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **log_file** | `str` |  | Guest path of a plain-text log; a missing file fails. No glob support. |
-| **pattern** | `str` |  | POSIX extended regex (``grep -E``), case-sensitive. |
-| max_lines | `int` | `1000` | How many trailing lines to search (default 1000). |
+| **dst** | `str` |  | Guest path of the log; a glob must match exactly one path, ``archive!member`` reads a rotated, compressed log (``/var/log/syslog.2.gz!``). A missing file is an error. The encoding is detected (BOM, UTF-16, else UTF-8); undecodable bytes are replaced, so binary garbage does not stop the search. |
+| **content** | `str` |  | With ``regex_match`` (default) a Python regex searched in each line (``re.search``, case-sensitive; ``(?i)`` for case-insensitive); an invalid regex is an error. Otherwise a substring a line must contain. |
+| regex_match | `bool` | `True` | ``True`` (default): ``content`` is a regex; ``False``: a plain substring. |
+| max_lines | `int` | `1000` | How many trailing lines to search (default 1000); must be positive. |
 
 ```yaml
 tests:
 - name: check_log_entry_exists
   function: linux.log_entry_exists
   parameter:
-    log_file: <str>
-    pattern: <str>
+    dst: <str>
+    content: <str>
 ```
 
 ### `linux.process_running`
@@ -817,8 +831,9 @@ executes SQL query against SQLite database and validates result
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the database; a glob must match exactly one file (otherwise an error). A missing file is an error. |
 | **query** | `str` |  | SQL to execute, e.g. ``SELECT name FROM items WHERE name LIKE '%example%'``. A SQL error (syntax, unknown table, unreadable database) is an error. |
-| expected_rows | `int` | `None` | Exact number of rows the query must return; ``None`` skips the check. Use ``0`` to assert a row is gone. |
-| expected_result | `list` | `None` | Exact expected rows as a list of ``{column: value}`` mappings, in query order; ``None`` skips the check. Placeholders compare the stringified result. |
+| expected_count | `int \| None` | `None` | Number of rows the query must return, compared with ``comparison_type``; ``None`` skips the check. Use ``0`` to assert a row is gone. A negative number or a non-integer is an error. |
+| expected_result | `list \| None` | `None` | Exact expected rows as a list of ``{column: value}`` mappings, in query order; ``None`` skips the check. Placeholders compare the stringified result. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal`` for ``expected_count``; other values are an error. |
 
 ```yaml
 tests:
@@ -898,7 +913,7 @@ tests if file content contains specified string or byte pattern
 |---|---|---|---|
 | dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file is an error. |
 | content | `str` | `''` | Text to find (case-sensitive). An empty value always passes. In ``bytes`` mode ASCII characters stand for their byte and Python escapes (``\x00``, ``\n``, ``\\``) are decoded; a non-ASCII character or an unknown escape is an error (write ``\xNN``, or use ``string`` mode with an ``encoding``). |
-| content_type | `str` | `'string'` | ``bytes`` searches the raw file bytes; any other value (default ``string``) searches the decoded text. |
+| content_type | `str` | `'string'` | ``string`` (default) searches the decoded text, ``bytes`` the raw file bytes; other values are an error. A ``!re``/``!timestamp`` placeholder in ``content`` is an error (use standard.file_content_matches_regex). |
 | encoding | `str` | `'utf-8'` | Codec for ``string`` mode; undecodable bytes are silently dropped. ``BOM`` detects UTF-8/16/32 from the byte-order mark and errors if there is none. |
 | strip_bom | `bool` | `False` | Remove a leading U+FEFF from the decoded text (``string`` mode only). |
 
@@ -1116,7 +1131,7 @@ tests the number of text lines that contain a string or match a regex
 | parameter | type | default | description |
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the text file; a glob must match exactly one path. A missing file or content not valid in the encoding is an error; an empty file has 0 lines. Lines end at ``\n``, ``\r\n`` or ``\r``. |
-| **content** | `str` |  | Substring a line must contain (case-sensitive); an empty string counts every line. With ``regex_match`` a regex searched in each line (``re.search``; ``(?i)`` for case-insensitive); an invalid regex is an error. |
+| **content** | `str` |  | Substring a line must contain (case-sensitive); an empty string counts every line. With ``regex_match`` a regex searched in each line (``re.search``; ``(?i)`` for case-insensitive); an invalid regex is an error. A ``!re`` or ``!timestamp`` placeholder is an error: write the pattern with ``regex_match``. |
 | **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
 | encoding | `str \| None` | `None` | Text encoding; ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8. A BOM always wins. Unknown names are an error. |
@@ -1141,10 +1156,10 @@ tests how often a string or byte sequence occurs in a (text or binary) file
 | parameter | type | default | description |
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the file; a glob must match exactly one path. A missing file is an error. The raw bytes are searched, nothing is decoded. |
-| **content** | `str` |  | What to find; must not be empty. Its meaning depends on ``content_type``. |
+| **content** | `str` |  | What to find; must not be empty. Its meaning depends on ``content_type``. A ``!re`` or ``!timestamp`` placeholder is an error: for patterns use text.line_count with ``regex_match``. |
 | **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
-| content_type | `str` | `'string'` | ``string`` (default): ``content`` encoded in each of ``encodings``. ``bytes``: ASCII characters stand for their byte, Python escapes (``\x00``, ``\n``, ``\\``) are decoded; a non-ASCII character or an unknown escape is an error (write ``\xNN``, or use ``string`` with an encoding). ``hex``: hex digits, whitespace allowed (``4d 5a 90 00``). |
-| encodings | `list[str] \| str \| None` | `None` | Encodings for ``string`` mode: a list (default ``[utf-8]``), e.g. ``[utf-8, utf-16-le]``, or one name (``utf-16-le``). Occurrences of the distinct encoded forms are summed (the same text stored once in each of two forms counts twice); a match on bytes already counted for an earlier form is skipped. ``utf-16``/``utf-32`` search both byte orders without BOM. Forms are matched at any byte offset, not aligned to characters. Unknown encodings, or ``content`` not encodable in one, are an error. |
+| content_type | `str` | `'string'` | ``string`` (default): ``content`` encoded in each of ``encoding``. ``bytes``: ASCII characters stand for their byte, Python escapes (``\x00``, ``\n``, ``\\``) are decoded; a non-ASCII character or an unknown escape is an error (write ``\xNN``, or use ``string`` with an encoding). ``hex``: hex digits, whitespace allowed (``4d 5a 90 00``). |
+| encoding | `list[str] \| str \| None` | `None` | Encoding(s) for ``string`` mode: one name (``utf-16-le``) or a list (default ``[utf-8]``), e.g. ``[utf-8, utf-16-le]``. Occurrences of the distinct encoded forms are summed (the same text stored once in each of two forms counts twice); a match on bytes already counted for an earlier form is skipped. ``utf-16``/``utf-32`` search both byte orders without BOM. Forms are matched at any byte offset, not aligned to characters. Unknown encodings, or ``content`` not encodable in one, are an error. |
 | case_sensitive | `bool` | `True` | ``False`` matches each character in any of its one-character case forms (``a``/``A``, ``ä``/``Ä``); case mappings to several characters (German sharp s to ``SS``) are not matched. ``string`` mode only, otherwise an error. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
 
@@ -1411,8 +1426,8 @@ tests the number of XML elements matching XPath expression
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | **xpath** | `str` |  | ElementTree ``ElementPath`` subset, evaluated on the root element: ``//tag`` (any depth), ``/root/child`` (first step must be the root tag), ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``. Any ``(``, ``::``, ``..`` or ``\|`` (even inside a quoted value) is an execution error, so no functions such as ``text()``. |
-| expected_count | `int` | `0` | Number to compare against (default 0). |
-| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an execution error. |
+| **expected_count** | `int` |  | Required non-negative integer to compare against; anything else is an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` + ``//ns:item``); ``{uri}tag`` also works without it. |
 
 ```yaml
@@ -1422,6 +1437,7 @@ tests:
   parameter:
     dst: <str>
     xpath: <str>
+    expected_count: <int>
 ```
 
 ### `xml.element_exists`
@@ -1455,8 +1471,8 @@ tests if XML element text content matches expected value with placeholder suppor
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | **xpath** | `str` |  | ElementTree ``ElementPath`` subset, evaluated on the root element: ``//tag`` (any depth), ``/root/child`` (first step must be the root tag), ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``. Any ``(``, ``::``, ``..`` or ``\|`` (even inside a quoted value) is an execution error, so no functions such as ``text()``. No match fails. |
-| expected_text | `str` | `''` | Exact expected text, or a regex with ``regex_match``. A single ``!re``/``!timestamp`` tag is matched by type (``case_sensitive`` then ignored). |
-| regex_match | `bool` | `False` | Search ``expected_text`` as a Python regex (``re.search``, unanchored). |
+| **expected_value** | `str` |  | Required. Exact expected text (``''`` for an empty element), or a regex with ``regex_match``. A single ``!re``/``!timestamp`` tag is matched by type (``case_sensitive`` then ignored); an invalid regex is an error. |
+| regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). |
 | case_sensitive | `bool` | `True` | ``False`` compares lower-cased / uses ``re.IGNORECASE``. |
 | wildcard_mode | `str` | `'any'` | For several matched elements: ``any`` (default) or ``all`` must match; other values are an execution error (only checked when several elements match). |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` + ``//ns:item``); ``{uri}tag`` also works without it. |
@@ -1468,7 +1484,7 @@ tests:
   parameter:
     dst: <str>
     xpath: <str>
-    expected_text: <str>
+    expected_value: <str>
 ```
 
 ### `xml.namespace_matches`
@@ -1501,7 +1517,7 @@ tests if XPath expression result matches expected value (text, number, or boolea
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | **xpath** | `str` |  | ElementTree ``ElementPath`` subset, evaluated on the root element: ``//tag`` (any depth), ``/root/child`` (first step must be the root tag), ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``. Any ``(``, ``::``, ``..`` or ``\|`` (even inside a quoted value) is an execution error, so no functions such as ``text()``. |
-| expected_result | `str \| int \| float \| bool` | `''` | Converted per ``result_type``: ``str()``, ``float()`` or ``bool()``. Note ``bool('false')`` is True -- use unquoted YAML ``true``/``false``. |
+| **expected_value** | `str \| int \| float \| bool` |  | Required. Converted per ``result_type``: ``str()``, ``float()`` or ``bool()``. Note ``bool('false')`` is True -- use unquoted YAML ``true``/``false``. |
 | result_type | `str` | `'text'` | ``text`` (default; first element's ``.text``, ``''`` if none), ``number`` (``float`` of that text; no match -> 0.0, non-numeric -> execution error) or ``boolean`` (whether anything matched). Other values are an execution error. |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` + ``//ns:item``); ``{uri}tag`` also works without it. |
 
@@ -1512,7 +1528,7 @@ tests:
   parameter:
     dst: <str>
     xpath: <str>
-    expected_result: <str | int | float | bool>
+    expected_value: <str | int | float | bool>
 ```
 
 ## yaml
