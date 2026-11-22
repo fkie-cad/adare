@@ -27,6 +27,20 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 
 ## [Unreleased]
 
+### Added
+- File testfunctions can read a file **inside an archive** (adare, adarelib; additive):
+  `dst: /home/u/backup.tar.gz!/etc/app/config.json`, `dst: /var/log/syslog.2.gz!` for the
+  decompressed content, nested archives (`outer.zip!/inner.tar.gz!/data.json`), globs on
+  both sides, and a mapping form `dst: {archive: ..., member: ...}`. Formats: tar (plain,
+  .gz, .bz2, .xz), zip, gzip, bzip2 and xz, detected from the content, not the extension.
+  Only the requested member is extracted, by streaming under a sanitized name, capped by
+  `ADARE_ARCHIVE_MAX_BYTES` (default 1 GiB). The extracted copy is removed after the test.
+  A missing, corrupt or unsupported archive, a link or `..` member, or a member over the
+  cap gives ERROR. An absent member counts like a missing file. Each result gets an
+  `archive member: ... sha256=...` provenance line. This works in guest mode and in host
+  mode (only the archive is pulled), with no change to any testfunction: it is built into
+  `ctx.resolve_globfilepath`. Guide: *Files inside archives*.
+
 ### Changed
 - The file-content testfunctions now end with an **error**, not a failure, when they cannot
   read their file: the path does not exist, a glob matches no file or more than one, or the

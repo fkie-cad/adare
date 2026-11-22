@@ -3,7 +3,9 @@ import inspect
 
 # configure logging
 import logging
+import shutil
 import sys
+import tempfile
 from typing import Any, Optional
 
 import attrs
@@ -11,6 +13,7 @@ import attrs
 from adarelib.event.event import TestResult
 
 # internal imports
+from adarelib.testset import archive
 from adarelib.testset.basictest import BasicTest, HostModeCategory, Parameter
 
 log = logging.getLogger(__name__)
@@ -34,6 +37,11 @@ class TestContext:
     def __init__(self, test_instance: BasicTest, host_context=None):
         self._test = test_instance
         self._host_context = host_context
+        # Archive members (dst: 'a.tar.gz!/x.json') are extracted into a per-test temp dir,
+        # created on first use and removed by close().
+        self._archive_workdir: str | None = None
+        self._archive_details: list[str] = []
+        self._archive_display: dict[str, str] = {}
 
     @property
     def host(self):
@@ -55,7 +63,65 @@ class TestContext:
     # Delegated helpers from BasicTest
 
     def resolve_globfilepath(self, globfilepath: str, match_mode: str = "single", return_list: bool = False):
+        """Resolve a guest path (glob allowed) to a local file path, as BasicTest does.
+
+        A path with an archive separator (``backup.tar.gz!/etc/app.json``) resolves to the
+        member, extracted into a temp dir: a missing member gives a path that does not exist
+        (like a missing plain file); an unusable archive gives an empty path and a status
+        (the test ERRORs). See :mod:`adarelib.testset.archive`.
+        """
+        if archive.has_archive_separator(globfilepath):
+            return self._resolve_archive_path(globfilepath, match_mode, return_list)
         return self._test.resolve_globfilepath(globfilepath, match_mode=match_mode, return_list=return_list)
+
+    def _resolve_archive_path(self, path: str, match_mode: str, return_list: bool):
+        empty = [] if return_list else ''
+        archive_part, members = archive.split_archive_path(path)
+        # the archive itself must be exactly one file, also for a glob
+        archive_path, status = self._test.resolve_globfilepath(archive_part, match_mode='single')
+        if status:
+            return empty, f'archive {archive_part}: {status}'
+        if self._archive_workdir is None:
+            self._archive_workdir = tempfile.mkdtemp(prefix='adare-archive-')
+        workdir = tempfile.mkdtemp(dir=self._archive_workdir)
+        try:
+            resolution = archive.resolve_archive_path(
+                archive_path,
+                members,
+                workdir,
+                match_mode=match_mode,
+                max_bytes=archive.max_bytes_from_env(),
+                companions=tuple(getattr(type(self._test), 'host_mode_sidecars', ())),
+            )
+        except archive.ArchiveError as e:
+            return empty, f'archive error: {e}'
+        self._archive_details.extend(resolution.details)
+        self._archive_display.update(resolution.display)
+        if resolution.status:
+            return empty, resolution.status
+        if return_list:
+            return list(resolution.paths), ''
+        return (resolution.paths[0] if resolution.paths else ''), ''
+
+    def _finish(self, result: TestResult) -> TestResult:
+        """Add archive provenance to the result and show members by their archive path."""
+        if not self._archive_details and not self._archive_display:
+            return result
+        details = []
+        for detail in result.details:
+            if isinstance(detail, str):
+                # longest first, so a path is never replaced inside a longer one
+                for local in sorted(self._archive_display, key=len, reverse=True):
+                    detail = detail.replace(local, self._archive_display[local])
+            details.append(detail)
+        result.details = details + [d for d in self._archive_details if d not in details]
+        return result
+
+    def close(self) -> None:
+        """Remove files extracted from archives during this test."""
+        if self._archive_workdir is not None:
+            shutil.rmtree(self._archive_workdir, ignore_errors=True)
+            self._archive_workdir = None
 
     def has_placeholders(self, text: str) -> bool:
         return self._test.has_placeholders(text)
@@ -168,34 +234,41 @@ def _make_test_class(
             return TestResult.success(result)
         return TestResult.success([str(result)])
 
+    def _from_exception(e: Exception) -> TestResult:
+        if isinstance(e, TestFailed):
+            return TestResult.failed([str(e)])
+        if isinstance(e, TestError):
+            return TestResult.error([str(e)])
+        return TestResult.execution_error(e, f"Error in testfunction '{testname}'")
+
+    # Every result goes through ctx._finish (archive provenance) and ctx.close removes
+    # files extracted from archives, whatever the outcome.
     if is_async:
 
         async def test_method(self, context=None):
             ctx = TestContext(self, host_context=context)
             kwargs = attrs.asdict(self.parameter)
             try:
-                result = await test_func(ctx, **kwargs)
-            except TestFailed as e:
-                return TestResult.failed([str(e)])
-            except TestError as e:
-                return TestResult.error([str(e)])
-            except Exception as e:
-                return TestResult.execution_error(e, f"Error in testfunction '{testname}'")
-            return _convert_result(result)
+                try:
+                    result = _convert_result(await test_func(ctx, **kwargs))
+                except Exception as e:  # a testfunction may raise anything: report it as ERROR
+                    result = _from_exception(e)
+                return ctx._finish(result)
+            finally:
+                ctx.close()
     else:
 
         def test_method(self):
             ctx = TestContext(self)
             kwargs = attrs.asdict(self.parameter)
             try:
-                result = test_func(ctx, **kwargs)
-            except TestFailed as e:
-                return TestResult.failed([str(e)])
-            except TestError as e:
-                return TestResult.error([str(e)])
-            except Exception as e:
-                return TestResult.execution_error(e, f"Error in testfunction '{testname}'")
-            return _convert_result(result)
+                try:
+                    result = _convert_result(test_func(ctx, **kwargs))
+                except Exception as e:  # a testfunction may raise anything: report it as ERROR
+                    result = _from_exception(e)
+                return ctx._finish(result)
+            finally:
+                ctx.close()
 
     # Build the class using type() + @attrs.define for proper cattrs compatibility
     namespace = {
