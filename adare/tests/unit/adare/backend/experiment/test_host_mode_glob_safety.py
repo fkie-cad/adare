@@ -1,7 +1,9 @@
 """Host test mode: guest glob commands quote their paths, and stale mirror copies are dropped."""
 
+import os
 import shutil
 import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -10,6 +12,7 @@ import pytest
 from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
 from adare.backend.experiment.host_services.guest_file_proxy import (
     GuestFileProxy,
+    glob_base,
     powershell_literal,
     shell_glob_word,
 )
@@ -45,7 +48,8 @@ def test_shell_glob_word_in_bash(tmp_path):
 
     def ls(pattern):
         word = shell_glob_word(f'{tmp_path}/{pattern}')
-        out = subprocess.run([BASH, '-c', f'ls -d -- {word} 2>/dev/null || true'], capture_output=True, text=True)
+        loop = f'for p in {word}; do if [ -e "$p" ]; then printf \'%s\\n\' "$p"; fi; done'
+        out = subprocess.run([BASH, '-c', loop], capture_output=True, text=True)
         return sorted(p.rsplit('/', 1)[-1] for p in out.stdout.splitlines())
 
     assert ls('*.log') == ['a 1.log', 'b.log', "it's.log", 'x;y.log']
@@ -270,3 +274,85 @@ async def test_plain_path_not_found_for_file_does_not_exist_passes(tmp_path):
     )
 
     assert result.status == StatusEnum.SUCCESS
+
+
+@pytest.mark.parametrize(
+    ('pattern', 'base'),
+    [
+        ('/var/log/*.log', '/var/log'),
+        ('/x*', '/'),
+        ('/a/b/plain.txt', '/a/b'),
+        ('/a/[x]/y*', '/a'),
+        ('/a/b[/c*', '/a/b['),  # an unclosed [ is literal
+        ('C:\\Users\\*\\Desktop', 'C:\\Users'),
+        ('C:\\*', 'C:\\'),
+        ('rel*', ''),
+    ],
+)
+def test_glob_base(pattern, base):
+    assert glob_base(pattern) == base
+
+
+def _bash_proxy():
+    """A GuestFileProxy whose guest is this machine's bash."""
+
+    async def run(cmd, silent=True):
+        out = subprocess.run([BASH, '-c', cmd], capture_output=True, text=True)
+        return SimpleNamespace(stdout=out.stdout, stderr=out.stderr, returncode=out.returncode)
+
+    vm = MagicMock()
+    vm.run_command = run
+    return GuestFileProxy(vm, 'linux')
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(BASH is None, reason='needs bash')
+async def test_real_glob_commands_list_matches_and_nothing_else(tmp_path):
+    (tmp_path / 'a.log').write_text('x')
+    (tmp_path / 'sub').mkdir()
+    (tmp_path / 'b.txt').write_text('x')
+    proxy = _bash_proxy()
+    try:
+        assert await proxy.resolve_guest_glob(f'{tmp_path}/*.log') == [f'{tmp_path}/a.log']
+        assert await proxy.resolve_guest_glob(f'{tmp_path}/*.none') == []  # no match is not an error
+        assert await proxy.resolve_guest_glob(f'{tmp_path}/missing/*') == []
+        kinds = sorted(await proxy.path_kinds(f'{tmp_path}/*'))
+        assert kinds == [(f'{tmp_path}/a.log', 'file'), (f'{tmp_path}/b.txt', 'file'), (f'{tmp_path}/sub', 'dir')]
+    finally:
+        proxy.cleanup()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(BASH is None, reason='needs bash')
+@pytest.mark.skipif(hasattr(os, 'geteuid') and os.geteuid() == 0, reason='root reads any directory')
+@pytest.mark.skipif(sys.platform == 'win32', reason='POSIX permissions')
+async def test_unreadable_base_directory_is_an_error_not_no_match(tmp_path):
+    locked = tmp_path / 'locked'
+    locked.mkdir()
+    (locked / 'secret.log').write_text('x')
+    locked.chmod(0)
+    proxy = _bash_proxy()
+    try:
+        with pytest.raises(RuntimeError, match='cannot read directory'):
+            await proxy.resolve_guest_glob(f'{locked}/*.log')
+        with pytest.raises(RuntimeError, match='cannot read directory'):
+            await proxy.path_kinds(f'{locked}/*.log')
+    finally:
+        locked.chmod(0o700)
+        proxy.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_windows_listing_fails_on_access_denied():
+    vm = MagicMock()
+    vm.run_command = AsyncMock(return_value=SimpleNamespace(stdout='', stderr='', returncode=0))
+    proxy = GuestFileProxy(vm, 'windows')
+    try:
+        await proxy.resolve_guest_glob('C:\\Users\\*\\Desktop')
+        command = vm.run_command.await_args.args[0]
+        assert '-ErrorVariable globErr' in command and 'UnauthorizedAccessException' in command
+        assert 'exit 3' in command
+        await proxy.path_kinds('C:\\Users\\*')
+        assert 'UnauthorizedAccessException' in vm.run_command.await_args.args[0]
+    finally:
+        proxy.cleanup()

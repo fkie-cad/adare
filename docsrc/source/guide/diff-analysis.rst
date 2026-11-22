@@ -220,30 +220,25 @@ For maximum coverage, use the ``snapshot_filesystem`` and
      enable_filesystem_diff: true
 
    tests:
-     - name: history_db_exists
+     - name: app_db_exists
        function: standard.file_exists
        parameter:
-         dst: "C:\\Users\\adare\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\History"
+         dst: "C:\\Users\\adare\\AppData\\Roaming\\SomeApp\\data\\app.db"
 
    actions:
-     - action: file.snapshot_filesystem
-       parameter:
-         label: before
+     - snapshot_filesystem:
+         variable: snapshot_before
 
      # ... perform user actions ...
 
-     - action: test
-       parameter:
-         name: history_db_exists
+     - test: app_db_exists
 
-     - action: file.snapshot_filesystem
-       parameter:
-         label: after
+     - snapshot_filesystem:
+         variable: snapshot_after
 
-     - action: file.pull_changed_files
-       parameter:
-         label_before: before
-         label_after: after
+     - pull_changed_files:
+         snapshot_before: snapshot_before
+         snapshot_after: snapshot_after
 
 This approach gives you both targeted pass/fail verdicts from tests and a
 complete change inventory from the diff. The pulled files are available in the

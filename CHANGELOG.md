@@ -273,6 +273,15 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   the Unix-seconds reading, as documented (`20240115` with `%Y%m%d` was read as 1970).
 - An LZ4 block whose header announces fewer bytes than it holds is reported as corrupt, not
   as over the size cap (adarelib).
+- `!re`/`!timestamp` tests in a playbook **without `variables:`** lost their placeholder
+  metadata (no registry to store it in), so every such test was an ERROR (adare); the
+  metadata is now kept without a registry.
+- Host mode: a glob whose base directory exists but cannot be listed is an ERROR, on Linux
+  (`ls … || true` read it as "no match") and Windows (access denied was silenced), so a
+  `file_does_not_exist` or `expected_count: 0` test cannot pass on it.
+- Docs: playbook examples use real actions and testfunctions (the test-driven analysis and
+  diff-analysis guides, the `dir_exists` pages and the filter examples in the action
+  reference showed invented ones); a unit test now parses every complete playbook in the docs.
 - `adare test dry-run --param entry=[a, b]` passed the list as a string, which became a list of
   characters; `[...]`/`{...}` values of list/dict parameters are read as YAML flow lists/maps now
   (a pattern such as `regex=[Ee]rror` stays a string). Dry-run reports a

@@ -204,9 +204,9 @@ def occurrence_count(
 ):
     r"""Pass when the number of non-overlapping occurrences of ``content`` in ``dst`` satisfies ``comparison_type``.
 
-    Use for: finding a value in any file, binary ones included (a database, a cache, a
-    memory dump), in one or several encodings at once; asserting a value was wiped:
-    ``expected_count: 0``. For line-based text use text.line_count.
+    Use for: how many times a word or value appears in any file (``expected_count: N``),
+    binary ones included (a database, a cache, a memory dump), in one or several encodings
+    at once; asserting a value was wiped: ``expected_count: 0``. For line-based text use text.line_count.
 
     Args:
         dst: Guest path to the file; a glob must match exactly one path. A missing file is an

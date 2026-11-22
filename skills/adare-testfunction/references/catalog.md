@@ -1305,7 +1305,7 @@ tests:
 
 tests how often a string or byte sequence occurs in a (text or binary) file
 
-**Use for:** finding a value in any file, binary ones included (a database, a cache, a memory dump), in one or several encodings at once; asserting a value was wiped: ``expected_count: 0``. For line-based text use text.line_count.
+**Use for:** how many times a word or value appears in any file (``expected_count: N``), binary ones included (a database, a cache, a memory dump), in one or several encodings at once; asserting a value was wiped: ``expected_count: 0``. For line-based text use text.line_count.
 
 *FILE_CONTENT*, os: any
 

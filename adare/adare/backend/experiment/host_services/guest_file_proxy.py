@@ -62,6 +62,44 @@ def _bracket_end(pattern: str, start: int) -> int:
     return pattern.find(']', i)
 
 
+def glob_base(pattern: str) -> str:
+    """The deepest directory of ``pattern`` before its first glob component (for a plain path: its
+    parent); ``''`` when there is none (a relative pattern)."""
+    first = next(
+        (i for i, c in enumerate(pattern) if c in '*?' or (c == '[' and _bracket_end(pattern, i) > 0)), len(pattern)
+    )
+    prefix = pattern[:first]
+    cut = max(prefix.rfind('/'), prefix.rfind('\\'))
+    if cut < 0:
+        return ''
+    base = prefix[:cut] or prefix[: cut + 1]  # '/x*' -> '/'
+    return base + prefix[cut] if base.endswith(':') else base  # 'C:\\*' -> 'C:\\', not 'C:'
+
+
+#: exit code of a listing whose base directory exists but cannot be read
+UNREADABLE_BASE_EXIT = 3
+
+
+def _posix_base_guard(pattern: str) -> str:
+    """Shell prefix that fails (exit 3) when the glob's base directory exists but cannot be listed:
+    the shell would expand the glob to nothing, which reads as "no match"."""
+    base = glob_base(pattern)
+    if not base:
+        return ''
+    q = shlex.quote(base)
+    return (
+        f'if [ -d {q} ] && ! {{ [ -r {q} ] && [ -x {q} ]; }}; then '
+        f'echo "cannot read directory "{q} >&2; exit {UNREADABLE_BASE_EXIT}; fi; '
+    )
+
+
+#: PowerShell suffix: an access-denied error while listing is a failure, not "no match"
+_POWERSHELL_DENIED_EXIT = (
+    '; if ($globErr | Where-Object { $_.Exception -is [System.UnauthorizedAccessException] }) '
+    f'{{ exit {UNREADABLE_BASE_EXIT} }}'
+)
+
+
 def powershell_literal(text: str) -> str:
     """``text`` as a single-quoted PowerShell string: no variable or subexpression expansion."""
     return "'" + text.replace("'", "''") + "'"
@@ -210,15 +248,22 @@ class GuestFileProxy(VMOperationProxy):
             List of matching absolute paths on guest
 
         Raises:
-            RuntimeError: the guest command failed (an empty list always means "no match")
+            RuntimeError: the guest command failed, or the glob's base directory exists but cannot
+                be read (an empty list always means "no match"). Only the base directory is
+                checked: an unreadable directory *inside* the glob is skipped, as the shell does.
+                QGA usually runs as root/SYSTEM, where this does not happen.
         """
         if self.is_windows:
             cmd = (
                 f'Get-ChildItem -Path {powershell_literal(pattern)} -ErrorAction SilentlyContinue '
-                f'| ForEach-Object {{ $_.FullName }}'
+                f'-ErrorVariable globErr | ForEach-Object {{ $_.FullName }}' + _POWERSHELL_DENIED_EXIT
             )
         else:
-            cmd = f"ls -d -- {shell_glob_word(pattern)} 2>/dev/null || true"
+            # no `ls`: its exit code is the same for "no match" and "cannot read"
+            cmd = _posix_base_guard(pattern) + (
+                f'for p in {shell_glob_word(pattern)}; do '
+                'if [ -e "$p" ] || [ -L "$p" ]; then printf \'%s\\n\' "$p"; fi; done'
+            )
 
         result = await self.vm.run_command(cmd, silent=True)
         if result.returncode != 0:
@@ -242,12 +287,13 @@ class GuestFileProxy(VMOperationProxy):
         if self.is_windows:
             path_arg = '-Path' if has_glob else '-LiteralPath'
             cmd = (
-                f'Get-Item {path_arg} {powershell_literal(pattern)} -Force -ErrorAction SilentlyContinue | ForEach-Object {{ '
-                f'if ($_.PSIsContainer) {{ "D:" + $_.FullName }} else {{ "F:" + $_.FullName }} }}'
+                f'Get-Item {path_arg} {powershell_literal(pattern)} -Force -ErrorAction SilentlyContinue '
+                '-ErrorVariable globErr | ForEach-Object { '
+                'if ($_.PSIsContainer) { "D:" + $_.FullName } else { "F:" + $_.FullName } }' + _POWERSHELL_DENIED_EXIT
             )
         else:
             words = shell_glob_word(pattern) if has_glob else shlex.quote(pattern)
-            cmd = (
+            cmd = _posix_base_guard(pattern) + (
                 f'for p in {words}; do if [ -d "$p" ]; then echo "D:$p"; elif [ -f "$p" ]; then echo "F:$p"; '
                 f'elif [ -L "$p" ] || [ -e "$p" ]; then echo "O:$p"; fi; done'
             )

@@ -306,11 +306,14 @@ ADARE supports powerful filters for data transformation:
 
    tests:
      - name: check_modification_time
-       function: file_modified_since
+       function: standard.file_timestamps
        parameter:
          dst: "/evidence/test.txt"
-         # Format timestamp and add tolerance for timing variations
-         since: "{{ current_time | format('%Y-%m-%d %H:%M:%S') | tolerance(10, -10) }}"
+         timestamp_type: modified
+         comparison_type: after
+         # Format the saved time the way time_format reads it
+         expected_time: "{{ current_time | format('%Y-%m-%d %H:%M:%S') }}"
+         time_format: "%Y-%m-%d %H:%M:%S"
 
 **Available Date/Time Filters:**
 
@@ -330,10 +333,12 @@ ADARE supports powerful filters for data transformation:
 
    tests:
      - name: verify_deletion_time
-       function: timestamp_within_range
+       function: json.value_matches
        parameter:
-         actual: "{{ actual_deletion | format('%Y-%m-%d %H:%M:%S') }}"
-         expected: "{{ deletion_time | format('%Y-%m-%d %H:%M:%S') | tolerance(5, -5) }}"
+         dst: "/evidence/deleted.json"
+         key_path: deleted_at
+         # the artifact's value must lie within 5 s of the time saved during the run
+         expected_value: "{{ actual_deletion | tolerance(5, -5) }}"
 
 Test Definitions
 ****************

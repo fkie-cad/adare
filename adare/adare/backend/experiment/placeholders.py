@@ -89,6 +89,17 @@ class MetadataManager:
             variable_registry: Variable registry to store metadata in
         """
         self.variable_registry = variable_registry
+        # without a registry (a playbook with no `variables:`) the metadata is kept here
+        self._own_metadata: dict[str, Any] = {}
+
+    def _store(self) -> dict[str, Any]:
+        """Where placeholder metadata lives: on the registry if there is one, else on this manager."""
+        if self.variable_registry is None:
+            return self._own_metadata
+        if not hasattr(self.variable_registry, '_placeholder_metadata'):
+            self.variable_registry._placeholder_metadata = {}
+        metadata: dict[str, Any] = self.variable_registry._placeholder_metadata
+        return metadata
 
     def add_regex_metadata(
         self, placeholder_name: str, regex_pattern: str, template_context: dict[str, Any] | None = None
@@ -101,15 +112,8 @@ class MetadataManager:
             regex_pattern: The regex pattern to store
             template_context: Current template context to update (optional)
         """
-        if not self.variable_registry:
-            log.warning(f"No variable registry available to store metadata for '{placeholder_name}'")
-            return
-
-        if not hasattr(self.variable_registry, '_placeholder_metadata'):
-            self.variable_registry._placeholder_metadata = {}
-
         # Same structure as timestamp metadata
-        self.variable_registry._placeholder_metadata[placeholder_name] = {
+        self._store()[placeholder_name] = {
             'raw_value': regex_pattern,
             'resolved_value': regex_pattern,
             'type': 'regex',
@@ -138,13 +142,6 @@ class MetadataManager:
             tolerance: Optional tolerance information
             template_context: Current template context to update (optional)
         """
-        if not self.variable_registry:
-            log.warning(f"No variable registry available to store metadata for '{placeholder_name}'")
-            return
-
-        if not hasattr(self.variable_registry, '_placeholder_metadata'):
-            self.variable_registry._placeholder_metadata = {}
-
         metadata = {'raw_value': timestamp_value, 'resolved_value': timestamp_value, 'type': 'timestamp'}
 
         # If the timestamp value contains template syntax, mark it for runtime resolution
@@ -162,7 +159,7 @@ class MetadataManager:
             metadata['tolerance'] = tolerance
             log.debug(f"Overriding tolerance from explicit parameter: {tolerance}")
 
-        self.variable_registry._placeholder_metadata[placeholder_name] = metadata
+        self._store()[placeholder_name] = metadata
         log.debug(
             f"Added timestamp metadata for '{placeholder_name}': value='{timestamp_value}', tolerance={tolerance}"
         )
@@ -190,13 +187,6 @@ class MetadataManager:
             analysis: Analysis results from the template
             template_context: Context to resolve the base timestamp value
         """
-        if not self.variable_registry:
-            log.warning(f"No variable registry available to store metadata for '{placeholder_name}'")
-            return
-
-        if not hasattr(self.variable_registry, '_placeholder_metadata'):
-            self.variable_registry._placeholder_metadata = {}
-
         # Resolve the base timestamp value (without tolerance filter)
         base_timestamp_value = None
         if analysis.variable_name and analysis.variable_name in template_context:
@@ -218,7 +208,7 @@ class MetadataManager:
         if analysis.has_localtime:
             metadata['localtime'] = True
 
-        self.variable_registry._placeholder_metadata[placeholder_name] = metadata
+        self._store()[placeholder_name] = metadata
         log.debug(f"Added tolerance metadata for '{placeholder_name}': {metadata}")
 
         # Do NOT add tolerance placeholders to template context
@@ -232,6 +222,4 @@ class MetadataManager:
         Returns:
             Dictionary of placeholder metadata
         """
-        if self.variable_registry and hasattr(self.variable_registry, '_placeholder_metadata'):
-            return self.variable_registry._placeholder_metadata
-        return {}
+        return self._store()

@@ -29,6 +29,29 @@ def _resolver(variables: dict | None = None, with_filters: bool = False) -> Vari
 
 
 class TestYamlTags:
+    def test_tags_keep_their_metadata_without_a_registry(self):
+        # a playbook without `variables:` has no registry; its !re/!timestamp tests still need metadata
+        from adarelib.testset.basictest import BasicTest
+
+        resolver = VariableResolver(variable_registry=None)
+        out = resolver.process_data(
+            {
+                'parameter': {
+                    'v': YamlRegexString(r'^a\d+$'),
+                    't': YamlTimestamp(timestamp='2026-01-01T00:00:00', tolerance=5),
+                }
+            },
+            {},
+        )
+        metadata = resolver.get_placeholder_metadata()
+        regex_name = out['parameter']['v'].strip('{} ')
+        assert metadata[regex_name]['type'] == 'regex'
+        test = BasicTest(name='t', parameter=None, description='', variable_metadata=metadata)
+        assert test.compare_with_placeholder(regex_name, 'a12')[0]
+        timestamp_name = out['parameter']['t'].strip('{} ')
+        assert metadata[timestamp_name]['type'] == 'timestamp'
+        assert test.compare_with_placeholder(timestamp_name, '2026-01-01T00:00:03')[0]
+
     @pytest.mark.parametrize(
         'value, pattern',
         [('2.4', r'^2\.4\.\d+$'), ('report (1).txt', r'^report\ \(1\)\.txt\.\d+$'), ('a+b', r'^a\+b\.\d+$')],
