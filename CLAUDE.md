@@ -196,6 +196,8 @@ tests:
 - Guest-side code (adarevm, adarelib, testfunctions and their tests) is pinned to py310 in ruff's
   `per-file-target-version`; don't use 3.11+ syntax there
 - ruff/mypy are pinned exactly in the `lint` group; bumping them = `make lint-baseline` in the same PR
+- Lockfile-only Dependabot PRs get their budgets re-measured by `dependabot-baseline.yml`
+  (`make lint-baseline-deps`, may raise them): library type changes move mypy counts without code changes
 - `uv.lock` is committed and CI sets `UV_LOCKED=1`. Plain `uv sync` strips extras from `.venv`; use
   `make sync` (make targets sync `--inexact`, so they never strip anything). After a Homebrew libvirt upgrade: `uv lock -P libvirt-python`
 - Record user-visible changes under **Unreleased** in `CHANGELOG.md`

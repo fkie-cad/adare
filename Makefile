@@ -1,5 +1,5 @@
 .DEFAULT_GOAL = help
-.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx install-skills test test-cov test-testfunctions test-testfunctions-guest test-cv test-agent test-install guest-venv lock-guest lint lint-fix lint-baseline typecheck hooks
+.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx install-skills test test-cov test-testfunctions test-testfunctions-guest test-cv test-agent test-install guest-venv lock-guest lint lint-fix lint-baseline lint-baseline-deps typecheck hooks
 
 # uv owns the environments and the lock; make only names the tasks. CI calls these
 # same targets (with UV_LOCKED=1, i.e. --locked), so each command is written once,
@@ -32,6 +32,7 @@ help:
 	@echo "  lint            Format check + quality ratchet (ruff, mypy, file size) - same as CI."
 	@echo "  lint-fix        Apply ruff format and safe autofixes."
 	@echo "  lint-baseline   Lock in paid-down debt (lowers quality-baseline.json)."
+	@echo "  lint-baseline-deps  Re-measure budgets after a dependency-only bump (may raise them)."
 	@echo "  typecheck       Strict mypy on adare.core (must stay at zero errors)."
 	@echo "  hooks           Install the pre-commit hooks."
 	@echo "---------------------------------------"
@@ -181,6 +182,13 @@ lint-fix:
 lint-baseline:
 	$(LINT_SYNC)
 	$(LINT_RUN) python scripts/quality_ratchet.py --update
+
+# Only for dependency-only changes (CI runs it on Dependabot lockfile PRs): library
+# type changes move the mypy counts without any code change. adare.core must still
+# stay at zero errors. Never use this to get a code change through.
+lint-baseline-deps:
+	$(LINT_SYNC)
+	$(LINT_RUN) python scripts/quality_ratchet.py --update --allow-increase
 
 typecheck:
 	$(LINT_SYNC)
