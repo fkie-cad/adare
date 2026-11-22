@@ -72,6 +72,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   paths (browser profiles, office suites, registry keys); a unit test keeps it that way.
 
 ### Fixed
+- Host mode read stale files: one file cache served the whole run, so a test after an
+  action got the copy an earlier test had pulled, and before/after tests compared the same
+  copy. Every test now pulls its file fresh from the guest.
 - `adare test dry-run` crashed on testfunctions with a `str | int | float ...` parameter
   (e.g. `json.value_matches`). It now structures parameters like a real run.
 
