@@ -82,7 +82,7 @@ def exec_with_error_printing(func, args):
     """Run a command implementation; report a LoggedException once and exit.
 
     Exit codes: 0 ok (or an informational message), 1 error, 2 usage error,
-    3 not found -- see ``adare.cli.errors``. The message goes to stderr (a JSON
+    3 not found, 130 interrupted -- see ``adare.cli.errors``. The message goes to stderr (a JSON
     ``{"error": {...}}`` document in json mode); the traceback only with
     --very-verbose.
     """

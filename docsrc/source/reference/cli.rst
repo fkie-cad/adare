@@ -35,7 +35,8 @@ Every read-only ``list``/``info``/``show``/``status`` command also accepts
 tab-separated text when stdout is piped). stdout carries only data; logs,
 progress, warnings and errors go to stderr. Errors are one concise message
 (``{"error": {...}}`` in json mode). Exit codes: ``0`` ok, ``1`` error,
-``2`` usage error, ``3`` not found. Details: :doc:`output-formats`.
+``2`` usage error, ``3`` not found, ``130`` interrupted. ``experiment run`` exits
+``1`` when any run did not pass (FAILED, ERROR, INCONCLUSIVE). Details: :doc:`output-formats`.
 
 Projects and aliases
 ====================

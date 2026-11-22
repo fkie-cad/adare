@@ -46,7 +46,8 @@ the assertions) → `adare-experiment` (run on every environment, compare).
   (`adare test search "file deleted" --json`, `adare env list --json`) or set
   `ADARE_FORMAT=json` for a whole session. When stdout is piped, output defaults to
   plain tab-separated text with full IDs. Data goes to stdout and messages to stderr.
-- **Exit codes:** 0 ok, 1 error, 2 usage, 3 not found. In JSON mode errors are
+- **Exit codes:** 0 ok, 1 error, 2 usage, 3 not found, 130 interrupted. `experiment run`
+  exits 1 when any run did not pass (FAILED, ERROR, INCONCLUSIVE). In JSON mode errors are
   `{"error": {"code", "message", "hint", "solutions"}}`.
 - **Discover, don't guess.** Use `adare <group> --help`, then `--help` on the
   subcommand. For assertions: `adare test search "<goal>"` → `adare test info <dotnotation> --example`.

@@ -95,6 +95,22 @@ class BatchRunSummary:
         return len([r for r in self.results if r.status == StatusEnum.INTERRUPTED])
 
     @property
+    def exit_code(self) -> int:
+        """The exit code of ``adare experiment run`` for these results.
+
+        ``1`` when any run did not pass (FAILED, ERROR, INCONCLUSIVE, ...) or nothing
+        ran at all; else ``130`` when a run was interrupted; else ``0``.
+        """
+        from adare.cli.errors import EXIT_ERROR, EXIT_INTERRUPTED, EXIT_OK
+
+        statuses = {r.status for r in self.results}
+        if not statuses or statuses - {StatusEnum.SUCCESS, StatusEnum.INTERRUPTED}:
+            return EXIT_ERROR
+        if StatusEnum.INTERRUPTED in statuses:
+            return EXIT_INTERRUPTED
+        return EXIT_OK
+
+    @property
     def success_rate(self) -> float:
         """Success rate as a percentage (0-100)."""
         if self.total_combinations == 0:

@@ -33,6 +33,8 @@ EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_USAGE = 2
 EXIT_NOT_FOUND = 3
+#: The command was interrupted (Ctrl-C, or a run ended as INTERRUPTED); 128 + SIGINT
+EXIT_INTERRUPTED = 130
 
 # Code fragments that mean "the thing you named does not exist".
 _NOT_FOUND_MARKERS = ('NOT_FOUND', 'DOES_NOT_EXIST', 'NOT_EXIST')

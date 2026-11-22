@@ -10,9 +10,9 @@ just installed, and needs a host with KVM/libvirt and the environment's image:
    the built-in ``verify_vm`` playbook (exits non-zero on failure).
 3. The bundled ``test_loop_simple`` example (shell commands, loops, ``file_exists``
    tests and pulls; no GUI), attached to the environment.
-4. ``adare --output-file smoke-result.json experiment run``. The exit status alone does not
-   show a FAILED test, so every ``results[].status`` in the JSON must be SUCCESS or
-   WARNING.
+4. ``adare --output-file smoke-result.json experiment run``. It must exit 0 (it exits 1
+   when a run did not pass), and as a second check every ``results[].status`` in the
+   JSON must be SUCCESS or WARNING.
 
 The whole sequence runs under ``adare vm slots exclusive``, so it waits for (and then
 blocks) the host's other ADARE runs instead of competing with them; busy slots past

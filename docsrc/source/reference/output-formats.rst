@@ -90,17 +90,25 @@ only printed with ``--very-verbose``.
 Exit codes
 ----------
 
-=====  ===========================================================
-Code   Meaning
-=====  ===========================================================
-``0``  success (including informational results such as "no projects found")
-``1``  error
-``2``  usage error (bad option or argument, unsupported ``--format``)
-``3``  not found (the named run, environment, experiment, VM, profile ... does not exist)
-=====  ===========================================================
+=======  ===========================================================
+Code     Meaning
+=======  ===========================================================
+``0``    success (including informational results such as "no projects found")
+``1``    error
+``2``    usage error (bad option or argument, unsupported ``--format``)
+``3``    not found (the named run, environment, experiment, VM, profile ... does not exist)
+``130``  interrupted (Ctrl-C, or an ``experiment run`` whose run was interrupted)
+=======  ===========================================================
+
+``experiment run`` exits ``0`` only when every run passed. It exits ``1`` when any
+run did not pass (FAILED, ERROR or INCONCLUSIVE), and ``130`` when nothing failed
+but a run was interrupted. This holds for one environment (``-e env``) and for a
+batch alike.
 
 Earlier versions exited ``255`` on every error and ``0`` on some failures
-(e.g. ``vm info`` or ``vm profile show`` with an unknown name).
+(e.g. ``vm info`` or ``vm profile show`` with an unknown name). ``experiment run``
+used to exit ``0`` for a failed run on a single environment, and for an
+ERROR, INCONCLUSIVE or interrupted run in a batch.
 
 Dual Output Mode
 ----------------
@@ -272,14 +280,10 @@ Shell Scripting
 
    #!/bin/bash
 
-   # Run experiments and save results
-   adare --format json --output-file results.json experiment run "exp_*" "*_env"
-
-   # Extract success rate using jq
-   SUCCESS_RATE=$(cat results.json | jq '.summary.success_rate')
-
-   if (( $(echo "$SUCCESS_RATE < 100" | bc -l) )); then
-       echo "Some experiments failed!"
+   # Run experiments and save results; the exit code says whether all passed
+   if ! adare --format json --output-file results.json experiment run "exp_*" "*_env"; then
+       echo "Some experiments did not pass:"
+       jq -r '.results[] | select(.status != "SUCCESS") | "\(.experiment) on \(.environment): \(.status)"' results.json
        exit 1
    fi
 
@@ -294,6 +298,7 @@ CI/CD Integration
        adare --format json --output-file results.json experiment run test_suite
 
    - name: Upload results
+     if: always()  # also when a run did not pass (exit 1)
      uses: actions/upload-artifact@v3
      with:
        name: experiment-results

@@ -65,6 +65,11 @@ is published to PyPI. A failed check leaves no release; fix it, delete the tag
   `ctx.resolve_globfilepath`. Guide: *Files inside archives*.
 
 ### Changed
+- `adare experiment run` exit codes (adare): `0` only when every run passed, `1` when any
+  run did not pass (FAILED, ERROR, INCONCLUSIVE), `130` when a run was interrupted or Ctrl-C
+  ended the command. Before, a single-environment run (`-e env`) exited `0` even when it
+  failed, and a batch exited `0` for ERROR, INCONCLUSIVE and interrupted runs. **Scripts that
+  relied on exit `0` after a failed run now stop there.**
 - cv-server: the OCR golden test no longer ships real desktop screenshots; it pins the
   profile, the model hashes and the text read from rendered UI-string frames.
 - Neutral names in comments, tests and docs (example project label `MyProject`).
