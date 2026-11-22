@@ -138,7 +138,8 @@ Running Experiments
 
 .. code-block:: bash
 
-   # Development/test run (default: allows modifications, creates fake runs)
+   # Development/test run (default: allows modifications, creates fake runs;
+   # only the ADARE_TEST_RUNS_KEEP (10) newest per experiment and environment are kept)
    adare experiment run my-experiment -e ubuntu24043
 
    # Production run (strict integrity checks, creates real runs)
@@ -155,8 +156,15 @@ Managing Experiments
    # Copy experiment for modification
    adare experiment clone my-experiment my-experiment-v2
 
-   # Remove experiment
+   # Delete the finished fake (test-mode) runs of an experiment, with their run folders
+   # (pending/running fake runs and dev sessions' runs are kept)
+   adare experiment clean my-experiment
+
+   # Remove experiment (with its runs and their run folders; --keep-files keeps the files)
    adare experiment remove my-experiment
+
+   # Free disk space: run folders without a database row (dry run; --yes deletes)
+   adare runs prune
 
    # Develop interactively against a live VM
    adare dev start -e ubuntu24043

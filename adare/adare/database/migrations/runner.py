@@ -125,6 +125,26 @@ MIGRATIONS: list[Migration] = [
         scope='project',
         module=f'{_PACKAGE}.add_vm_hash_to_experiment_run',
     ),
+    Migration(
+        name='add_run_lookup_indexes',
+        scope='project',
+        module=f'{_PACKAGE}.add_run_lookup_indexes',
+    ),
+    Migration(
+        name='delete_orphan_run_rows',
+        scope='project',
+        module=f'{_PACKAGE}.delete_orphan_run_rows',
+    ),
+    Migration(
+        name='move_parent_event_keys',
+        scope='project',
+        module=f'{_PACKAGE}.move_parent_event_keys',
+    ),
+    Migration(
+        name='add_superseded_to_playbook_item',
+        scope='project',
+        module=f'{_PACKAGE}.add_superseded_to_playbook_item',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per

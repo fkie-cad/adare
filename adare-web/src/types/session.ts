@@ -3,60 +3,67 @@
  * Mirrors backend DTOs from adare/adare/webapi/
  */
 
+/** Mirrors `DevModeSnapshot` (backend/devmode/session/core.py) as serialised by the API. */
+export interface SessionSnapshot {
+  snapshot_name: string
+  created_at: string
+  variable_state: Record<string, any>
+  description?: string
+  memory_file_path?: string
+  disk_file_path?: string
+  checkpoint_id?: string
+}
+
+/** Mirrors `DevSessionInfo` (core/dto/devmode.py): POST /sessions/start and GET /sessions/{id}/state. */
 export interface DevSessionInfo {
   session_id: string
-  project: string
-  experiment: string
-  environment: string
-  status: 'running' | 'stopped' | 'error'
+  project_path: string
+  environment_name: string
+  vm_running: boolean
+  actions_executed: number
   created_at: string
-  variables: Record<string, any>
-  snapshots: CheckpointInfo[]
-  action_count: number
-  last_action_time?: string
-  vm_status: VMStatus
+  current_variables: Record<string, any>
+  available_snapshots: SessionSnapshot[]
+  experiment_name?: string | null
+  name?: string | null
+  next_steps?: string[]
+  tip?: string | null
 }
 
+/** Mirrors `DevSessionListItem` (core/dto/devmode.py): GET /sessions. */
 export interface DevSessionListItem {
   session_id: string
-  project: string
-  experiment: string
-  environment: string
-  status: 'running' | 'stopped' | 'error'
+  experiment_name: string
+  environment_name: string
+  vm_running: boolean
+  actions_executed: number
   created_at: string
-  action_count: number
-  uptime_seconds: number
-  vm_running?: boolean
-  vm_name?: string
+  project_path: string
+  status: 'running' | 'stopped' | 'crashed'
+  name?: string | null
+  vm_name?: string | null
 }
 
+/** Mirrors `DevCheckpointInfo` (core/dto/devmode.py): GET /sessions/{id}/checkpoints. */
 export interface CheckpointInfo {
   name: string
-  description?: string
+  description: string
   created_at: string
-  memory_size_mb: number
-  disk_size_mb: number
-  variables_snapshot: Record<string, any>
+  variable_count: number
+  checkpoint_id: string
+  memory_file_path: string
+  disk_file_path: string
+  file_size_mb: number
 }
 
-export interface VMStatus {
-  hypervisor_type: 'qemu' | 'virtualbox' | 'unknown'
-  running: boolean
-  websocket_connected: boolean
-  last_heartbeat?: string
-}
+/** GET /sessions/{id}/state returns the session info itself. */
+export type SessionState = DevSessionInfo
 
-export interface SessionState {
-  variables: Record<string, any>
-  checkpoints: CheckpointInfo[]
-  execution_stats: ExecutionStats
-}
-
-export interface ExecutionStats {
-  total_actions: number
-  successful_actions: number
-  failed_actions: number
-  average_execution_time_ms: number
+/** Mirrors `DevCleanupResult` (core/dto/devmode.py): POST /sessions/cleanup. */
+export interface CleanupResult {
+  sessions_reconciled: number
+  reconciled_session_ids: string[]
+  sessions_left_running: number
 }
 
 export interface StartSessionRequest {

@@ -138,10 +138,14 @@ Documentation Structure
    guide/environments
    guide/experiments
    guide/test-driven-analysis
+   guide/negative-results
    guide/diff-analysis
    guide/icon-library
    guide/vm-image-creation
    guide/dev-mode
+   guide/host-resources
+   guide/hostside-backend
+   guide/web-ui
    guide/mcp-authoring
    guide/sharing
 

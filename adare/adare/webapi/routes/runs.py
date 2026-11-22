@@ -34,7 +34,8 @@ def _classify_artifact(rel_path: str) -> str:
         return "video"
     if name.startswith("report"):
         return "report"
-    if suffix == ".log" or "log" in name:
+    # By extension only: a substring test would file dialog.png / catalog.json under Logs.
+    if suffix == ".log":
         return "log"
     return "other"
 
@@ -80,15 +81,18 @@ def get_run(ulid: str):
 
 
 @router.delete("/{ulid}")
-def remove_run(ulid: str, project_path: str | None = Query(None)):
-    """Remove a run by ULID."""
-    from pathlib import Path
+def remove_run(ulid: str, project_path: str | None = Query(None), keep_files: bool = Query(False)):
+    """Remove a run by ULID: its database rows and (unless ``keep_files``) its run folder.
 
+    ``project_path`` is optional: without it the run's project is found by ULID across the
+    registered projects, the same way ``GET /api/runs/{ulid}`` does.
+    """
     from adare.core.dto.show import RunRemoveRequest
 
     dto = RunRemoveRequest(
         ulid=ulid,
         project_path=Path(project_path) if project_path else None,
+        keep_files=keep_files,
     )
     result = _api().show.remove_run(dto)
     return result_to_response(result)
@@ -125,8 +129,9 @@ def get_run_artifact(ulid: str, artifact_path: str):
 
     resolved_dir = run_dir.resolve()
     target = (run_dir / artifact_path).resolve()
-    # Path-traversal guard: the resolved file must stay under the run dir.
-    if not str(target).startswith(str(resolved_dir)):
+    # Path-traversal guard: the resolved file must stay under the run dir. A plain
+    # string-prefix check would also admit a sibling such as `<run-dir>-evil/`.
+    if not target.is_relative_to(resolved_dir):
         raise HTTPException(status_code=404)
     if not target.is_file():
         raise HTTPException(status_code=404, detail="artifact not found")

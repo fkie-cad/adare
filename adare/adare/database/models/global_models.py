@@ -14,6 +14,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -570,3 +571,64 @@ class Environment(RemoteIdentityMixin, SerializerMixin, GlobalBase):
 
     def __repr__(self):
         return f"<Environment(name='{self.name}',description='{self.description}')>"
+
+
+class ResourceSample(SerializerMixin, GlobalBase):  # type: ignore[misc,valid-type]
+    """
+    One point-in-time reading of the host's load, taken by the web server's
+    resource sampler. The history behind the web UI's usage charts.
+    """
+
+    __tablename__ = 'resource_sample'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    taken_at = Column(DateTime, nullable=False, index=True)
+
+    cpu_percent = Column(Float, nullable=False)  # whole host, 0-100
+    load_1m = Column(Float, nullable=True)
+    memory_total_bytes = Column(Integer, nullable=False)
+    memory_used_bytes = Column(Integer, nullable=False)
+    disk_total_bytes = Column(Integer, nullable=False)  # filesystem holding the ADARE state
+    disk_used_bytes = Column(Integer, nullable=False)
+
+    # QEMU processes ADARE started (runs, dev sessions, builds)
+    vm_count = Column(Integer, nullable=False, default=0)
+    vm_rss_bytes = Column(Integer, nullable=False, default=0)
+    vm_cpu_percent = Column(Float, nullable=False, default=0.0)  # in cores x 100, like `top`
+
+
+class RunResourceUsage(SerializerMixin, GlobalBase):  # type: ignore[misc,valid-type]
+    """
+    What one machine of one experiment run actually consumed, measured while it
+    ran. Lives in the global database (not the project's) because capacity
+    planning looks across every project's runs of an environment.
+    """
+
+    __tablename__ = 'run_resource_usage'
+
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+    experiment_run_id = Column(String, nullable=False, index=True)
+    machine = Column(String, nullable=True)  # machine key of a multi-machine run, NULL for single-VM
+    instance_name = Column(String, nullable=False)
+    environment_id = Column(String, nullable=True, index=True)
+    environment_name = Column(String, nullable=True, index=True)
+    project_path = Column(String, nullable=True)
+    experiment_name = Column(String, nullable=True)
+
+    started_at = Column(DateTime, nullable=False)
+    ended_at = Column(DateTime, nullable=True)
+    samples = Column(Integer, nullable=False, default=0)
+
+    # Configured size of the VM
+    vm_cpus = Column(Integer, nullable=True)
+    vm_memory_mb = Column(Integer, nullable=True)
+
+    # Measured on the QEMU process
+    peak_rss_bytes = Column(Integer, nullable=False, default=0)
+    avg_cpu_percent = Column(Float, nullable=False, default=0.0)  # in cores x 100
+    peak_cpu_percent = Column(Float, nullable=False, default=0.0)
+
+    # Physical size of the run's disk files (copy + overlay) when the VM stopped
+    disk_bytes = Column(Integer, nullable=True)
+
+    __table_args__ = (Index('idx_run_usage_env_started', 'environment_name', 'started_at'),)

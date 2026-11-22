@@ -1,6 +1,6 @@
 [project]
 name = "adaredepend"
-version = "0.1.0"
+version = "0.1.1"
 description = "ADARE workspace root: host client, guest agent, shared library and CV server"
 authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
 license = "MIT"
@@ -11,7 +11,8 @@ dependencies = [
     "adarevm",
     "adare",
     "adarelib",
-    "adare-cv-server",
+    # [paddle]: keep the legacy OCR profile installable (ADARE_OCR_ENGINE=paddle).
+    "adare-cv-server[paddle]",
 ]
 
 [project.scripts]
@@ -68,10 +69,17 @@ adare = { workspace = true }
 adarelib = { workspace = true }
 adare-cv-server = { workspace = true }
 
-[[tool.uv.index]]
-name = "paddlepaddle"
-url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
-explicit = true
+[tool.uv]
+# opencv-python (adare, cv-server), opencv-python-headless (rapidocr) and
+# opencv-contrib-python (paddlex, which pins ==4.10.0.84) all install the same
+# `cv2` module, and the last wheel installed wins. The cv2 version alone changes
+# OCR output (10/60 benchmark frames, 4.10 vs 5.0) and feeds icon matching, so keep
+# all three on one version. Drop this together with the cv-server `paddle` extra.
+constraint-dependencies = [
+    "opencv-python==4.10.0.84",
+    "opencv-python-headless==4.10.0.84",
+    "opencv-contrib-python==4.10.0.84",
+]
 
 [tool.uv.workspace]
 members = ["adare", "adarevm", "adarelib", "adare-cv-server"]

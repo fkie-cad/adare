@@ -8,6 +8,7 @@ from typing import Any
 
 import cattrs
 import yaml
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from adare.database.api.base import ProjectDatabaseApi
@@ -16,6 +17,43 @@ from adare.types.playbook import ActionType, parse_playbook
 from adare.types.playbook import Playbook as PlaybookType
 
 log = logging.getLogger(__name__)
+
+# Strings longer than this are not stored in ActionExecution.result_data. Screenshots
+# arrive as base64 PNGs (~170 KB each); stored inline they grew a project database to
+# 47 GB. Explicit screenshots are saved as files and referenced by 'screenshot_path'.
+MAX_RESULT_STRING = 16 * 1024
+
+
+def is_image_payload(container: dict, key: Any, item: Any) -> bool:
+    """True for the ``data`` of ``{'data': <base64>, 'format': 'png'}``, how images travel over the websocket."""
+    return key == 'data' and isinstance(item, str) and 'format' in container
+
+
+def omitted_image_marker(data: str, image_format: Any) -> str:
+    """The text an image's base64 ``data`` is replaced with in a stored action result."""
+    return f'<omitted: {len(data)} chars of {image_format} data>'
+
+
+def strip_bulky_values(value: Any) -> Any:
+    """Copy of an action result with base64 images and oversized strings replaced by a marker."""
+    if isinstance(value, dict):
+        stripped = {}
+        for key, item in value.items():
+            if is_image_payload(value, key, item):
+                stripped[key] = omitted_image_marker(item, value['format'])
+            else:
+                stripped[key] = strip_bulky_values(item)
+        return stripped
+    if isinstance(value, list | tuple):
+        return [strip_bulky_values(item) for item in value]
+    if isinstance(value, str) and len(value) > MAX_RESULT_STRING:
+        return f'<omitted: {len(value)} chars>'
+    return value
+
+
+def _posix_time(value: datetime) -> float:
+    """POSIX time of a stored DateTime; naive values are UTC, as adare writes them."""
+    return (value if value.tzinfo else value.replace(tzinfo=UTC)).timestamp()
 
 
 class PlaybookApi(ProjectDatabaseApi):
@@ -67,8 +105,9 @@ class PlaybookApi(ProjectDatabaseApi):
             # Flush to get the playbook ID assigned before creating items
             self._session.flush()
 
-            # Clear existing items (for updates)
-            self._session.query(PlaybookItem).filter(PlaybookItem.playbook_id == playbook.id).delete()
+            # Retire the previous version's items (for updates). A run in progress still
+            # executes the items it mapped at its start, so then none may be deleted.
+            self._retire_playbook_items(playbook, supersede_all=self.has_active_run(str(experiment.id)))
 
             # Convert actions to database items
             for order, action in enumerate(config.actions):
@@ -117,6 +156,69 @@ class PlaybookApi(ProjectDatabaseApi):
             self._session.add(playbook)
 
         return playbook
+
+    def _retire_playbook_items(self, playbook: Playbook, supersede_all: bool = False) -> None:
+        """Take a playbook's items out of the current playbook before new ones are added.
+
+        Items an ``action_execution`` references are kept and marked superseded, so
+        earlier runs keep their audit trail (foreign keys are off in SQLite, nothing
+        else would stop the delete). Every other item is deleted -- also a superseded
+        one whose runs have been deleted since. Set-based: no per-row Python.
+
+        With ``supersede_all`` (a run of the experiment is in progress, see
+        :meth:`has_active_run`) nothing is deleted: every current item is marked
+        superseded, because that run mapped the items at its start and writes
+        executions for the ones it has not reached yet. A later re-ingest without an
+        active run deletes the superseded items no execution ended up referencing.
+        """
+        executed = select(ActionExecution.id).where(ActionExecution.playbook_item_id == PlaybookItem.id).exists()
+        to_supersede = [PlaybookItem.playbook_id == playbook.id, PlaybookItem.superseded.is_(False)]
+        if not supersede_all:
+            to_supersede.append(executed)
+        # 'fetch' keeps item objects already in the session in step with the rows.
+        self._session.execute(
+            update(PlaybookItem)
+            .where(*to_supersede)
+            .values(superseded=True)
+            .execution_options(synchronize_session='fetch')
+        )
+        if not supersede_all:
+            self._session.execute(
+                delete(PlaybookItem)
+                .where(PlaybookItem.playbook_id == playbook.id, ~executed)
+                .execution_options(synchronize_session='fetch')
+            )
+        self._session.expire(playbook, ['items'])
+
+    def has_active_run(self, experiment_id: str) -> bool:
+        """True when a run of the experiment may still be executing its playbook.
+
+        Decided like ``adare db compact`` does (:mod:`adare.database.maintenance`): the
+        run's status is not terminal (``NON_TERMINAL_RUN_STATUSES``) and it showed
+        activity -- its start/creation time or a change in its run folder -- within
+        ``ACTIVITY_WINDOW_SECONDS``. An unfinished run without recent activity is stale
+        (a crashed process) and does not count.
+        """
+        from adare.backend.experiment.run_folders import last_activity, map_db_run_path
+        from adare.database.maintenance import ACTIVITY_WINDOW_SECONDS, NON_TERMINAL_RUN_STATUSES
+        from adare.database.models.project_models import ExperimentRun
+        from adarelib.constants import StatusEnum
+
+        statuses = [StatusEnum[name] for name in NON_TERMINAL_RUN_STATUSES]
+        cutoff = datetime.now(UTC).timestamp() - ACTIVITY_WINDOW_SECONDS
+        rows = self._session.execute(
+            select(ExperimentRun.path, ExperimentRun.start_time, ExperimentRun.created_at).where(
+                ExperimentRun.experiment_id == experiment_id, ExperimentRun.status.in_(statuses)
+            )
+        ).all()
+        for path, start_time, created_at in rows:
+            times = [_posix_time(value) for value in (start_time, created_at) if value is not None]
+            run_dir = map_db_run_path(self.project_path, path) if path else None
+            if run_dir is not None and run_dir.is_dir():
+                times.append(last_activity(run_dir))
+            if max(times, default=0.0) >= cutoff:
+                return True
+        return False
 
     def _create_playbook_item(self, playbook: Playbook, action: ActionType, sequence_order: int) -> PlaybookItem:
         """Convert action to PlaybookItem."""
@@ -167,6 +269,8 @@ class PlaybookApi(ProjectDatabaseApi):
             result["continue_on_test_failure"] = config.settings.continue_on_test_failure
         if getattr(config.settings, 'resolution', None) is not None:
             result["resolution"] = config.settings.resolution
+        if getattr(config.settings, 'effect_check', None) is not None:
+            result["effect_check"] = config.settings.effect_check
 
         return result
 
@@ -191,6 +295,8 @@ class PlaybookApi(ProjectDatabaseApi):
             result["offset"] = attrs.asdict(target.offset)
         if target.use_cache is not None:
             result["use_cache"] = target.use_cache
+        if target.min_margin is not None:
+            result["min_margin"] = target.min_margin
         return result
 
     def _strategy_to_json(self, strategy) -> dict[str, Any]:
@@ -270,7 +376,7 @@ class PlaybookApi(ProjectDatabaseApi):
 
         # CRITICAL: Check WaitCondition BEFORE hasattr(__dict__) because attrs classes
         # may not have __dict__ (they use __slots__ by default)
-        from adare.types.playbook import Target, WaitCondition
+        from adare.types.playbook import ClickVerify, Target, WaitCondition
 
         if isinstance(value, WaitCondition):
             return self._serialize_wait_condition(value)
@@ -279,6 +385,12 @@ class PlaybookApi(ProjectDatabaseApi):
         # (e.g. a DragAction's src/dst). Serialize it symmetrically here.
         if isinstance(value, Target):
             return self._target_to_json(value)
+        if isinstance(value, ClickVerify):
+            return {
+                name: self._target_to_json(getattr(value, name))
+                for name in ('exists', 'not_exists')
+                if getattr(value, name) is not None
+            }
 
         # Now check for __dict__ for other object types
         if hasattr(value, '__dict__'):
@@ -304,8 +416,14 @@ class PlaybookApi(ProjectDatabaseApi):
         return self._session.query(Playbook).filter(Playbook.experiment_id == experiment_id).first()
 
     def get_playbook_items(self, playbook_id: str, parent_id: str | None = None) -> list[PlaybookItem]:
-        """Get playbook items, optionally filtered by parent."""
-        query = self._session.query(PlaybookItem).filter(PlaybookItem.playbook_id == playbook_id)
+        """Get the current playbook's items, optionally filtered by parent.
+
+        Superseded items (an earlier version's, kept for the runs that executed them)
+        are left out.
+        """
+        query = self._session.query(PlaybookItem).filter(
+            PlaybookItem.playbook_id == playbook_id, PlaybookItem.superseded.is_(False)
+        )
 
         if parent_id:
             query = query.filter(PlaybookItem.parent_id == parent_id)
@@ -353,7 +471,7 @@ class PlaybookApi(ProjectDatabaseApi):
         if execution:
             execution.status = 'success' if success else 'failed'
             execution.completed_at = datetime.now(UTC)
-            execution.result_data = result_data
+            execution.result_data = strip_bulky_values(result_data)
             execution.error_message = error_message
             execution.attempt_number = attempt_number
             self._session.flush()
@@ -410,6 +528,7 @@ class PlaybookApi(ProjectDatabaseApi):
             collect_system_info=settings_json.get('collect_system_info', True),
             forensic_logging=settings_json.get('forensic_logging', True),
             resolution=settings_json.get('resolution'),
+            effect_check=settings_json.get('effect_check', 'warn'),
         )
 
     def _json_to_target(self, target_json: dict[str, Any] | None):
@@ -441,6 +560,7 @@ class PlaybookApi(ProjectDatabaseApi):
             strategy=strategy,
             offset=offset,
             use_cache=target_json.get('use_cache'),
+            min_margin=target_json.get('min_margin'),
         )
 
     def _json_to_strategy(self, strategy_json: dict[str, Any]):
@@ -499,12 +619,22 @@ class PlaybookApi(ProjectDatabaseApi):
 
         return conditions if conditions else None
 
+    def _json_to_verify(self, verify_json, verify_cls):
+        """A stored ``verify: {exists|not_exists: target}`` back to its object (None if absent)."""
+        if not isinstance(verify_json, dict) or not (verify_json.get('exists') or verify_json.get('not_exists')):
+            return None
+        return verify_cls(
+            exists=self._json_to_target(verify_json['exists']) if verify_json.get('exists') else None,
+            not_exists=self._json_to_target(verify_json['not_exists']) if verify_json.get('not_exists') else None,
+        )
+
     def _playbook_item_to_action(self, item: PlaybookItem) -> ActionType:
         """Convert PlaybookItem database model to Action object."""
         from adare.types.playbook import (
             ActionTestAction,
             BlockAction,
             ClickAction,
+            ClickVerify,
             CommandAction,
             DragAction,
             GotoAction,
@@ -543,16 +673,28 @@ class PlaybookApi(ProjectDatabaseApi):
                 log.error(f"Failed to parse parameters JSON: {e}")
                 raise ValueError(f"Invalid JSON in {action_type} action parameters: {params[:200]}") from e
 
+        # verify:/verify_timeout/effect, shared by the GUI actions that take them
+        action_verify = self._json_to_verify(params.get('verify'), ClickVerify)
+        effect_fields: dict[str, Any] = {
+            'verify': action_verify,
+            'verify_timeout': params.get('verify_timeout', 3.0),
+            'effect': params.get('effect'),
+        }
+
         if action_type == 'click':
             return ClickAction(
-                target=self._json_to_target(item.target), type=params.get('type', 'left'), description=description
+                target=self._json_to_target(item.target),
+                type=params.get('type', 'left'),
+                description=description,
+                retries=params.get('retries', 0) if action_verify else 0,
+                **effect_fields,
             )
 
         if action_type == 'drag':
             # Drag has src and dst targets in parameters
             src_target = self._json_to_target(params.get('src'))
             dst_target = self._json_to_target(params.get('dst'))
-            return DragAction(src=src_target, dst=dst_target, description=description)
+            return DragAction(src=src_target, dst=dst_target, description=description, **effect_fields)
 
         if action_type == 'keyboard':
             return KeyboardAction(
@@ -561,6 +703,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 combination=params.get('combination'),
                 when=conditions,
                 description=description,
+                **effect_fields,
             )
 
         if action_type == 'idle':
@@ -568,11 +711,14 @@ class PlaybookApi(ProjectDatabaseApi):
 
         if action_type == 'scroll':
             return ScrollAction(
-                direction=params.get('direction', 'down'), amount=params.get('amount', 1), description=description
+                direction=params.get('direction', 'down'),
+                amount=params.get('amount', 1),
+                description=description,
+                **effect_fields,
             )
 
         if action_type == 'goto':
-            return GotoAction(target=self._json_to_target(item.target), description=description)
+            return GotoAction(target=self._json_to_target(item.target), description=description, **effect_fields)
 
         if action_type == 'actiontest':
             return ActionTestAction(name=params.get('name', ''), description=description)
@@ -696,6 +842,23 @@ class PlaybookApi(ProjectDatabaseApi):
 
         return variables, tests
 
+    def _load_on_failure_from_yaml(self, yaml_content) -> list:
+        """Structure the playbook-level ``on_failure:`` list from the stored YAML.
+
+        ``on_failure`` steps are not stored as PlaybookItems (they are not part of the
+        main sequence), so they are read from the original YAML, like variables and tests.
+        """
+        if not yaml_content:
+            return []
+        from adare.types.playbook import structure_action
+        from adarelib.testset.yaml.customloader import get_custom_loader
+
+        data = yaml.load(yaml_content, Loader=get_custom_loader())
+        steps = data.get('on_failure') if isinstance(data, dict) else None
+        if not steps:
+            return []
+        return [structure_action(step) for step in steps]
+
     def load_playbook_from_database(self, experiment_id: str) -> PlaybookType:
         """Load Playbook object from database models (no YAML parsing for actions).
 
@@ -731,4 +894,10 @@ class PlaybookApi(ProjectDatabaseApi):
         from adare.types.playbook import Playbook as PlaybookType
 
         log.info(f"Playbook reconstruction complete - {len(actions)} actions, {len(tests)} tests")
-        return PlaybookType(actions=actions, settings=settings, variables=variables, tests=tests)
+        return PlaybookType(
+            actions=actions,
+            settings=settings,
+            variables=variables,
+            tests=tests,
+            on_failure=self._load_on_failure_from_yaml(playbook.original_yaml_content),
+        )

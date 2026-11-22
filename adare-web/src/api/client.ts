@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { apiErrorMessage } from '@/types/api'
 
 export const api = axios.create({
   baseURL: '/api',
@@ -26,11 +27,19 @@ function extractMessage(error: unknown): string | null {
 }
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // A webapi rejection arrives as HTTP 200 with `success: false`
+    // (`result_to_response`). Reject it here so every hook surfaces the
+    // server's message instead of resolving a failure as a success (success
+    // toasts on refused deletes, `data is undefined` on not-found lookups).
+    const body = response.data as { success?: unknown; error?: unknown; message?: unknown } | undefined
+    if (body && typeof body === 'object' && body.success === false) {
+      return Promise.reject(new Error(apiErrorMessage(body.error ?? body.message) ?? 'Request failed'))
+    }
+    return response
+  },
   (error) => {
-    // Only reached for 4xx/5xx and transport failures. Note that a *contract*
-    // rejection from the webapi arrives as HTTP 200 with `success: false`, so it
-    // never gets here — hooks must check `data.success` themselves.
+    // Reached for 4xx/5xx and transport failures.
     const data = error.response?.data
     const message =
       extractMessage(data?.error) ??

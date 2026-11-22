@@ -108,9 +108,13 @@ def reserve_port_atomically(api_session, vm_id: str, instance_name: str, experim
                 return port
 
             except IntegrityError as db_error:
-                # If database constraint fails (e.g., duplicate port or instance name), try next port
-                log.debug(f"Port {port} reservation failed due to constraint violation, trying next port: {db_error}")
-                api_session.session.rollback()  # Rollback the failed insert
+                # create_vm_instance's own `with` block already rolled the failed
+                # insert back. Only a port collision (another process reserved
+                # this port after our scan) is worth retrying; any other
+                # constraint, e.g. a duplicate instance name, fails on every port.
+                if 'websocket_port' not in str(db_error.orig):
+                    raise
+                log.info(f"Port {port} was taken by a concurrent reservation, trying the next port")
                 continue
             except OperationalError as db_error:
                 # Database operational error (connection, timeout, etc.)

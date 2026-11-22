@@ -83,6 +83,14 @@ def file_exists(ctx, dst: str, match_mode: str = "any"):
   directory.
 - Assert with `ctx.fail_if(cond, msg)` (test failed) / `ctx.error_if(cond, msg)`
   (precondition/setup error); return a str/list (success) or a `TestResult`.
+- **A test whose pass means "something is absent"** (cleared, deleted, never written)
+  should declare `@testfunction(..., negative=True)`. The host then reports an
+  unproven pass (an earlier GUI action skipped or without visible effect) as
+  INCONCLUSIVE instead of SUCCESS, so every playbook that uses it gets that for
+  free. Names ending in `_does_not_exist` are recognised without the flag. Tell
+  playbook authors to pair it with a control test (`controls:`), see the
+  adare-playbook skill. A missing file/key must be reported by the test itself, not
+  inferred from a read error: only a real "not found" may pass.
 
 ## 3. Validate (offline, no VM)
 

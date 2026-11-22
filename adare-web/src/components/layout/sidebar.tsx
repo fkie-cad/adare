@@ -11,16 +11,23 @@ import {
   Moon,
   Monitor,
   Palette,
+  Gauge,
+  SquareTerminal,
+  Activity,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useThemeStore } from '@/stores/theme-store'
 import { useSidebarStore } from '@/stores/sidebar-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 
 const navSections = [
   {
     label: 'Overview',
-    items: [{ to: '/', label: 'Home', icon: LayoutDashboard }],
+    items: [
+      { to: '/', label: 'Home', icon: LayoutDashboard },
+      { to: '/system', label: 'System', icon: Gauge },
+    ],
   },
   {
     label: 'Build',
@@ -32,7 +39,10 @@ const navSections = [
   },
   {
     label: 'VMs',
-    items: [{ to: '/vms', label: 'VMs', icon: HardDrive }],
+    items: [
+      { to: '/vms', label: 'VMs', icon: HardDrive },
+      { to: '/live', label: 'Live', icon: Activity },
+    ],
   },
   {
     label: 'Develop',
@@ -47,6 +57,7 @@ const navSections = [
 export function Sidebar() {
   const { mode, colorScheme, setMode, setColorScheme } = useThemeStore()
   const { collapsed } = useSidebarStore()
+  const terminal = useTerminalStore()
 
   return (
     <aside
@@ -94,6 +105,25 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Terminal panel toggle */}
+      <div className="px-4 pb-2">
+        <button
+          type="button"
+          onClick={terminal.toggle}
+          aria-pressed={terminal.open}
+          title={collapsed ? 'Terminal (Ctrl+`)' : 'Ctrl+`'}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+            'hover:bg-accent hover:text-accent-foreground',
+            terminal.open && 'bg-accent text-accent-foreground',
+            collapsed && 'justify-center',
+          )}
+        >
+          <SquareTerminal className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Terminal &amp; Claude</span>}
+        </button>
+      </div>
 
       {/* Theme controls */}
       <div className="p-4 border-t border-border space-y-2">

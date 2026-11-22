@@ -73,6 +73,21 @@ def _playbook_settings_memory(project_path: Path, experiment_name: str) -> int |
     return getattr(settings, 'vm_memory', None) if settings else None
 
 
+def _playbook_settings_backend(project_path: Path, experiment_name: str):
+    """The experiment playbook's ``settings`` object (for ``settings.backend``), or None when unreadable."""
+    try:
+        from adare.backend.experiment.directory import ExperimentDirectory
+        from adare.types.playbook import parse_playbook
+
+        exp_dir = ExperimentDirectory(project_path, experiment_name)
+        if not exp_dir.playbookfile.exists():
+            return None
+        return getattr(parse_playbook(exp_dir.playbookfile), 'settings', None)
+    except (FileNotFoundError, OSError, ValueError, KeyError, TypeError) as e:
+        log.warning(f"Could not read settings.backend from playbook: {e}")
+        return None
+
+
 def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_success: bool) -> tuple[bool, dict]:
     """Resolve the success verdict for an experiment run.
 
@@ -112,10 +127,14 @@ def _resolve_experiment_verdict(experiment_run, test_mode: bool, execution_succe
         success = bool(execution_success)
     else:
         # WARNING is pass-with-warning: a passing verdict, reported distinctly.
+        # INCONCLUSIVE (an unproven absence) is not a pass, but is not called a failure either.
         success = result_status in (StatusEnum.SUCCESS, StatusEnum.WARNING)
 
+    verdict = "SUCCESS" if success else "FAILED"
+    if not success and result_status == StatusEnum.INCONCLUSIVE:
+        verdict = "INCONCLUSIVE"
     diagnostics = {
-        "verdict": "SUCCESS" if success else "FAILED",
+        "verdict": verdict,
         "smoke_mode": is_smoke_run,
         "test_mode": test_mode,
         "run_found": experiment_run is not None,
@@ -166,15 +185,24 @@ async def experiment_run(
     vm_cpus: int = None,
     gui_mode: str = None,
     test_exec_mode: str = None,
+    backend: str | None = None,
     diff: bool = None,
     diff_mode: str = 'auto',
     export_disk_image: bool = None,
     capture_pcap: bool = None,
+    filter_pcap: bool | None = None,
     export_memory_dump: bool = None,
     allow_emulation: bool = False,
     file_log_level: int = logging.INFO,
     run_ulid: str | None = None,
+    verdict_out: dict | None = None,
 ):
+    """Run one experiment on one environment.
+
+    Returns ``(was_interrupted, was_successful)``. Pass a dict as ``verdict_out`` to also
+    receive the verdict diagnostics (``verdict`` is SUCCESS, FAILED or INCONCLUSIVE);
+    :func:`run_status` turns them into a :class:`StatusEnum`.
+    """
     import signal
 
     log.info(f"Starting experiment run {experiment_name} in project {project_path}")
@@ -263,6 +291,13 @@ async def experiment_run(
         config.test_mode_override = test_exec_mode
         log.info(f"Using custom test execution mode: {test_exec_mode}")
 
+    # Guest backend: CLI > ADARE_BACKEND > playbook settings.backend > agent
+    from adare.backend.hostside import resolve_backend
+
+    config.backend = resolve_backend(backend, _playbook_settings_backend(project_path, experiment_name))
+    if config.backend != 'agent':
+        log.info(f"Using guest backend: {config.backend}")
+
     # Set filesystem diff parameters
     if diff is not None:
         config.enable_diff = diff
@@ -278,6 +313,9 @@ async def experiment_run(
     if capture_pcap is not None:
         config.capture_pcap = capture_pcap
         log.info(f"pcap capture CLI override: {'enabled' if capture_pcap else 'disabled'}")
+    if filter_pcap is not None:
+        config.filter_pcap = filter_pcap
+        log.info(f"pcap ADARE-traffic filter CLI override: {'enabled' if filter_pcap else 'disabled'}")
     if export_memory_dump is not None:
         config.export_memory_dump = export_memory_dump
         log.info(f"Memory dump CLI override: {'enabled' if export_memory_dump else 'disabled'}")
@@ -397,6 +435,7 @@ async def experiment_run(
     # --- Execution Flow ---
     vm_manager = None
     video_recorder = None
+    run_monitor = None
 
     try:
         # Experiment Preparation Phase
@@ -435,6 +474,13 @@ async def experiment_run(
                 await step_runner.run_async_step(vm_manager.setup_file_transfer, experiment_run_context)
                 await step_runner.run_async_step(vm_manager.setup_networking, experiment_run_context)
                 await step_runner.run_async_step(vm_manager.start_vm, experiment_run_context)
+
+        # Measure what the run's VMs consume; capacity planning reads it back
+        # (`adare system capacity`, the web UI's System page).
+        if not stop_event.is_set():
+            from adare.backend.system.run_monitor import start_run_monitor
+
+            run_monitor = start_run_monitor(experiment_run_context)
 
         # Whole-run MP4 via ffmpeg (opt-in, ADARE_EXPERIMENT_VIDEO — no CLI flag
         # yet). QEMU-only: SPICE/QMP screendump are QEMU-specific capture paths.
@@ -482,7 +528,11 @@ async def experiment_run(
             _resolve_and_store_test_execution_mode(experiment_run_context)
 
         # Software Installation Phase
-        if not stop_event.is_set():
+        if not stop_event.is_set() and experiment_run_context.config.backend == 'hostside':
+            # No agent to install, no QGA to run installations through: environment installations were
+            # classified and staged into the overlay before first boot (see backend/hostside).
+            log.info("Host-side backend: skipping adarevm installation, WebSocket connection and QGA installations")
+        elif not stop_event.is_set():
             is_host_test_mode = experiment_run_context.test_execution_mode == 'host'
             is_host_gui_mode = experiment_run_context.config.gui_mode_override == 'host' or (
                 experiment_run_context.config.gui_mode_override is None
@@ -590,6 +640,10 @@ async def experiment_run(
                 if video_recorder is not None:
                     await video_recorder.stop()
 
+                if run_monitor is not None:
+                    # Before the VM stops and its disk files are removed.
+                    run_monitor.stop()
+
                 if vm_manager:
                     # Memory only exists while QEMU is running, so the dump must happen
                     # BEFORE retrieve_artifacts/stop_vm below (which may themselves stop
@@ -623,6 +677,10 @@ async def experiment_run(
                     await step_runner.run_cleanup_step(
                         vm_manager.stop_vm, experiment_run_context, post_interrupt=True, force=force_shutdown
                     )
+                    # QEMU has closed the pcap now: drop ADARE's own packets from it
+                    await step_runner.run_cleanup_step(
+                        vm_manager.perform_pcap_filter, experiment_run_context, post_interrupt=True
+                    )
                     # Perform host-side diff AFTER VM stopped, BEFORE overlay cleanup
                     await step_runner.run_cleanup_step(
                         vm_manager.perform_host_diff, experiment_run_context, post_interrupt=True
@@ -634,6 +692,11 @@ async def experiment_run(
                     await step_runner.run_cleanup_step(
                         vm_manager.cleanup_vm, experiment_run_context, post_interrupt=True
                     )
+            # Let background screenshot recompression finish before the run counts as done
+            from adare.backend.experiment.screenshot_store import wait_for_pending
+
+            await asyncio.to_thread(wait_for_pending)
+
             # Give time for all events to be processed before stopping
             await asyncio.sleep(2)
 
@@ -701,7 +764,7 @@ async def experiment_run(
                 )
 
             if test:
-                # Test mode: fake runs are kept until manually cleaned with 'adare experiment clean <name>'
+                # Test mode: this run is kept; older test runs beyond ADARE_TEST_RUNS_KEEP are removed below
                 log.info(
                     f"Test mode run {experiment_run_context.experiment_run_ulid} completed and preserved for analysis"
                 )
@@ -828,16 +891,58 @@ async def experiment_run(
     except (OSError, ValueError, KeyError) as e:
         log.error(f"Error generating forensic report: {e}", exc_info=True)
 
+    # Test-run retention: keep the ADARE_TEST_RUNS_KEEP newest test runs of this
+    # experiment and environment (this one and the newest successful one included;
+    # -1 = off). Never fails the run: the helper logs and keeps everything on errors.
+    # Off the event loop: deleting run folders can take a while.
+    if test and not experiment_run_context.config.dev_mode:
+        from adare.backend.experiment.run_prune import apply_test_run_retention
+
+        retention_message = await asyncio.to_thread(
+            apply_test_run_retention,
+            Path(project_path),
+            experiment_name,
+            experiment_run_context.experiment_run_ulid,
+        )
+        if retention_message and not disable_printing:
+            from adare.console import console_print
+
+            console_print(retention_message)
+
+    if verdict_out is not None:
+        verdict_out.update(diagnostics)
     # Return both interruption status and actual success status
     return user_interrupt_event.is_set(), experiment_success
 
 
-def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
-    """Test an experiment in development mode - creates fake run that gets cleaned up.
+def run_status(was_interrupted: bool, was_successful: bool, verdict: dict | None = None) -> StatusEnum:
+    """The status to report for a finished ``experiment_run`` (``verdict``: its ``verdict_out``)."""
+    if was_interrupted:
+        return StatusEnum.INTERRUPTED
+    if was_successful:
+        return StatusEnum.SUCCESS
+    if (verdict or {}).get('verdict') == 'INCONCLUSIVE':
+        return StatusEnum.INCONCLUSIVE
+    return StatusEnum.FAILED
 
-    This function provides a development-friendly way to test experiments without
-    creating persistent runs or requiring integrity checks. Perfect for iterative
-    development and testing of experiment playbooks.
+
+#: Shown for an INCONCLUSIVE run: a negative test passed without proof that its actions took effect
+INCONCLUSIVE_MESSAGE = (
+    'Negative result unproven: an earlier action or control gave no proof of the act (see the test details)'
+)
+
+
+def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
+    """Test an experiment: a fake (test-mode) run without integrity checks.
+
+    For iterative playbook development. The run is recorded as a fake run and its
+    folder kept for analysis. Afterwards older test runs of the experiment on this
+    environment are pruned so that only the ``ADARE_TEST_RUNS_KEEP`` (default 10)
+    newest remain, this run included, at most 5 per run (see
+    :func:`~adare.backend.experiment.run_prune.retain_test_runs`); the newest
+    successful run, runs still in progress, dev sessions' runs and runs started less
+    than an hour ago are never removed. ``adare runs prune --fake`` removes the rest
+    by hand.
 
     Args:
         project_path: Path to the project directory
@@ -847,14 +952,14 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
 
     log.info(f'Starting experiment test: {experiment_name} in environment {environment_name}')
 
-    # Run experiment in test mode (creates fake run that gets cleaned up)
+    # Run experiment in test mode (a fake run; older ones beyond ADARE_TEST_RUNS_KEEP are pruned)
     asyncio.run(
         experiment_run(
             project_path=project_path,
             experiment_name=experiment_name,
             environment_name=environment_name,
             disable_printing=False,  # Show output for development feedback
-            test=True,  # This creates fake runs that are cleaned up automatically
+            test=True,  # A fake run; triggers test-run retention at the end
             debug_screenshots=True,  # Enable debug screenshots for development
             preserve_snapshot=False,  # Don't preserve snapshots in test mode
             runlog=True,  # Save logs for test runs to aid debugging

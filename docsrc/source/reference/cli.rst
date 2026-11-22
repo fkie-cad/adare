@@ -71,6 +71,53 @@ Projects are top-level containers that organize experiments and their runs.
 ``adare status``
   Quick overview: current project, active dev sessions, VM count and database status.
 
+Host Resources
+==============
+
+``adare system`` reports what the host has, what ADARE's VMs use and how many more
+runs fit (see :doc:`../guide/host-resources`). Every subcommand takes the global
+``--format`` option.
+
+``adare system resources``
+  Live CPU, memory and disk, and every running QEMU VM with its resident memory and CPU.
+
+``adare system capacity``
+  How many more runs of each current environment fit right now, the limiting
+  resource, and whether the per-run need is measured or the configured size.
+
+``adare system usage``
+  What recent experiment runs actually used: peak RAM, average CPU, disk, duration.
+
+  Options:
+    * ``-e, --environment TEXT`` - Only runs of this environment
+    * ``--limit INTEGER`` - Number of runs to show (default: 50)
+
+``adare system storage``
+  Physical size of ADARE's directories and projects, and run disks without a
+  database owner (reclaimable with ``adare vm prune --force``).
+
+  Options:
+    * ``--refresh`` - Re-measure instead of using the report cached for a few minutes
+
+``adare system settings [list|get|set|unset]``
+  Host limits ADARE keeps to, saved in ``~/.adare/settings.json``. Each resolves
+  environment variable > saved setting > default, and ``list`` shows where each
+  value comes from. ``set`` validates the value; ``unset`` returns to the default.
+
+  * ``ADARE_MAX_VMS`` (20) - VMs that may run at once across all adare processes
+  * ``ADARE_VM_SLOT_TIMEOUT`` (30) - seconds a run waits for a free VM slot
+  * ``ADARE_MIN_FREE_DISK_GB`` (10) - GiB that must be free on the project and ADARE
+    disks before a run starts; 0 switches the check off
+  * ``ADARE_DEV_SESSION_MAX_AGE_DAYS`` (off) - stopped dev sessions unused for longer
+    are removed by every experiment run and ``adare vm prune --force``
+  * ``ADARE_TEST_RUNS_KEEP`` (10) - test (fake) runs kept per experiment and
+    environment; each test run removes up to 5 older ones (see
+    :ref:`test-run retention <cli-test-run-retention>`). The run that just finished
+    counts, so 0 keeps only it (and the newest successful run, which is always
+    kept); -1 switches retention off
+
+  Example: ``adare system settings set ADARE_DEV_SESSION_MAX_AGE_DAYS 30``
+
 Environment Management
 ======================
 
@@ -160,11 +207,32 @@ Experiments contain the actual test automation logic using YAML-based playbooks.
   Create the example experiment with a complete playbook and test configuration.
 
 ``adare experiment load <experiment>``
-  Load an experiment configuration into the project database.
+  Load an experiment configuration into the project database. Loading an
+  experiment that is already loaded is a :ref:`reload <cli-experiment-reload>`.
 
   Options:
     * ``-e, --environment TEXT`` - Name of the environment
-    * ``-f, --force`` - Force update of the experiment
+    * ``-f, --force`` - Replace a changed experiment that has production runs:
+      the experiment and **all** its runs, production runs included, are deleted
+      and it is loaded again under a new id
+
+.. _cli-experiment-reload:
+
+**Reloading a changed experiment.** ``adare experiment load`` and the load that
+``adare experiment run`` / ``replicate`` do before every run (test and production
+mode alike) compare the playbook's hash with the loaded one:
+
+* unchanged: nothing happens;
+* changed, no production runs: the experiment is reloaded in place -- same id;
+  description, environments, tags, tests and playbook are refreshed. Its finished
+  fake runs are deleted first, rows and run folders, as ``adare experiment clean``
+  does (fake runs still pending/running and dev sessions' runs are kept);
+* changed, with production runs (finished or not): refused, nothing changes. A run
+  does not record which playbook version it ran, so a reload would put the
+  production runs under a playbook they never executed. Run the changed playbook as
+  a new experiment (``adare experiment clone``, then restore the original's
+  ``playbook.yml``), restore the playbook, or replace the experiment with
+  ``adare experiment load --force``.
 
 .. _test-mode-development:
 
@@ -178,8 +246,10 @@ Experiments contain the actual test automation logic using YAML-based playbooks.
     * ``-s, --preserve-snapshot`` - VirtualBox: snapshot the final VM state (QEMU runs are discarded; use ``--export-disk-image``)
     * ``--vm-memory INTEGER``, ``--vm-cpus INTEGER`` - VM resources
     * ``--gui-mode [auto|agent|host]``, ``--test-mode [auto|agent|host]`` - Run GUI actions / tests through the guest agent or from the host (QMP/QGA, QEMU only)
+    * ``--backend [agent|hostside]`` - Guest backend: ``agent`` (default, in-guest ``adarevm``) or ``hostside`` (no process of ours in the guest; QEMU Linux guests; see :doc:`/guide/hostside-backend`). Also ``ADARE_BACKEND`` and the playbook setting ``settings.backend``
     * ``--diff/--no-diff``, ``--diff-mode [auto|guest|host]`` - Filesystem diff (overrides the playbook setting)
     * ``--export-disk-image``, ``--capture-pcap``, ``--export-memory-dump`` - Forensic artifacts (overrides the playbook setting)
+    * ``--filter-pcap/--no-filter-pcap`` - Remove ADARE's own traffic (agent WebSocket, SMB share) from the captured pcap after the run (default on; ``--no-filter-pcap`` keeps the raw capture; overrides ``settings.filter_pcap``)
     * ``--no-runlog`` - Do not save the adare log to the run directory
     * ``--allow-emulation`` - Allow QEMU TCG software emulation for a foreign guest architecture (slow)
 
@@ -221,8 +291,11 @@ By default, experiments run in **test mode** which is ideal for development:
 
 * **Test Mode (Default)**:
 
-  * Allows continuous modification and testing of playbook files
-  * Creates "fake runs" that can be cleaned up with ``adare experiment clean``
+  * Allows continuous modification and testing of playbook files: a changed
+    playbook is :ref:`reloaded <cli-experiment-reload>` before the run, deleting the
+    finished fake runs of the old version
+  * Creates "fake runs"; only the newest ones per experiment and environment are
+    kept (see below), ``adare experiment clean`` removes them all
   * Skips integrity checks to enable rapid iteration
   * Perfect for developing and debugging experiments
 
@@ -233,8 +306,64 @@ By default, experiments run in **test mode** which is ideal for development:
   * Prevents modifications to experiments with existing runs
   * Use only when ready for production data collection
 
+Once an experiment has production runs, a changed playbook is refused in both
+modes (see :ref:`reloading <cli-experiment-reload>`); production runs are never
+deleted by a run.
+
 **Workflow**: Develop and test in default test mode, then use ``--production`` only when ready for final data collection.
 For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>`.
+
+.. _cli-test-run-retention:
+
+**Test-run retention.** Every test-mode run (``adare experiment run`` /
+``replicate`` without ``--production``; not dev sessions) ends by removing older
+test runs of the same experiment **and environment** (the exact environment version
+the run used; runs without an environment are a group of their own), so that the
+``ADARE_TEST_RUNS_KEEP`` newest of that group remain (default 10). A default
+``adare experiment run exp`` over several environments therefore never removes its
+own results of another environment. The run that just finished takes one of those
+places and is never removed, so ``0`` and ``1`` both keep it alone.
+
+The **newest successful run** of the group is never removed either. Successful
+means the run finished (status ``FINISHED``; failed and interrupted runs end as
+``FAILED``/``ERROR``/``INTERRUPTED``) and its result in ``adare runs list`` is
+``SUCCESS`` or ``WARNING`` (all tests passed; a run without tests counts as
+passed). It takes one of the ``ADARE_TEST_RUNS_KEEP`` places when it is among the
+newest; otherwise it is kept on top of them, so a burst of failed attempts can
+never remove the last good run.
+
+Runs are ranked by start time, and a run that would go is still kept when it
+
+* started less than an hour ago, or is not finished (pending, running, paused, no
+  status);
+* belongs to a dev session;
+* has a run folder that fails the :ref:`run-folder test <cli-run-folders>` (e.g.
+  something in it changed in the last hour); its database row stays too;
+* has a run folder that a run of another registered project sharing this ``run/``
+  directory refers to; its row stays too. If such a project cannot be read, nothing
+  is removed (like ``adare runs prune``).
+
+At most **5** runs per experiment and environment are removed after one run,
+oldest first, so the first run after an upgrade does not delete a whole backlog at
+once; later runs take the rest, or ``adare runs prune --fake`` removes finished
+test runs in bulk (that one does not keep the newest).
+
+Production runs are never touched. The rows go in one transaction, then the
+folders; when something was removed, one line such as ``removed 3 older test runs
+(1.2 GiB; ADARE_TEST_RUNS_KEEP=10)`` is printed. It adds ``; 4 more kept for now
+(at most 5 are removed per run; `adare runs prune --fake` removes finished test
+runs in bulk)`` when the limit was hit, and ``; 1 run folder could not be deleted
+(`adare runs prune` removes leftover folders)`` when a folder could not be deleted
+after its row was (the folder is then an orphan that ``adare runs prune`` cleans
+up). If the runs, the dev sessions or a sharing project cannot be read, a warning
+is logged, nothing is removed and the run is unaffected.
+
+.. code-block:: bash
+
+   adare system settings set ADARE_TEST_RUNS_KEEP 25   # keep more
+   ADARE_TEST_RUNS_KEEP=0 adare experiment run exp -e env   # keep only this run (+ the last good one)
+   adare system settings set ADARE_TEST_RUNS_KEEP -1   # switch retention off
+   adare system settings unset ADARE_TEST_RUNS_KEEP     # back to 10
 
 ``adare experiment diff <experiment>``
   Run an experiment in visual diff mode for manual side-by-side comparison
@@ -277,15 +406,17 @@ For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>
     * ``-f, --force`` - Proceed even if an experiment would be left without environments
 
 ``adare experiment clean <experiment>``
-  Delete all fake (test-mode) runs of an experiment.
+  Delete the finished fake (test-mode) runs of an experiment: their database rows and
+  their run folders (see :ref:`run folders <cli-run-folders>`). Fake runs that are
+  still pending or running, and dev sessions' runs, are kept.
 
 ``adare experiment remove <experiment>``
-  Remove an experiment, all its runs and (unless ``--keep-files``) its directory.
-  Alias: ``rm``.
+  Remove an experiment, all its runs and (unless ``--keep-files``) its directory and
+  the runs' folders (see :ref:`run folders <cli-run-folders>`). Alias: ``rm``.
 
   Options:
     * ``-f, --force`` - Remove even if the experiment has production runs
-    * ``--keep-files`` - Keep the experiment directory (only remove from the database)
+    * ``--keep-files`` - Keep the experiment directory and the run folders (only remove from the database)
 
 **Playbook Sub-commands (adare experiment playbook)**
 
@@ -297,7 +428,15 @@ For interactive development against a live VM, use :ref:`dev mode <cli-dev-mode>
 
 ``adare experiment playbook set <experiment> <file>``
   Validate a playbook file, write it as the experiment's ``playbook.yml`` and
-  re-ingest the project database.
+  re-ingest the project database. Re-ingest replaces the playbook's items; items
+  earlier runs executed are kept, marked superseded, so those runs' action
+  executions still name the action they ran. While a run of the experiment is in
+  progress (unfinished, with activity in the last 30 minutes, as ``adare db compact``
+  decides) every old item is kept, superseded; a later re-ingest deletes those no
+  run executed. The experiment's content hash and tests are refreshed too, so the
+  next ``experiment run`` sees no change; runs are not touched. A changed playbook
+  for an experiment with production runs is refused and nothing is written (see
+  :ref:`reloading <cli-experiment-reload>`).
 
   Options:
     * ``--no-backup`` - Do not back up the existing playbook.yml to ``.bak``
@@ -318,7 +457,72 @@ Run Management
   Show detailed information about a specific experiment run, including results and logs.
 
 ``adare runs remove <ulid>``
-  Remove a single experiment run. Alias: ``rm``.
+  Remove a single experiment run: its database rows and its run folder. A folder
+  that fails the run-folder test below is kept and the reason is printed; the
+  database rows are removed either way. Alias: ``rm``.
+
+  Options:
+    * ``--keep-files`` - Keep the run folder (only remove the database rows)
+
+  The web API equivalent is ``DELETE /api/runs/{ulid}`` (query ``keep_files=true``
+  keeps the folder).
+
+``adare runs prune``
+  Free disk space in the current project's ``run/`` directory. By default a dry
+  run: lists the run folders that nothing refers to, with their sizes and a total,
+  and deletes nothing. A folder is kept when
+
+  * a run in the database or a dev session (any status) has it as its folder;
+  * a run without a recorded folder (one that failed or was interrupted before it
+    got one, e.g. during VM preparation) of the same experiment started within 16 h
+    of the folder's timestamp name (a run without an experiment counts for every
+    experiment). The window is wide on purpose: run folder names and start times are
+    UTC, but older ones were local time;
+  * the folder belongs to another registered project: the runs of every registered
+    project whose ``run/`` resolves to the same directory (e.g. through a symlink)
+    count as well. If one of those projects' databases cannot be read, nothing is
+    pruned.
+
+  Options:
+    * ``--fake`` - Also target finished fake (test-mode) runs that started more than
+      an hour ago: their database rows and their folders. Fake runs that are not
+      finished (pending, running, paused, or without a status) and dev sessions'
+      runs are skipped
+    * ``--older-than DAYS`` - Only targets last changed (fake runs: started) at least
+      ``DAYS`` days ago
+    * ``-y, --yes`` - Delete exactly the listed targets (fake run rows in one
+      transaction first, then the folders)
+    * ``--json`` / ``--format`` - Machine-readable output
+
+  .. code-block:: bash
+
+     adare runs prune                       # what would be removed
+     adare runs prune --fake --older-than 7 # include fake runs older than a week
+     adare runs prune --fake --yes          # delete
+
+.. _cli-run-folders:
+
+**Run folders.** A run's files live in ``<project>/run/<experiment>/<timestamp>``.
+``run/`` may also hold your own files, so ADARE only ever deletes a folder there
+(``runs remove``, ``runs prune``, ``experiment clean``, ``experiment remove``) when
+all of these hold:
+
+* it resolves to a path inside the project's ``run/`` directory, and neither it nor
+  its ``<experiment>`` directory is a symlink;
+* it is exactly ``run/<experiment>/<timestamp>``, ``<experiment>`` is a known
+  experiment, and ``<timestamp>`` looks like ``2025-01-31_14-05-09`` (optionally
+  ``_2``, ``_3`` ...);
+* it contains a ``logs/`` or ``reporting/`` subdirectory;
+* nothing in it (the folder, ``logs/``, ``reporting/``, the files in ``logs/``)
+  changed in the last hour.
+
+A folder a dev session refers to (its run folder, or the folder of the run whose id
+is the session id; any session status, any project) is never deleted, and when the
+dev sessions cannot be read no folder is deleted. Database run paths are matched by
+their ``run/<experiment>/<timestamp>`` tail, so a moved project still finds its run
+folders. Folders of fake runs that the automatic
+post-run cleanup removes from the database stay on disk (useful for debugging) until
+``adare runs prune`` deletes them.
 
 .. _cli-dev-mode:
 
@@ -355,6 +559,17 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
 
 ``adare dev remove``
   Remove a dev mode session and all associated resources. Alias for ``adare dev stop --rm``.
+  A stopped session keeps a full copy of its VM disk (often 5-50 GiB) until it is removed.
+
+  Options:
+    * ``--stopped`` - Remove every stopped or crashed session; lists them with their disk size and asks first
+    * ``--older-than AGE`` - With ``--stopped``: only sessions unused for this long (``14d``, ``12h``)
+    * ``-y, --yes`` - Skip the confirmation
+
+  Automatic expiry is opt-in: with the ``ADARE_DEV_SESSION_MAX_AGE_DAYS`` setting
+  (``adare system settings set``), every experiment run and ``adare vm prune --force`` remove stopped or crashed sessions
+  unused for longer than that many days (``adare vm prune`` without ``--force`` lists them).
+  Running sessions and sessions whose VM is still up are never removed.
 
 ``adare dev resume [session_id]``
   Resume a previously stopped session. If no session ID is given, resumes the most recently stopped session.
@@ -666,7 +881,11 @@ ADARE knows two kinds of VM:
   Reclaim what crashed runs left behind (instances, run files, orphaned base
   disks, stale recipe caches). Dry run unless ``--force``. Also lists registered
   VMs no environment uses; those are never deleted by prune -- remove one with
-  ``adare vm remove <name>``.
+  ``adare vm remove <name>``. It also reports the disk stopped dev sessions hold
+  (removed with ``adare dev remove --stopped``).
+
+  Runs refuse to start while a filesystem they write to (project ``run/``, ADARE
+  state) has less than the ``ADARE_MIN_FREE_DISK_GB`` setting free (default 10; 0 disables it).
 
   Options:
     * ``--sockets`` - Also reap dead QMP/QGA sockets
@@ -727,9 +946,14 @@ Local Web UI
 
 ``adare ui`` runs the local web UI (FastAPI + VirtualSpice), which also serves
 the live VM viewer used by ``adare vm watch`` and ``adare dev start --watch``.
+While it runs it records a host usage sample per minute for the *System* page,
+and its terminal panel runs Claude Code or a shell on this host (see :doc:`../guide/web-ui`).
 
 ``adare ui start``
   Start the ADARE web UI (FastAPI + VirtualSpice) and open it in the browser.
+  VirtualSpice runs with its own data dir (``~/.adare/virtualspice``, log
+  ``adare-server.log`` there), so it coexists with the VirtualSpice app; one
+  already answering on the spice port is used instead of starting another.
 
   Options:
     * ``--port INTEGER``, ``--host TEXT`` - Bind address
@@ -971,6 +1195,121 @@ database is opened -- see :doc:`../architecture/database-migrations`.
   Options:
     * ``--force``, ``-f`` - Skip the confirmation prompt
 
+``adare db compact [--dry-run] [--all] [-p PROJECT]``
+  Shrink a project database. Action results recorded before results were
+  stored without images keep a base64 copy of every screenshot in
+  ``action_execution.result_data`` -- on a long-lived project that is most of
+  the file (tens of GB). The screenshots themselves stay on disk in each run's
+  ``reporting/screenshots`` folder; ``compact`` only drops the database copy,
+  then runs ``VACUUM`` so the file actually gets smaller. Run it once on a
+  project that predates the change, or whenever ``ls -l .adare/`` looks too big.
+  Any command that opens a project database larger than 512 MiB that still holds
+  such copies prints a one-line hint to run it (on stderr, not with ``--json``);
+  the hint is shown once and comes back only when the database has grown by half
+  again (``.adare/compact-hint.json`` records the size; a successful ``compact``
+  writes it too).
+
+  * Only image payloads are removed, and a row's images only when every one of
+    them is byte-for-byte identical to the PNG its ``screenshot_path`` names
+    (the base64 data is decoded and compared with the file). Relative paths are
+    resolved against the run folder under the project's *current* location (a
+    moved project works). Rows whose screenshot file is missing, differs, or
+    that have no ``screenshot_path`` are left byte-for-byte unchanged and
+    counted as kept. A removed image is replaced by the same
+    ``<omitted: N chars of png data>`` marker new rows get.
+  * Nothing else is ever removed: long text that is not an image (command
+    output, ...) stays as it is; such rows are only counted.
+  * Refuses to touch a database that may be written to while it runs; nothing
+    is changed then, and the exit code is 1:
+
+    - another process holds the write lock (it waits 2 s for it);
+    - a run of the project has not ended (``RUNNING``, ``PENDING``, ``PAUSE``)
+      and showed activity in the last 30 minutes: its start or creation time,
+      or the modification time of its run folder or of a file in its ``logs/``
+      folder. Unfinished runs without such activity were left behind by a crash;
+      they are ignored and their number is reported;
+    - for every database: a dev session marked running whose VM is alive (asked
+      from the hypervisor, as ``adare dev cleanup`` does) or whose state changed
+      in the last 30 minutes.
+
+    The message names the run or dev session. Stop ``adare ui`` as well.
+  * ``VACUUM`` writes a temporary copy of the database and, in WAL mode, passes
+    all of it through the ``-wal`` file: it needs free space of twice the
+    remaining data plus 10 % next to the database and in the temporary directory
+    (``TMPDIR``) when that is on another volume. With less it is skipped (the
+    row rewrite still stands) and the report says so. Rows are rewritten and
+    committed in small batches, so an interrupted run keeps its progress and can
+    simply be started again.
+  * A registered project whose directory or database file is gone is reported
+    as ``missing``; nothing is created on disk, and the other databases are
+    still processed.
+
+  Reports per database: rows stripped, rows kept (screenshot file missing /
+  differs), rows with oversized non-image text (kept), stale runs ignored,
+  bytes freed by the rewrite, size before and after (database file + ``-wal``)
+  and the duration.
+
+  Options:
+    * ``--dry-run`` - Open the database read-only and report what would be
+      reclaimed (row counts and bytes); write nothing. A dry run is not refused
+      for activity; its message says when a real run would be.
+    * ``--all`` - Every registered project database plus the global one
+      (default: the project of the current directory)
+    * ``-p``, ``--project`` - Project name or path
+    * ``--json`` / ``--format`` - Machine-readable output::
+
+        {"dry_run": false, "ok": true, "databases": [
+          {"label": "MyProject", "path": ".../.adare/project.db.sqlite3",
+           "status": "compacted", "message": null,
+           "rows": {"examined": 2000, "stripped": 1985,
+                    "kept_missing_file": 10, "kept_mismatch": 5,
+                    "non_image_kept": 3},
+           "stale_runs_ignored": 0,
+           "reclaimable_bytes": 341266000, "free_pages_bytes": 341000000,
+           "vacuum": {"done": true, "message": null},
+           "size_before": {"db": 345964544, "wal": 0},
+           "size_after": {"db": 2920448, "wal": 0},
+           "duration_seconds": 0.32}]}
+
+    ``status`` is ``compacted``, ``dry-run``, ``in-use``, ``missing`` or ``error``.
+
+``adare db check [--all] [-p PROJECT]``
+  Read-only health check of a database:
+
+  * ``PRAGMA quick_check`` - page-level integrity. Exit code 1 when it finds
+    a problem (or the file is not a database): restore the database from a
+    backup.
+  * ``PRAGMA foreign_key_check``, counted per (table, parent table). It works
+    although ADARE runs with foreign-key enforcement off. The ``event -> event``
+    violations older versions produced (action keys stored as parent event ids)
+    are cleared by the ``move_parent_event_keys`` migration.
+  * Orphaned rows, counted only (exit code 0), never changed:
+
+    - action executions with no run row (``action_execution_without_run``).
+      Dev-session consoles record their actions under a console ULID that no
+      run row has, and run deletions of older versions left their runs'
+      executions behind; the two cannot be told apart, so these rows are kept;
+    - run-file and log-file rows no run references
+      (``experiment_run_files_unreferenced``, ``log_file_unreferenced``). The
+      ``delete_orphan_run_rows`` migration removed those older versions left
+      once; run deletion now removes them, so new ones are not expected;
+    - action executions whose playbook item is gone
+      (``action_execution_dangling_playbook_item``). Older versions deleted an
+      experiment's playbook items when its playbook was loaded again; re-ingest
+      now keeps every item an execution references (marked superseded), so new
+      ones are not expected.
+
+  A registered project whose directory or database file is gone is reported
+  with status ``missing``; nothing is created on disk.
+
+  Options:
+    * ``--all`` - Every registered project database plus the global one
+    * ``-p``, ``--project`` - Project name or path
+    * ``--json`` / ``--format`` - ``{"ok": ..., "databases": [{"label", "path",
+      "status", "integrity_ok", "problems", "foreign_key_violations": [{"table",
+      "parent", "count"}], "orphans": {name: count}, "message"}]}``;
+      ``status`` is ``checked`` or ``missing``
+
 VM runtime
 ----------
 
@@ -993,7 +1332,7 @@ print a pointer to the new name on stderr. They will be removed in a future rele
    * - Old
      - New
    * - ``adare run list|info|remove``
-     - ``adare runs list|info|remove``
+     - ``adare runs list|info|remove|prune``
    * - ``adare agent setup|status``
      - ``adare skills install|status``
    * - ``adare web start|build|install-spice``

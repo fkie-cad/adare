@@ -95,9 +95,22 @@ Configure experiment-wide behavior:
                                      # artifacts/disk/ (e.g. for Autopsy ingestion)
      capture_pcap: false            # Capture outside-world traffic (QEMU only) to
                                      # artifacts/pcap/ via host-side filter-dump
+     filter_pcap: true              # After the run, remove ADARE's own traffic
+                                     # (agent WebSocket, SMB share) from that pcap;
+                                     # rules, counts and the raw capture's sha256
+                                     # go to <machine>.pcap.filter.json.
+                                     # false keeps the raw capture
      export_memory_dump: false      # Live-dump guest RAM (QEMU only) to
                                      # artifacts/memory/ via QMP dump-guest-memory,
                                      # e.g. for Volatility3 ingestion
+     clock_log: true                # Sample the guest clock before/after every action
+                                    # into clock.jsonl (offset to host, jumps, timezone)
+     effect_check: warn             # Check each GUI action changed the screen near its
+                                    # input: off | warn (record + summary) | prove (an
+                                    # unchanged or when-skipped action makes later
+                                    # negative tests INCONCLUSIVE) | strict (prove +
+                                    # fail the step)
+                                    # see guide/negative-results
 
      # GUI automation mode (QEMU only)
      gui_execution_mode: 'auto'     # 'auto' (choose best), 'agent' (VM-based),
@@ -122,6 +135,14 @@ Configure experiment-wide behavior:
      performance:
        parallel_tests: false      # Run tests in parallel
        cache_screenshots: true    # Cache images for speed
+
+**Screenshot file size.** Run screenshots (``reporting/screenshots/*.png`` and failure
+evidence) are written as captured, then re-encoded losslessly at PNG zlib level 9 in a
+background thread. The pixels stay identical and the files get roughly 25-50% smaller. A
+file is swapped atomically, and only when the result is smaller. The run waits for pending
+jobs before it finishes. Because of this, a file's hash differs from that of the bytes the
+guest sent. Set the environment variable ``ADARE_SCREENSHOT_PNG_LEVEL`` to ``0``-``9`` for
+another level, or to ``off`` to keep the captured bytes.
 
 Platform-Specific Settings
 ===========================
@@ -329,6 +350,46 @@ Basic Test Structure
        parameter:
          dst: "/evidence/test.txt"
 
+Failure Evidence and ``on_failure``
+===================================
+
+When an action fails (target not found, ``wait_until`` timeout, command error) the playbook
+stops at that action. ADARE keeps what the screen showed, in ``<run>/reporting/failure/``:
+
+- ``aNN_last_search.png``: the screenshot the target resolver last searched
+- ``aNN_screen.png``: a fresh screenshot after the failure (omitted if identical)
+- ``aNN_ocr.json``: the full OCR dump of that screenshot
+- ``aNN_failure.json``: the action, every target it refers to (with offset, strategy,
+  ``text_match``), the error message and the target of the last search (the failing inner
+  step for a ``block``/``loop``)
+
+``NN`` is the 1-based index of the action in the playbook. Set ``ADARE_FAILURE_EVIDENCE=0``
+to turn this off. Assertion (``test:``) failures do not produce a screenshot.
+
+An optional playbook-level ``on_failure:`` list holds steps that run **once**, after the
+first failure that stops the playbook and before the run ends, for example to collect more
+evidence or to exit the application cleanly:
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target: {text: "File"}
+     - wait_until:
+         condition: {exists: {text: "New Window"}}
+   on_failure:
+     - screenshot:
+         name: after_failure
+     - pull:
+         src: "{{ adare_user_documents }}/session.log"
+     - keyboard:
+         combination: [ctrl, q]
+
+``on_failure`` steps are validated like normal steps (``adare exp playbook validate``) and
+can use any variable the playbook defines. They never change the run's failed status or its
+counts; a failing step is logged and the remaining steps still run. No ``on_failure`` list
+means nothing runs after a failure, exactly as before.
+
 Test Failure Handling
 ======================
 
@@ -439,6 +500,40 @@ Use custom tags in test parameters for precise matching:
 - ``!path`` - Path exact match
 - ``!reALL`` - Wildcard (match any value)
 - ``!timestamp {timestamp, tolerance, timezone, format}`` - Timestamp with tolerance
+- ``!timestamp {after, before, precision, localtime, format}`` - Timestamp inside a measured interval
+
+**Timestamps inside a measured interval:** instead of guessing a ``tolerance``, bracket the
+action with two ``save_timestamp`` actions (they read the guest clock) and require the artifact's
+time to lie between them. ``precision`` widens the interval by the artifact's storage granularity
+(e.g. ``1`` for whole seconds, ``2`` for FAT). ``localtime: true`` marks artifacts that store the
+guest's local time without an offset; they are read in the guest's timezone, measured right before
+the test, never the host's. For a file's own MACB times use ``standard.file_timestamps`` with
+``comparison_type: between`` and the same two variables.
+
+.. code-block:: yaml
+
+   tests:
+     - name: trashbin_check
+       function: csv.contains_line
+       parameter:
+         dst: '{{trashbin_csv}}'
+         entry:
+           - !re '.*'
+           - '$I'
+           - 'C:\Users\{{username}}\Documents\testfile.txt'
+           - !re '.*'
+           - !timestamp
+             after: '{{deleted_after}}'
+             before: '{{deleted_before}}'
+             precision: 1
+             format: '%Y-%m-%d %H:%M:%S'
+
+   actions:
+     - save_timestamp: {variable: deleted_after}
+     - click: {target: {text: "Delete"}}
+     - save_timestamp: {variable: deleted_before}
+     # ... export the Recycle Bin with RBCmd to trashbin_csv ...
+     - test: trashbin_check
 
 Actions Reference
 *****************

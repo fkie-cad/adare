@@ -13,6 +13,7 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import backref, declarative_base, relationship
 from sqlalchemy_serializer import SerializerMixin
 
+from adare.database.models.run_verdict import compute_result_status
 from adare.database.models.sync_identity import RemoteIdentityMixin
 from adarelib.constants import StatusEnum
 
@@ -392,15 +393,17 @@ class Event(SerializerMixin, ProjectBase):
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
     event_type = Column(String)
     category = Column(String)
-    experiment_run_id = Column(String, ForeignKey('experiment_run.id', ondelete='CASCADE'))
+    experiment_run_id = Column(String, ForeignKey('experiment_run.id', ondelete='CASCADE'), index=True)
     experiment_run = relationship("ExperimentRun", backref=backref("events", cascade="all, delete-orphan"))
     error = Column(String)
-    parent_event_id = Column(
-        CHAR(26), ForeignKey('event.id', ondelete='SET NULL'), nullable=True
-    )  # Parent event ID for nested events
-    parent_event = relationship(
-        "Event", remote_side=[id], backref=backref("child_events", cascade="all, delete-orphan")
-    )
+    # Legacy column, no longer written. Older writers stored the parent *action key*
+    # here although it is declared as a FK to event.id; the move_parent_event_keys
+    # migration moved those keys to parent_group_id. Kept because SQLite cannot drop
+    # a FK column without rebuilding the table.
+    parent_event_id = Column(CHAR(26), ForeignKey('event.id', ondelete='SET NULL'), nullable=True, index=True)
+    # Grouping key (event_group_id) of the action this event is nested under, or NULL
+    # for a top-level event. It is an action key, not an event id.
+    parent_group_id = Column(String, nullable=True, index=True)
 
     # Success/failure tracking for all events
     success = Column(Boolean, nullable=True)
@@ -445,7 +448,7 @@ class TestEvent(Event):
         'polymorphic_identity': 'test_event',
     }
     id = Column(CHAR(26), ForeignKey('event.id'), primary_key=True)
-    abstract_test_id = Column(CHAR(26), ForeignKey('abstract_test.id'), nullable=True)
+    abstract_test_id = Column(CHAR(26), ForeignKey('abstract_test.id'), nullable=True, index=True)
     result_id = Column(CHAR(26), ForeignKey('result.id'), nullable=True)
     abstract_test = relationship(AbstractTest, backref=backref("test_events", cascade="all, delete-orphan"))
     result = relationship(Result)
@@ -518,22 +521,6 @@ class ActionEvent(Event):
     # Generic action data as JSON-like text field
     # This allows us to store any action-specific data flexibly
     action_data = Column(String, nullable=True)  # JSON serialized action data
-
-    @hybrid_property
-    def display_level(self):
-        """
-        Compute display level based on parent relationship hierarchy.
-        Root level actions have display_level = 0, each nested level adds 1.
-        """
-        if not self.parent_event_id:
-            return 0  # Root level
-
-        # Find parent event and recursively compute depth
-        parent = self.__class__.query.filter_by(id=self.parent_event_id).first()
-        if parent and hasattr(parent, 'display_level'):
-            return parent.display_level + 1
-        # If parent not found or doesn't have display_level, assume next level
-        return 1
 
     @hybrid_property
     def stage_submessage(self):
@@ -675,7 +662,7 @@ class StageInRun(SerializerMixin, ProjectBase):
     status_id = Column(CHAR(26), ForeignKey('status.id', ondelete='RESTRICT'), nullable=False)
     status = relationship(Status, backref=backref("stage_in_runs"))
 
-    run_id = Column(CHAR(26), ForeignKey('experiment_run.id', ondelete='CASCADE'))
+    run_id = Column(CHAR(26), ForeignKey('experiment_run.id', ondelete='CASCADE'), index=True)
 
     # start_time and end_time as DateTime for SQL compatibility
     start_time = Column(DateTime, nullable=True)
@@ -798,40 +785,13 @@ class ExperimentRun(SerializerMixin, ProjectBase):
 
     @hybrid_property
     def result_status(self):
-        # Handle case where experiment is None
+        """Verdict of this run. Listings of many runs use ``load_result_statuses`` instead."""
         if not self.experiment:
             return StatusEnum.ERROR
-
-        # First check for test execution failures and result failures
-        # This takes priority over missing tests since failed tests cause early termination
-        saw_warning = False
-        for t in self.tests:
-            # Check if test execution failed (success=False in Event base class)
-            if hasattr(t, 'success') and t.success is False:
-                return StatusEnum.FAILED
-
-            # Check if test result indicates failure. WARNING is pass-with-warning:
-            # it must not be treated as a failure (see TestResult.warning).
-            if t.result:
-                status = int(t.result.status_id)
-                if status == StatusEnum.WARNING:
-                    saw_warning = True
-                elif status != StatusEnum.SUCCESS:
-                    return StatusEnum.FAILED
-
-        # Only check for missing tests if no tests failed
-        # (missing tests are expected when earlier tests failed and stopped execution)
-        for test in self.experiment.abstract_tests:
-            found = False
-            for t in self.tests:
-                if t.abstract_test_id == test.id:
-                    found = True
-                    break
-            if not found:
-                return StatusEnum.TEST_MISSING
-
-        # All tests passed; surface WARNING distinctly (still a passing verdict).
-        return StatusEnum.WARNING if saw_warning else StatusEnum.SUCCESS
+        return compute_result_status(
+            [(t.success, t.abstract_test_id, t.result.status_id if t.result else None) for t in self.tests],
+            [test.id for test in self.experiment.abstract_tests],
+        )
 
     @hybrid_property
     def ulid(self):
@@ -864,6 +824,8 @@ class Playbook(SerializerMixin, ProjectBase):
 
     # Relationships
     experiment = relationship("Experiment", back_populates="playbook")
+    # All items, superseded ones included, so deleting the playbook deletes them too.
+    # The current playbook is PlaybookApi.get_playbook_items() (superseded = false).
     items = relationship("PlaybookItem", back_populates="playbook", cascade="all, delete-orphan")
 
 
@@ -874,8 +836,8 @@ class PlaybookItem(SerializerMixin, ProjectBase):
     RELATIONSHIPS_TO_DICT = True
 
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
-    playbook_id = Column(CHAR(26), ForeignKey('playbook.id', ondelete='CASCADE'), nullable=False)
-    parent_id = Column(CHAR(26), ForeignKey('playbook_item.id', ondelete='CASCADE'), nullable=True)
+    playbook_id = Column(CHAR(26), ForeignKey('playbook.id', ondelete='CASCADE'), nullable=False, index=True)
+    parent_id = Column(CHAR(26), ForeignKey('playbook_item.id', ondelete='CASCADE'), nullable=True, index=True)
 
     item_type = Column(String(50), nullable=False)  # 'action', 'group_block', 'if_block', etc.
     sequence_order = Column(Integer, nullable=False)
@@ -891,6 +853,9 @@ class PlaybookItem(SerializerMixin, ProjectBase):
     name = Column(String(255))
     description = Column(Text)
     is_enabled = Column(Boolean, default=True)
+    # True for an item of an earlier playbook version that run executions still
+    # reference: re-ingest keeps it for the audit trail, out of the current playbook.
+    superseded = Column(Boolean, nullable=False, default=False, server_default='0')
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -908,14 +873,14 @@ class ActionExecution(SerializerMixin, ProjectBase):
     RELATIONSHIPS_TO_DICT = True
 
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
-    playbook_item_id = Column(CHAR(26), ForeignKey('playbook_item.id'), nullable=False)
-    experiment_run_id = Column(CHAR(26), nullable=True)
+    playbook_item_id = Column(CHAR(26), ForeignKey('playbook_item.id'), nullable=False, index=True)
+    experiment_run_id = Column(CHAR(26), nullable=True, index=True)
 
     status = Column(String(20), nullable=False)  # 'pending', 'running', 'success', 'failed', 'skipped'
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
 
-    result_data = Column(JSON)  # screenshots, coordinates, error details, timing
+    result_data = Column(JSON)  # coordinates, error details, timing (image payloads stripped)
     error_message = Column(Text)
     attempt_number = Column(Integer, default=1)
 

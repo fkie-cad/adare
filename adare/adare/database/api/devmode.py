@@ -10,7 +10,7 @@ This module provides CRUD operations for persistent dev mode sessions:
 
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from adare.database.api.base import EnhancedDatabaseApi
@@ -102,8 +102,8 @@ class DevModeApi(EnhancedDatabaseApi):
             environment_name=environment_name,
             vm_name=vm_name,
             status='running',
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=datetime.now(UTC).replace(tzinfo=None),
+            updated_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         self._session.add(session)
@@ -200,7 +200,7 @@ class DevModeApi(EnhancedDatabaseApi):
 
         session = self.get_session_or_404(session_id)
         session.status = status
-        session.updated_at = datetime.now()
+        session.updated_at = datetime.now(UTC).replace(tzinfo=None)
         self._session.flush()
         self._session.commit()
 
@@ -226,7 +226,7 @@ class DevModeApi(EnhancedDatabaseApi):
         """
         session = self.get_session_or_404(session_id)
         session.overlay_disk_path = overlay_disk_path
-        session.updated_at = datetime.now()
+        session.updated_at = datetime.now(UTC).replace(tzinfo=None)
         self._session.flush()
         self._session.commit()
 
@@ -253,7 +253,7 @@ class DevModeApi(EnhancedDatabaseApi):
         """
         session = self.get_session_or_404(session_id)
         session.run_directory_path = run_directory_path
-        session.updated_at = datetime.now()
+        session.updated_at = datetime.now(UTC).replace(tzinfo=None)
         self._session.flush()
         self._session.commit()
 
@@ -275,7 +275,7 @@ class DevModeApi(EnhancedDatabaseApi):
         """
         session = self.get_session_or_404(session_id)
         session.cached_start_command = command
-        session.updated_at = datetime.now()
+        session.updated_at = datetime.now(UTC).replace(tzinfo=None)
         self._session.flush()
         self._session.commit()
 

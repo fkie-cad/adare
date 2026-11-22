@@ -1,6 +1,6 @@
 [project]
 name = "adare"
-version = "0.1.0"
+version = "0.1.1"
 description = "Automated Desktop Analysis framework for Reproducible Experiments: host client for projects, VMs and experiments"
 authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
 license = "MIT"
@@ -40,6 +40,7 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "python-multipart>=0.0.20",
     "pycdlib>=1.14.0",
+    "psutil>=7.0.0",
 ]
 
 [project.scripts]
@@ -47,6 +48,8 @@ adare = "adare.run:main"
 adareexp = "adare.example:main"
 
 [project.optional-dependencies]
+# Host-side (agent-free) backend: offline qcow2 / LVM / ext4 reading (adare.backend.hostside)
+hostside = ["dissect.hypervisor>=3.21", "dissect.extfs>=3.15", "dissect.volume>=3.18", "backports.zstd; python_version < '3.14'"]
 docs = ["sphinx", "sphinx-rtd-theme"]
 qemu = ["libvirt-python>=11.0.0"]
 # Optional local element-grounding backend for `adare dev agent --ground`:

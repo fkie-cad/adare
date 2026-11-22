@@ -360,6 +360,13 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
             log.info(f'removing {adarelib_uv_lock} to ensure that adarelib is installed correctly')
             adarelib_uv_lock.unlink()
 
+        # A run grows its VM overlay and writes artifacts: never start one on a nearly full disk.
+        from adare.backend.system.disk_guard import ensure_free_disk
+        from adare.backend.system.host import state_directories
+
+        project_run = [context.project_directory.run] if context.project_directory else []
+        ensure_free_disk([*project_run, *state_directories()])
+
         # Create run directory
         run_dir = ExperimentRunDirectory(context.project_directory, context.config.experiment_name)
         run_dir.create()
@@ -384,7 +391,14 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
         # get one cv-server per machine (each needs its own port/log/debug dir);
         # today's single-VM playbooks (no `machines:` key) get exactly one, under
         # the implicit None key -- net-zero behavior change.
-        from adare.backend.experiment.mcp_server_manager import MCPServerManager, find_free_cv_port
+        from adare.backend.experiment.mcp_server_manager import (
+            MCPServerManager,
+            find_free_cv_port,
+            resolve_ocr_settings,
+        )
+
+        # The experiment's `ocr:` pin (metadata.yml) overrides the global OCR default.
+        ocr_engine, ocr_lang = resolve_ocr_settings(context.experiment_directory)
 
         for machine_key, view in _machine_views(context):
             # Determine debug output directory
@@ -411,9 +425,18 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
             cv_port = find_free_cv_port()
 
             view.mcp_server = MCPServerManager(
-                server_port=cv_port, log_file=log_file, debug=context.config.dev_mode, debug_output_dir=debug_output_dir
+                server_port=cv_port,
+                log_file=log_file,
+                debug=context.config.dev_mode,
+                debug_output_dir=debug_output_dir,
+                exit_with_parent=not context.config.dev_mode,
+                ocr_engine=ocr_engine,
+                ocr_lang=ocr_lang,
             )
-            log.info(f"CV/OCR server for machine {machine_key!r} will use port {cv_port}")
+            log.info(
+                f"CV/OCR server for machine {machine_key!r} will use port {cv_port} "
+                f"(OCR {view.mcp_server.ocr_engine}/{view.mcp_server.ocr_lang})"
+            )
 
 
 def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
@@ -423,6 +446,12 @@ def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
     if context.vm is None:
         log.warning("VM not available for test execution mode resolution, defaulting to agent")
         context.test_execution_mode = 'agent'
+        return
+
+    if context.config.backend == 'hostside':
+        # Tests run on the host either way; the host-side backend swaps the transport (GuestFS, not QGA)
+        context.test_execution_mode = 'host'
+        log.info("Test execution mode resolved to: host (host-side backend, offline GuestFS)")
         return
 
     try:
@@ -556,6 +585,13 @@ async def step_start_mcp_server(context: ExperimentRunCtx):
                         view.mcp_server.known_server_pid,
                         machine_key=machine_key,
                     )
+                    # OCR provenance: which engine/models/params serve this run. Also
+                    # loads + verifies the pinned models now rather than at the first click.
+                    from adare.backend.experiment.mcp_server_manager import record_ocr_provenance
+
+                    await record_ocr_provenance(
+                        view.mcp_server, context.experiment_run_directory.path, machine_key=machine_key
+                    )
             else:
                 from adare.exceptions import LoggedException
 
@@ -674,8 +710,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         )
 
         # Set up host-mode test executor if in HOST test mode
-        if is_host_test_mode:
-            _setup_guest_to_host_test_executor(controller, context.vm, context.playbook, vm_os)
+        _wire_host_test_executor(controller, context, is_host_test_mode, vm_os)
 
         # Execute complete experiment (playbook + tests)
         log.info(f"Starting experiment execution for {context.config.experiment_name}")
@@ -684,9 +719,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         # Store execution result in context for final message generation
         context.execution_result = result
 
-        # Cleanup host-mode executor temp files
-        if is_host_test_mode and hasattr(controller, '_guest_to_host_test_executor'):
-            controller._guest_to_host_test_executor.cleanup()
+        _cleanup_host_test_executor(controller, context, is_host_test_mode)
 
         if result.success:
             log.info(
@@ -695,6 +728,37 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         else:
             log.error(f"Experiment failed: {result.error_message}")
             log.error(f"Action results: {result.successful_actions}/{result.total_actions} succeeded")
+
+
+def _wire_host_test_executor(controller, context: ExperimentRunCtx, is_host_test_mode: bool, vm_os: str | None) -> None:
+    """Install the executor for host-evaluated tests: GuestFS (host-side backend) or QGA (``--test-mode host``)."""
+    if context.config.backend == 'hostside':
+        _setup_hostside_test_executor(controller, context)
+    elif is_host_test_mode:
+        _setup_guest_to_host_test_executor(controller, context.vm, context.playbook, vm_os)
+
+
+def _cleanup_host_test_executor(controller, context: ExperimentRunCtx, is_host_test_mode: bool) -> None:
+    """Remove the temp mirrors of the host test executors."""
+    if is_host_test_mode and hasattr(controller, '_guest_to_host_test_executor'):
+        controller._guest_to_host_test_executor.cleanup()
+    if context.config.backend == 'hostside':
+        controller._hostside_test_executor.cleanup()
+
+
+def _setup_hostside_test_executor(controller, context: ExperimentRunCtx):
+    """Wire the host-side backend into the controller: deferred tests evaluated over a GuestFS."""
+    from adare.backend.experiment.execution.base import TestExecutionMode
+    from adare.backend.hostside.testing import HostsideTestExecutor
+
+    session = context.hostside
+    executor = HostsideTestExecutor(session, session.testfunctions)
+    controller.hostside = session
+    controller._hostside_test_executor = executor
+    controller.action_executor.test_actions.set_test_execution_mode(TestExecutionMode.HOST)
+    controller.action_executor.test_actions.set_guest_to_host_test_executor(executor)
+    controller.action_executor.hostside = session
+    log.info("Host-side backend: HostsideTestExecutor configured (tests are deferred to the quiesced image)")
 
 
 def _setup_guest_to_host_test_executor(controller, vm, playbook, vm_os: str):
@@ -788,7 +852,9 @@ async def _collect_machine_system_info(context: ExperimentRunCtx, machine_key, v
     # Use QGA-based collection in host test mode, WebSocket otherwise
     is_host_test_mode = context.test_execution_mode == 'host'
 
-    if is_host_test_mode and view.vm:
+    if context.config.backend == 'hostside':
+        success = context.hostside.collect_system_info(output_file) if context.hostside else False
+    elif is_host_test_mode and view.vm:
         from adare.backend.experiment.system_info_collector import collect_system_info_via_qga
 
         success = await collect_system_info_via_qga(

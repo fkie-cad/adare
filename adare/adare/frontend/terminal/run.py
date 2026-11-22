@@ -312,18 +312,18 @@ class ExperimentRunActionsPanel:
         parent_to_children = {}
         root_actions = []
 
-        # Group actions by parent_event_id
+        # Group actions by parent_group_id (the enclosing action's grouping key)
         for _event_group_id, action in actions_by_id.items():
-            parent_event_id = action.get('parent_event_id')
+            parent_group_id = action.get('parent_group_id')
 
-            if parent_event_id:
+            if parent_group_id:
                 # Find the parent action by searching for action with matching event_group_id, action_id or id
                 parent_action = None
                 for _, paction in actions_by_id.items():
                     if (
-                        paction.get('event_group_id') == parent_event_id
-                        or paction.get('action_id') == parent_event_id
-                        or paction.get('id') == parent_event_id
+                        paction.get('event_group_id') == parent_group_id
+                        or paction.get('action_id') == parent_group_id
+                        or paction.get('id') == parent_group_id
                     ):
                         parent_action = paction
                         break

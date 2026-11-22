@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
 from adare.database.api.base import experiment_name_from_run_path
+from adare.database.api.run_results import load_result_statuses
 from adare.database.models.global_models import (
     Environment,
     Vm,
@@ -49,8 +50,12 @@ class RunQueryMixin(_Host):
         # Bulk load all required objects with eager loading
         runs_dict = {
             run.id: run
-            for run in self._project_api._session.query(ExperimentRun).filter(ExperimentRun.id.in_(run_ids)).all()
+            for run in self._project_api._session.query(ExperimentRun)
+            .options(joinedload(ExperimentRun.experiment))
+            .filter(ExperimentRun.id.in_(run_ids))
+            .all()
         }
+        result_statuses = load_result_statuses(self._project_api._session, runs_dict.values())
 
         experiments_dict = {
             exp.id: exp
@@ -100,7 +105,7 @@ class RunQueryMixin(_Host):
 
         # access hybrid properties with null checks
         data['duration'] = data['object_run'].apply(lambda obj: obj.duration if obj else None)
-        data['result_status'] = data['object_run'].apply(lambda obj: int(obj.result_status) if obj else 0)
+        data['result_status'] = data['object_run'].apply(lambda obj: int(result_statuses[obj.id]) if obj else 0)
         data['status'] = data['object_run'].apply(lambda obj: obj.status if obj else '')
         # experiment_dotnotation is set during the enrichment loop above (handles unlinked runs)
         data['vm'] = data['object_environment'].apply(lambda obj: obj.vm if obj else None)
@@ -282,7 +287,7 @@ class RunQueryMixin(_Host):
                 'event_group_id': getattr(event, 'event_group_id', None),  # Universal grouping field
                 'event_type_specific': getattr(event, 'event_type_specific', None),
                 'display_level': self._compute_display_level(event),
-                'parent_event_id': event.parent_event_id,
+                'parent_group_id': event.parent_group_id,
                 'data': action_data,
             }
 
@@ -311,6 +316,7 @@ class RunQueryMixin(_Host):
                     'event_group_id',
                     'event_type_specific',
                     'display_level',
+                    'parent_group_id',
                     'data',
                     'result_status',
                 ]
@@ -360,7 +366,7 @@ class RunQueryMixin(_Host):
             'event_group_id': getattr(event, 'event_group_id', event.id),  # Universal grouping field
             'event_type_specific': getattr(event, 'event_type_specific', 'test_complete'),
             'display_level': display_level,
-            'parent_event_id': event.parent_event_id,
+            'parent_group_id': event.parent_group_id,
             'data': action_data,
         }
 

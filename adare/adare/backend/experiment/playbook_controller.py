@@ -9,7 +9,7 @@ management, variable resolution, and test loading.
 import logging
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +21,7 @@ from adare.backend.experiment.action_executor import ActionExecutor, ActionResul
 from adare.backend.experiment.event_manager import EventManager
 
 # Import filesystem diff manager
+from adare.backend.experiment.failure_handling import FailureHandlingMixin
 from adare.backend.experiment.filesystem_diff_manager import FilesystemDiffManager
 
 # Target resolution using MCP GUI server
@@ -87,9 +88,13 @@ class PlaybookExecutionResult:
     total_tests: int = 0
     successful_tests: int = 0
     failed_tests: int = 0
+    # Playbook-level ``on_failure:`` steps (run after the first stopping failure). They never
+    # change ``success`` or the counts above; results are kept here for logging and reports.
+    on_failure_results: list[ActionResult] = field(default_factory=list)
+    failure_evidence: list[dict] = field(default_factory=list)
 
 
-class PlaybookController:
+class PlaybookController(FailureHandlingMixin):
     """
     Controller for executing YAML playbooks via WebSocket.
 
@@ -209,9 +214,18 @@ class PlaybookController:
         self.start_time: float | None = None
         self.action_timings: dict[str, float] = {}
 
+        # Failure evidence (G8) and on_failure results; see execute_playbook.
+        self.on_failure_results: list[ActionResult] = []
+        self.failure_evidence: list[dict] = []
+
         # Auto-pull on test failure tracking
         self._auto_pull_files: list[str] = []
         self._auto_pull_executed: bool = False
+
+        # Host-side backend (agent-free): set by run_setup after construction. Tests are deferred
+        # to the quiesced image and evaluated in a second pass (see backend/hostside/session.py).
+        self.hostside: Any | None = None
+        self._deferred_pass: bool = False
 
     def _build_machine_handles(
         self, cfg: PlaybookControllerConfig, websocket_client: AdareVMClient, vm: Any
@@ -446,7 +460,7 @@ class PlaybookController:
                     log.warning(f"No playbook found for experiment {self.experiment_id}")
                     return
 
-                # Get playbook items ordered by sequence
+                # The current playbook's items (superseded ones excluded), ordered by sequence
                 items = playbook_api.get_playbook_items(playbook.id)
 
                 # Map action index to playbook_item_id
@@ -524,6 +538,12 @@ class PlaybookController:
                     if auto_fs_diff and initial_snapshot_ref and diff_mode != 'host':
                         await diff_mgr.capture_and_export_diff(initial_snapshot_ref, "_fs_snapshot_final")
                     return playbook_result
+                if self.hostside is not None:
+                    from adare.backend.hostside.second_pass import run_second_pass
+
+                    playbook_result = await run_second_pass(self, playbook_result)
+                    if not playbook_result.success:
+                        return playbook_result
             else:
                 log.warning("No playbook.yml found, skipping GUI actions")
         else:
@@ -558,12 +578,16 @@ class PlaybookController:
             failed_tests=failed_tests,
         )
 
-    async def execute_playbook(self, indices: list[int] | None = None) -> PlaybookExecutionResult:
+    async def execute_playbook(
+        self, indices: list[int] | None = None, reload_variables: bool = True
+    ) -> PlaybookExecutionResult:
         """
         Execute YAML playbook actions in order.
 
         Args:
             indices: Optional list of 1-based indices to execute. If None, execute all.
+            reload_variables: Reload the playbook variables into the execution context (the host-side
+                backend's second pass keeps the runtime-captured values instead).
 
         Returns:
             PlaybookExecutionResult with execution details
@@ -593,7 +617,7 @@ class PlaybookController:
 
         # Set up experiment variables and playbook access
         self.execution_context['playbook'] = playbook
-        if hasattr(playbook, 'variables') and playbook.variables:
+        if reload_variables and hasattr(playbook, 'variables') and playbook.variables:
             log.info("Loading experiment variables...")
             # Debug what variables are in the registry
             log.info(f"Variables in registry: {list(playbook.variables.variables.keys())}")
@@ -628,7 +652,7 @@ class PlaybookController:
             log.info(f"Selected indices: {indices}")
 
         # Capture initial baseline screenshot before any actions run
-        if self.action_executor.debug_screenshots:
+        if self.action_executor.debug_screenshots and not self._deferred_pass:
             try:
                 await self.action_executor.target_resolution.get_current_screenshot_with_path(
                     action_context="a00_initial"
@@ -636,6 +660,7 @@ class PlaybookController:
             except (OSError, ConnectionError, TimeoutError, ValueError) as e:
                 log.warning(f"Failed to capture initial debug screenshot: {e}")
 
+        stopped_on_failure = False
         for i, action in enumerate(playbook.actions):
             # i is 0-based, so action index is i+1
             action_index = i + 1
@@ -645,6 +670,13 @@ class PlaybookController:
                 continue
 
             action_name = type(action).__name__
+
+            # Host-side backend: a test is evaluated after the guest quiesced, not at its position.
+            if self.hostside is not None and not self._deferred_pass and self._is_test_action(action):
+                self.hostside.defer_test(action_index, getattr(action, 'name', ''))
+                self.action_executor.test_actions.effect_ledger.note_deferred(getattr(action, 'name', ''))
+                continue
+
             log.info(f"Executing action {action_index}/{total_actions}: {action_name}")
 
             # Skip pause actions when not in test mode
@@ -736,6 +768,11 @@ class PlaybookController:
             if not result.success:
                 log.error(f"Action {i + 1} failed: {result.message}")
 
+                # G8: keep what the screen showed and what was being looked for. Test
+                # (assertion) failures are not GUI failures and need no screenshot.
+                if not self._is_test_action(resolved_action):
+                    await self._record_failure_evidence(action_index, resolved_action, result)
+
                 # Check if we should continue on test failure
                 should_continue = False
                 if self._is_test_action(resolved_action):
@@ -758,11 +795,19 @@ class PlaybookController:
 
                 if not should_continue:
                     # Stop execution after failed action
+                    stopped_on_failure = True
                     break
 
             # Apply global idle setting
-            if hasattr(playbook, 'settings') and playbook.settings and playbook.settings.idle:
-                await self.client.idle(playbook.settings.idle)
+            settings = getattr(playbook, 'settings', None)
+            if not self._deferred_pass and settings and settings.idle:
+                await self.client.idle(settings.idle)
+
+        # Run the playbook's on_failure steps once, before the run ends. They are not part of
+        # action_results, so they cannot change the failed status or the tallies.
+        on_failure_steps = getattr(playbook, 'on_failure', None)
+        if stopped_on_failure and on_failure_steps:
+            await self._run_on_failure_steps(on_failure_steps)
 
         successful = sum(1 for r in self.action_results if r.success)
         failed = len(self.action_results) - successful
@@ -772,6 +817,8 @@ class PlaybookController:
         total_tests = len(test_results)
         successful_tests = sum(1 for r in test_results if r.success)
         failed_tests = total_tests - successful_tests
+
+        self.action_executor.clock.write_summary()
 
         return PlaybookExecutionResult(
             success=failed == 0,
@@ -783,6 +830,8 @@ class PlaybookController:
             total_tests=total_tests,
             successful_tests=successful_tests,
             failed_tests=failed_tests,
+            on_failure_results=self.on_failure_results,
+            failure_evidence=self.failure_evidence,
         )
 
     async def _create_database_execution_record(self, action_index: int) -> str | None:

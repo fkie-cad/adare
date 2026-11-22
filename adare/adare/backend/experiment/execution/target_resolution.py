@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from adare.backend.events.emitters import emit_action
+from adare.backend.experiment.screenshot_store import store_screenshot
 from adare.types.step_actions import ExecuteAction, FindAction
 
 from .base import ActionResult, get_target_info, serialize_target
@@ -50,6 +51,12 @@ class TargetResolutionExecutor:
         self.screenshots_dir = screenshots_dir
         self.gui_executor = gui_executor
         self.screenshot_counter = 0
+        # Last screenshot a search ran on and the target it looked for (failure evidence, G8).
+        self.last_screenshot_base64: str | None = None
+        self.last_target = None
+        # The frame the most recent target coordinates were found on: the effect check's
+        # "before" frame (EffectProbe resets it when an action starts).
+        self.resolution_frame: str | None = None
         self.current_action_prefix: str | None = None
         self._manifest_initialized = False
 
@@ -84,7 +91,7 @@ class TargetResolutionExecutor:
         ]
         return ":".join(key_parts)
 
-    def cache_match(self, target, match_result, screenshot_path: str = None):
+    def cache_match(self, target, match_result, screenshot_path: str = None, frame: str | None = None):
         """
         Cache a successful target match.
 
@@ -102,6 +109,7 @@ class TargetResolutionExecutor:
             'timestamp': time.time(),
             'screenshot_path': screenshot_path,
             'generation': self._resolution_generation,
+            'frame': frame,
         }
         log.debug(f"Cached match for target {target_hash} at generation {self._resolution_generation}")
 
@@ -147,6 +155,7 @@ class TargetResolutionExecutor:
         # This call is itself a target-resolution attempt, whether it ends up
         # served from cache or via fresh CV - advance the counter either way.
         self.begin_resolution()
+        self.last_target = target
 
         # Apply smart defaults if no strategy specified
         if target.strategy is None:
@@ -220,7 +229,8 @@ class TargetResolutionExecutor:
         if should_use_cache and cached_match:
             # One-shot consumption: drop the entry so it can't be reused again even if
             # a later action coincidentally lands on the same generation check.
-            del self.last_match_cache[self._get_target_hash(target)]
+            entry = self.last_match_cache.pop(self._get_target_hash(target))
+            self.resolution_frame = entry.get('frame')
 
             # Use cached result effectively skipping new screenshot and expensive resolution
             return self._process_match_result(
@@ -241,6 +251,7 @@ class TargetResolutionExecutor:
             screenshot_base64, screenshot_path = await self.get_current_screenshot_with_path(
                 action_context=action_context
             )
+            self.resolution_frame = screenshot_base64
             if not screenshot_base64:
                 log.error("Failed to get screenshot for target resolution")
 
@@ -464,23 +475,9 @@ class TargetResolutionExecutor:
             Either can be None if failed
         """
         try:
-            # Take new screenshot (use GUI executor if available for mode-aware screenshots)
-            result = None
-            if self.gui_executor:
-                result = await self.gui_executor.screenshot()
-                # Check for error status
-                if result and result.get('status') == 'error':
-                    log.warning(f"GUI executor screenshot failed: {result.get('message')}. Falling back to WebSocket.")
-                    result = None  # forcing fallback
-
-            # Fallback to WebSocket if GUI executor didn't work (or wasn't available)
-            if not result:
-                log.debug("Using WebSocket client for screenshot")
-                result = await self.client.screenshot()
-
-            if result and 'image' in result:
-                # Extract base64 data from result
-                screenshot_base64 = result['image']['data'] if 'data' in result['image'] else result['image']
+            screenshot_base64 = await self._take_screenshot()
+            if screenshot_base64:
+                self.last_screenshot_base64 = screenshot_base64
 
                 # Save screenshot to disk if debug mode is enabled
                 screenshot_path = await self._save_debug_screenshot(screenshot_base64, action_context)
@@ -493,6 +490,30 @@ class TargetResolutionExecutor:
         except (RuntimeError, OSError, KeyError) as e:
             log.error(f"Failed to capture screenshot: {e}")
             return None, None
+
+    async def _take_screenshot(self) -> str | None:
+        """One screenshot as base64 (GUI executor first, WebSocket fallback); None if neither works."""
+        result = None
+        if self.gui_executor:
+            result = await self.gui_executor.screenshot()
+            if result and result.get('status') == 'error':
+                log.warning(f"GUI executor screenshot failed: {result.get('message')}. Falling back to WebSocket.")
+                result = None  # forcing fallback
+        if not result:
+            log.debug("Using WebSocket client for screenshot")
+            result = await self.client.screenshot()
+        if result and 'image' in result:
+            image = result['image']
+            return str(image.get('data', image) if isinstance(image, dict) else image)
+        return None
+
+    async def capture_frame(self) -> str | None:
+        """A screenshot for comparison only: not saved, not the failure-evidence frame."""
+        try:
+            return await self._take_screenshot()
+        except (RuntimeError, OSError, KeyError, ConnectionError, TimeoutError) as e:
+            log.warning(f"Failed to capture comparison screenshot: {e}")
+            return None
 
     async def _save_debug_screenshot(self, screenshot_base64: str, action_context: str | None = None) -> str | None:
         """
@@ -534,10 +555,8 @@ class TargetResolutionExecutor:
             # Increment counter for next screenshot
             self.screenshot_counter += 1
 
-            # Decode and save the image
-            image_data = base64.b64decode(screenshot_base64)
-            with open(filepath, 'wb') as f:
-                f.write(image_data)
+            # Decode and save the image (recompressed losslessly in the background)
+            store_screenshot(filepath, base64.b64decode(screenshot_base64))
 
             log.debug(f"Debug screenshot saved: {filepath}")
 

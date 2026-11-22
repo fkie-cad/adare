@@ -35,11 +35,13 @@ class ExperimentConfig:
     diff_mode: str = 'auto'  # 'auto', 'guest', or 'host'
     export_disk_image: bool | None = None  # None=use playbook, True/False=override
     capture_pcap: bool | None = None  # None=use playbook, True/False=override
+    filter_pcap: bool | None = None  # None=use playbook, True/False=override
     export_memory_dump: bool | None = None  # None=use playbook, True/False=override
     dev_mode: bool = False  # Track if running in dev mode
     installation_mode: str = "wheel"  # "wheel" (pip) or "editable" (Poetry)
     file_log_level: int = 20  # logging.INFO — level for adare.log file handler
     allow_emulation: bool = False  # Allow QEMU TCG when guest arch != host arch (--allow-emulation)
+    backend: str = 'agent'  # 'agent' (in-guest adarevm) or 'hostside' (no guest process); see backend/hostside
 
 
 @dataclass
@@ -111,6 +113,9 @@ class ExperimentRunCtx:
     # --- Caching ---
     cached_agent_commands: Any | None = None  # Cached CommandSet for dev mode restores
     cached_env_info: Any | None = None  # Cached EnvironmentInfo for dev mode restores
+
+    # --- Host-side backend ---
+    hostside: Any = None  # HostsideSession when config.backend == 'hostside'
 
     # --- Machines ---
     # Keyed by machine name from the playbook's `machines:` section, or the

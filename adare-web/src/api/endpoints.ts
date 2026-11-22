@@ -4,7 +4,7 @@ export const endpoints = {
   sessionState: (id: string) => `/sessions/${id}/state`,
   sessionStart: '/sessions/start',
   sessionStop: (id: string) => `/sessions/${id}/stop`,
-  sessionReset: (id: string, type: string) => `/sessions/${id}/reset?type=${type}`,
+  sessionReset: (id: string, type: string) => `/sessions/${id}/reset?reset_type=${type}`,
   sessionCleanup: '/sessions/cleanup',
 
   // Checkpoints
@@ -44,6 +44,11 @@ export const endpoints = {
   vmInstanceUsage: '/vm-instances/usage',
   vmInstance: (id: string) => `/vm-instances/${id}`,
   vmInstanceSnapshots: (id: string) => `/vm-instances/${id}/snapshots`,
+  // Log files of a running instance (its run's logs/*.log + the libvirt domain log),
+  // and one log read from a byte offset for live tailing.
+  vmInstanceLogs: (id: string) => `/vm-instances/${id}/logs`,
+  vmInstanceLog: (id: string, key: string) =>
+    `/vm-instances/${id}/logs/${key.split('/').map(encodeURIComponent).join('/')}`,
   vmInstanceSnapshotDelete: (id: string, name: string) =>
     `/vm-instances/${id}/snapshots/${encodeURIComponent(name)}`,
 
@@ -92,6 +97,17 @@ export const endpoints = {
 
   // System management
   manageDbStatus: '/manage/db-status',
+
+  // Host resources
+  systemResources: '/system/resources',
+  systemStorage: '/system/storage',
+  systemHistory: '/system/history',
+  systemCapacity: '/system/capacity',
+  systemRunUsage: '/system/run-usage',
+
+  // Browser terminals (shell / Claude Code); attach over `/ws/terminals/{id}`
+  terminals: '/terminals',
+  terminal: (id: string) => `/terminals/${id}`,
 
   // Health
   health: '/health',

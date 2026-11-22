@@ -8,12 +8,20 @@ import type { ApiResponse } from '@/types/api'
  * resolving a running VM's live VirtualSpice display URL (watch / embed).
  */
 
-// Shape of a locally-registered VM record. The backend returns whatever
-// `AdareAPI().vm` yields — we keep this permissive and let callers narrow.
+// A locally-registered VM: a row of GET /api/local-vms (VmListItem) or, with
+// the detail-only fields, GET /api/local-vms/{id} (VmInfo).
 export interface LocalVm {
   id: string
   name?: string
+  description?: string
+  hypervisor?: string
+  os_platform?: string | null
+  instance_count?: number
+  file_hash?: string
+  /** List rows: the VM disk/image file. */
   path?: string
+  /** Detail only: the VM disk/image file. */
+  file_path?: string
   [key: string]: unknown
 }
 
@@ -52,9 +60,14 @@ export function useDeleteLocalVm() {
 export interface VmInstance {
   id: string
   vm_id?: string
-  name?: string
+  vm_name?: string
+  /** Hypervisor domain name (what the live view resolves), unique per instance. */
+  instance_name?: string
   status?: 'active' | 'available' | 'stopped' | string
   websocket_port?: number
+  hypervisor?: string
+  /** ULID of the run holding this instance (an experiment run or a dev session), if any. */
+  current_experiment_run_id?: string | null
   [key: string]: unknown
 }
 
@@ -79,6 +92,64 @@ export function useVmInstances(vmId?: string) {
       return data.data ?? []
     },
   })
+}
+
+/** Instances that are running right now (status `active`), refreshed every few seconds. */
+export function useRunningVmInstances() {
+  return useQuery({
+    queryKey: ['vm-instances', null],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<VmInstance[]>>(endpoints.vmInstances)
+      return data.data ?? []
+    },
+    select: (instances) => instances.filter((i) => i.status === 'active'),
+    refetchInterval: 5000,
+  })
+}
+
+/** A log file a running instance can be tailed through (GET /api/vm-instances/{id}/logs). */
+export interface VmInstanceLogSource {
+  /** `run/<file>` for the run's logs, `libvirt` for the hypervisor's domain log. */
+  key: string
+  name: string
+  size: number
+}
+
+export function useVmInstanceLogs(instanceId: string | undefined) {
+  return useQuery({
+    queryKey: ['vm-instance-logs', instanceId],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<VmInstanceLogSource[]>>(
+        endpoints.vmInstanceLogs(instanceId!),
+      )
+      return data.data ?? []
+    },
+    enabled: !!instanceId,
+    // Logs appear as a run progresses (the agent log only once the guest is up).
+    refetchInterval: 5000,
+  })
+}
+
+/** One read of a log (GET /api/vm-instances/{id}/logs/{key}?offset=). */
+export interface VmInstanceLogChunk {
+  text: string
+  offset: number
+  next_offset: number
+  size: number
+  /** The file got shorter than the requested offset: drop what is shown. */
+  reset: boolean
+}
+
+export async function fetchVmInstanceLogChunk(
+  instanceId: string,
+  key: string,
+  offset: number | null,
+): Promise<VmInstanceLogChunk> {
+  const { data } = await api.get<ApiResponse<VmInstanceLogChunk>>(
+    endpoints.vmInstanceLog(instanceId, key),
+    { params: offset === null ? {} : { offset } },
+  )
+  return data.data!
 }
 
 export function useVmInstance(instanceId: string) {
@@ -112,12 +183,20 @@ export function useRemoveVmInstance() {
   })
 }
 
+/** Result of DELETE /api/vm-instances (VmInstanceCleanupResult). */
+export interface VmInstanceCleanupResult {
+  removed_count: number
+  removed_instances: string[]
+  failed_count: number
+  failed_instances: string[]
+}
+
 export function useRemoveAllStoppedInstances() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async () => {
-      const { data } = await api.delete<ApiResponse<number>>(endpoints.vmInstances)
-      return data.data ?? 0
+      const { data } = await api.delete<ApiResponse<VmInstanceCleanupResult>>(endpoints.vmInstances)
+      return data.data!
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vm-instances'] }),
   })

@@ -27,7 +27,156 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 
 ## [Unreleased]
 
+## [adare 0.1.1] - 2026-11-22
+
 ### Added
+- Negative results are now proven, not assumed (guide: *Proving negative results*):
+  - Every click/keyboard/drag/scroll/goto gets an automatic **effect check**: the screen
+    near the input (for keyboard steps: the whole screen) is compared before and after
+    (polled up to 1 s, clock/panels ignored).
+    `effect: changed|unchanged` goes into the event data and the forensic log; for
+    `unchanged` a WebP screenshot is kept and the run summary counts them.
+    `settings.effect_check: off|warn|prove|strict` (default `warn`: record only, no
+    verdict changes; `prove`: unchanged/when-skipped actions count against negative tests;
+    `strict`: `prove` + fail the step); `effect: none` marks an action expected to change
+    nothing.
+  - New status **INCONCLUSIVE** (15): a passing negative test (`*_does_not_exist`,
+    `visual.not_exists`, `count_max` with max 0, `expect_to_fail`, or a testfunction
+    declared `@testfunction(..., negative=True)`) is INCONCLUSIVE when an earlier GUI
+    action failed or failed its `verify:` (under `prove`/`strict` also: was skipped by
+    `when:` or showed no effect). Run verdict
+    precedence: FAILED > INCONCLUSIVE > TEST_MISSING > WARNING > SUCCESS. Needs
+    adare-server migration `0021_status_inconclusive` before uploading such runs.
+    The run summary says "EXPERIMENT INCONCLUSIVE" and counts such tests apart
+    ("1 inconclusive", not "failed"); `--format`/batch results report the run as
+    INCONCLUSIVE (`summary.inconclusive_runs`).
+  - `controls: [test names]` on a test: tests that must have passed before it (else
+    INCONCLUSIVE); `adare exp playbook validate` rejects unknown, cyclic or late controls.
+  - `verify:` / `verify_timeout` now also on `keyboard`, `drag`, `scroll` and `goto`.
+  - Recorded playbooks (`adare dev agent`, `adare dev mcp`) get a generated
+    `verify: {exists: {image: ...}}` per click/keyboard step from the region that changed;
+    `--plan` adds a `wait_until` gate per verified sub-goal.
+- pcap captures (`--capture-pcap`) no longer contain ADARE's own traffic: after the VM
+  stops, packets of the adarevm WebSocket (the `adarevm` hostfwd, guest port 18765, incl.
+  every `pull`) and of the SLIRP SMB share (`10.0.2.4`) are removed; every other record is
+  copied byte for byte. This was typically >90% of a capture (one run: 20.3 MB ->
+  61 KB). `<machine>.pcap.filter.json` next to the pcap records the rules, the packet
+  counts and the sha256 of the raw and the filtered capture. On by default; keep the raw
+  capture with `--no-filter-pcap` or `settings.filter_pcap: false`.
+- Web UI **Live** page (sidebar *VMs → Live*, `/live`): lists the running VM instances
+  (refreshed every 5 s) and shows the selected one's display view-only and/or its logs
+  as they are written (`tail -f` style, one tab per `logs/*.log` of the run holding the
+  instance plus the libvirt domain log; filter, pause, follow, wrap). Running instances
+  on a VM's page link to it. New endpoints `GET /api/vm-instances/{id}/logs` and
+  `GET /api/vm-instances/{id}/logs/{source}?offset=`; instance list rows now carry
+  `current_experiment_run_id`.
+- Host-side (agent-free) backend: `adare experiment run --backend hostside` (also
+  `ADARE_BACKEND`, playbook `settings.backend`; default stays `agent`). Playbooks run
+  unchanged with no process of ours in the guest (QEMU Linux guests): GUI through QMP,
+  file-effect `command:` actions and environment installations staged into the run
+  overlay before first boot (libguestfs or e2fsprogs `debugfs`), `test:` actions
+  evaluated on the host over a new `GuestFS` abstraction (offline qcow2/LVM/ext4 via
+  dissect) after a clean shutdown, `pull:` and the filesystem diff taken from the image,
+  playbook steps written as `marker` events into a qemufile run directory (`<run>/qfm/`).
+  Commands that need a guest process fail before boot, naming their class. See
+  `docs/guide/hostside-backend`, `scripts/hostside_inventory.py`; optional dependencies
+  `uv pip install 'adare[hostside]'`.
+- OCR provenance: every run records the cv-server's OCR profile in `<run>/ocr.yml`
+  (`ocr-<machine>.yml` per machine): profile, engine and package versions (incl.
+  `cv2`), model names + sha256, parameters, language, leading-glyph tolerance and the
+  cv-server version, read from the new cv-server MCP tool `get_engine_info`. A server
+  that was attached to rather than spawned is recorded as-is, with a warning when its
+  profile differs from the requested one.
+- Per-experiment OCR pin: `ocr: {engine: rapidocr|paddle, lang: latin|en}` in
+  `metadata.yml` overrides the global default (`ADARE_OCR_ENGINE` / `ADARE_OCR_LANG`);
+  pin `engine: paddle` to keep an existing experiment on the legacy profile. Dev
+  sessions keep their profile across resume and `restart_mcp_server`.
+- cv-server: per-frame OCR cache (64-entry LRU keyed by screenshot sha256 + profile
+  fingerprint, single-flight). Repeated OCR of the same frame (multi-leaf `wait_until`,
+  `when`, `ClosestTo`, failure evidence, polling an unchanged screen) is computed once;
+  results are identical by construction.
+- cv-server: `--ocr-engine {rapidocr,paddle}` / `--ocr-lang {latin,en}` (env
+  `ADARE_OCR_ENGINE` / `ADARE_OCR_LANG`), `ADARE_OCR_THREADS` (onnxruntime threads,
+  default 4), `ADARE_OCR_MODEL_DIR`.
+- cv-server: golden OCR test on real experiment screenshots and rendered German UI text
+  (`make test-cv`), and `adare-cv-server/scripts/ocr_compare.py`, an offline A/B of two
+  OCR profiles over a project's recorded runs and text queries.
+- Automatic test-run retention: every test-mode run (`adare experiment run` /
+  `replicate` without `--production`, not dev sessions) ends by removing older
+  finished fake runs of the same experiment **and environment** (rows in one
+  transaction, then their run folders), keeping the newest `ADARE_TEST_RUNS_KEEP`
+  of that environment (new setting, default 10;
+  `adare system settings set ADARE_TEST_RUNS_KEEP N`, `-1` switches it off).
+  Counting per environment means a default multi-environment run never removes its
+  own results. The run that just finished counts toward the limit and is never
+  removed (`0` keeps only it), and neither is the newest successful run (finished,
+  result SUCCESS or WARNING), so a burst of failed attempts cannot remove the last
+  good run. At most 5 runs per experiment and environment are removed per run, so
+  an existing backlog drains gradually (`adare runs prune --fake` removes it at
+  once). Runs started less than an hour ago, unfinished runs, dev sessions' runs,
+  runs whose folder fails the run-folder test and runs whose folder another project
+  sharing `run/` refers to are kept; production runs are never touched. Prints e.g.
+  `removed 3 older test runs (1.2 GiB; ADARE_TEST_RUNS_KEEP=10)`, saying also when
+  the per-run limit was hit or a folder could not be deleted after its row was; a
+  failure (unreadable runs, dev sessions or sharing project) only logs a warning,
+  removes nothing and never fails the run. One project had 126 fake runs holding
+  10.4 GB of run folders.
+- `adare db compact [--dry-run] [--all] [-p PROJECT]` shrinks project databases
+  that grew from the base64 screenshot copies older action results kept in
+  `action_execution.result_data` (47 GB of a 50 GB database in one project). Only
+  image payloads are removed, and only when the decoded image is byte-for-byte
+  identical to the PNG its `screenshot_path` names; rows whose screenshot file is
+  missing or differs stay unchanged and are reported as kept. Nothing else is
+  removed: oversized non-image text (command output) is kept and only counted
+  (`rows.non_image_kept`). The database is then vacuumed when there is free space
+  of twice the remaining data plus 10 % next to it (and in `TMPDIR` on another
+  volume). Refuses to run, naming the blocker, while another process holds the
+  write lock, an unfinished run of the project showed activity in the last 30
+  minutes (start time or run folder / `logs/` mtime; older ones count as crashed
+  and are reported as `stale_runs_ignored`), or a dev session is live.
+  `--dry-run` opens the database read-only and reports the reclaimable bytes.
+- `adare db check [--all] [-p PROJECT]`: read-only `quick_check`,
+  `foreign_key_check` summary and orphaned-row counts per database; exits 1 when
+  a database is corrupt. Both commands take `--json`; with `--all` a registered project whose directory or
+  database is gone is reported as `missing` (nothing is created on disk) and the
+  rest are still processed.
+- A command that opens a project database over 512 MiB that still holds
+  screenshot copies in `action_execution.result_data` prints a one-line hint on
+  stderr to run `adare db compact -p <project>` (not with `--json`/`--format
+  json|yaml`). It is shown once; `.adare/compact-hint.json` records the size, and
+  the hint returns only after the database grew by half. A successful compact
+  writes the marker too. The check is a `stat` below 512 MiB and one
+  `octet_length` query (record headers only) above it.
+- SQLite upkeep: every connection caps the `-wal` file at 64 MiB after a
+  checkpoint (`journal_size_limit`, also on `adare db compact`'s connection), and
+  each CLI command and the web API run `PRAGMA optimize` (bounded by
+  `analysis_limit=400`, 1 s busy timeout; a read-only or locked database is
+  skipped) on the databases they used when they end.
+- `adare runs prune [--fake] [--older-than DAYS] [--yes] [--json]`: frees disk space
+  in the current project's `run/` directory. A dry run by default: lists run folders
+  no database run (and no dev session) refers to, with sizes and a total. A run that
+  failed before it recorded its folder (e.g. during VM preparation) keeps every
+  folder of its experiment within 16 h of its start, and the runs of every registered
+  project whose `run/` resolves to the same directory count too (when one of them
+  cannot be read, nothing is pruned). `--fake` also targets finished fake runs (not
+  pending/running, not a dev session's run; rows + folders), `--older-than` filters
+  by age, and only `--yes` deletes. A folder is only ever selected when it
+  is clearly an ADARE run folder: `run/<known experiment>/<run timestamp>` inside
+  `run/` with no symlinks, with a `logs/` or `reporting/` subdirectory, unchanged for
+  an hour; users' own files in `run/` are never listed.
+- Terminal and Claude in the web UI: a terminal panel on every page (sidebar or
+  Ctrl+`) runs Claude Code or a shell in a chosen project, as tabs that survive
+  page changes and reloads. *Build with Claude* (experiments), *Work on it with
+  Claude* (experiment) and *Debug with Claude* (run) start Claude with the task
+  set. Terminals only accept requests from this machine (loopback client, local
+  `Host` and `Origin`).
+- Host resources and run capacity. The web UI has a **System** page (and host tiles
+  on the home dashboard): live CPU, memory and disk, every running VM, how many
+  more runs of each environment fit right now and what limits them, usage history
+  charts, and where the disk space goes, including run disks without an owner that
+  `adare vm prune` can reclaim. `adare system resources|capacity|usage|storage`
+  report the same. Every experiment run now records what its VM used (peak RAM,
+  CPU, disk), and the capacity estimate is sized from those measurements.
 - VM images have a record: `adare vm create` registers the disk at once and writes
   `<disk>.image.yml` (install method, OS profile + hash, ISO + SHA256, setup level,
   ADARE version/commit, QEMU version, date) and the guest's package list
@@ -101,8 +250,110 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   finished booting" and a screenshot, instead of a bare timeout after three cold
   boots (~19 min). The guest's screen sitting still for a minute is what tells it
   apart from a slow boot.
+- Image targets honour the offset `base` (`top-left`, `center-left`, ...) like text
+  targets: the box comes from the new `sizes` field of `find_icon` (or the
+  template's native size). `center` (the default) is unchanged. Image and icon
+  candidates below the confidence floor are dropped before the strategy runs, and
+  `target.min_margin` (0.0-1.0) accepts a match only if it beats the best other
+  above-floor candidate by that margin.
+- `click` takes `verify: {exists|not_exists: <target>}`, `retries: n` (default 0)
+  and `verify_timeout` (seconds, default 3): after the click the condition is
+  polled; if it does not hold the target is re-resolved and clicked again, up to
+  `retries` more times, and the action fails if the effect never appears. Without
+  `verify` a click behaves exactly as before.
+- `ADARE_CLICK_SETTLE_MS` sets the QMP pointer-move-to-press gap (default 10 ms,
+  the previous fixed value).
+- Evidence on a failed action: screenshot of the last search, a fresh screenshot,
+  the full OCR dump and the target description(s) are written to
+  `<run>/reporting/failure/aNN_*` (switch off with `ADARE_FAILURE_EVIDENCE=0`).
+- Playbook-level `on_failure:` action list: runs once after the first failure that
+  stops the playbook and before the run ends; never changes the failed status.
+  Accepted by `adare exp playbook validate` and validated like normal steps.
+- Cross-process VM slots (`adare.backend.vm.slots`): `N` flock files under
+  `<appdata>/vm_slots/` cap the live VMs across all `adare` processes (N =
+  the `ADARE_MAX_VMS` setting, default 20, the
+  old per-VM instance limit). Every run's VM (QEMU run instance or pooled
+  VirtualBox instance) takes one slot before it boots (waits up to
+  `ADARE_VM_SLOT_TIMEOUT`, default 30 s) and keeps it until the run is removed or
+  the instance released, so parallel runs cannot exhaust host memory; the kernel frees a crashed
+  process's slot. `adare vm slots status [--json]` shows the slots;
+  `adare vm slots exclusive [--timeout s] -- <cmd>` runs a command holding every
+  slot (its adare child processes run under that lease). A slot belongs to the
+  allocating process, so a VM that outlives it (detached dev session) stops counting.
+- `adare dev remove --stopped [--older-than 14d] [-y]` removes stopped dev
+  sessions in bulk, listing each with the VM disk it keeps (on this host 25
+  forgotten sessions held ~164 GiB). `adare vm prune` reports that space too.
+- `adare system settings list|get|set|unset`: host limits saved in
+  `~/.adare/settings.json` (`ADARE_MAX_VMS`, `ADARE_VM_SLOT_TIMEOUT`,
+  `ADARE_MIN_FREE_DISK_GB`, `ADARE_DEV_SESSION_MAX_AGE_DAYS`), each resolved
+  environment variable > saved setting > default and validated when set.
+- Opt-in expiry of forgotten dev sessions: with the `ADARE_DEV_SESSION_MAX_AGE_DAYS`
+  setting, every experiment run and `adare vm prune --force` remove stopped/crashed
+  sessions unused for longer than that (never running ones, never one whose VM is
+  up, never from inside a dev session). Off by default.
+- Runs refuse to start when a filesystem they write to has less than
+  the `ADARE_MIN_FREE_DISK_GB` setting free (default 10 GiB, 0 disables), with the cleanup
+  commands as suggestions, instead of filling the disk mid-run.
 
 ### Changed
+- Run screenshots (`reporting/screenshots/`, failure evidence) are re-encoded losslessly
+  as PNG at zlib level 9 in a background thread after they are written: pixel-identical,
+  roughly 25-50% smaller. The file is swapped atomically and only when smaller; a run
+  waits for pending jobs before it finishes. The file's sha256 is no longer that of the
+  bytes the guest sent. `ADARE_SCREENSHOT_PNG_LEVEL=0-9` picks the level, `off` keeps
+  the captured bytes.
+- `sqlite.query_result` now ends with an **error**, not a failure, when the database cannot be
+  evaluated: a missing database file, or any SQL error (syntax, unknown table or column, a
+  corrupt or unreadable database). A failure now always means the query ran and the result did
+  not match, so `expect_to_fail` can no longer turn a missing database into a pass (errors are
+  never inverted). Playbooks that used `expect_to_fail` on a missing table or database get an
+  error instead; assert absence with a query that runs (e.g. `expected_rows: 0`). Every result
+  after the query ran, a pass included, now reports the rows read as `query result: [...]`
+  (cut after 2000 characters).
+- Locked dependencies upgraded to clear the 68 pip-audit advisories (authlib 1.9.5,
+  certifi 2026.10.23, dnspython 2.9.2, fastmcp 3.4.11, filelock 4.2.9, joserfc 1.8.0,
+  mcp 1.30.0, opentelemetry-api 1.45.2, pillow 13.0.0, setuptools 84.2.1). The guest
+  packages' minimums are unchanged (guests stay on Python 3.10).
+- `paddlepaddle` (cv-server `paddle` extra) now comes from PyPI (same 3.2.2 wheels, now
+  hash-pinned in `uv.lock`) instead of paddlepaddle.org.cn, whose index answers GitHub
+  with 403 and made every Dependabot `uv` update fail. Dependabot now updates `uv.lock`
+  only (`versioning-strategy: lockfile-only`).
+- **OCR engine: RapidOCR is the new default.** New cv-servers use the pinned profile
+  `rapidocr-v5m-latin`: RapidOCR on onnxruntime (CPU on Linux, Windows and macOS),
+  PP-OCRv5 mobile detection + mobile Latin recognition, model files verified by sha256
+  (a mismatch is a hard error). Measured on real experiment screenshots: 0.2-0.3 s and ~1 GB
+  per frame instead of 11.3 s and 6-21 GB (PaddleOCR), word recall 97.4% vs 95.1%,
+  rendered German UI lines 92% vs 76%. OCR results - and so clicks - can differ from
+  the PaddleOCR runs (about one in six anchored-line queries; two words up to ~30 px
+  apart now read as one line): pin `ocr: {engine: paddle}` for experiments that must
+  stay on the old profile. With this profile only, a line also matches with one
+  leading run of 1-2 glyphs stripped (`>Bookmarks Menu`, `• Other`).
+- PaddleOCR is now the `paddle-legacy` profile, unchanged, in the optional
+  `adare-cv-server[paddle]` extra (the workspace still installs it). The cv-server
+  starts it with `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True` (~3 s faster start).
+- OpenCV is pinned to 4.10.0.84 for `opencv-python`, `opencv-python-headless` and
+  `opencv-contrib-python` (workspace `constraint-dependencies`): all three install the
+  same `cv2` module, so which version loaded depended on install order (the lock said
+  4.13, the environment ran 4.10).
+- `adare runs remove`, `DELETE /api/runs/{ulid}`, `adare experiment clean` and
+  `adare experiment remove` also delete the run folders of the runs they remove,
+  through the same run-folder safety test as `runs prune` (a refused folder is kept
+  and reported; the rows are deleted anyway). Database run paths are matched by
+  their `run/<experiment>/<timestamp>` tail, so moved projects still match.
+  `runs remove --keep-files` (web: `keep_files=true`) and `experiment remove
+  --keep-files` keep the files. A folder a dev session refers to (any status) is
+  never deleted, and neither is any folder when the dev sessions cannot be read.
+  `experiment clean` keeps fake runs that are still pending or running and dev
+  sessions' runs. The automatic fake-run cleanup after a test run
+  still removes only the rows; `runs prune` collects those folders.
+- SQLite databases now use write-ahead logging (`journal_mode=WAL`) with
+  `synchronous=NORMAL` and a 30 s busy timeout (was 5 s), set on every connection:
+  readers no longer block a writer, so the CLI, web UI and a running experiment can
+  share a database without `database is locked`. WAL is recorded in the database
+  file, which gains `-wal`/`-shm` sidecar files next to it. A read-only database
+  file or directory, where the switch to WAL cannot be written, keeps its journal
+  mode and stays readable. Foreign-key enforcement stays off. See *Connection
+  settings* in the database migrations docs.
 - Development tasks have one definition: CI runs the Makefile targets (`make lint`,
   `make test`, `make test-agent`, …) instead of its own copies of the commands.
   Every target syncs what it needs first (`--inexact`, so it never strips the
@@ -255,6 +506,207 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   concurrently on the shared PaddleOCR instance).
 
 ### Fixed
+- `adare experiment run` without `-e` (all environments): the closing summary crashed on a
+  missing helper and, past that, deadlocked on the console lock; it now prints.
+- `settings.effect_check: off` written unquoted (YAML reads it as false) is accepted as off.
+- False passes: a host-mode (QGA/hostside) test whose file read failed for any reason other
+  than "no such file" (guest agent down, timeout, permission) is now ERROR. Before, a
+  `*_does_not_exist` test passed on a transport error and a glob match that failed to pull
+  silently dropped out of the test.
+- Test results are stored with their real status (SUCCESS/FAILED/ERROR/WARNING/
+  INCONCLUSIVE) instead of only SUCCESS/FAILED; under `expect_to_fail` the test's own
+  answer is kept in the details, and a WARNING under `expect_to_fail` now explicitly
+  counts as "passed although expected to fail".
+- The forensic log now carries a GUI action's error message, `verify:` outcome
+  (`verified`, `click_attempts`), the typed `text`, `skipped` (a false `when:`) and the
+  effect check; action events finally fill `Event.error`.
+- Idiom templates: `delete_file_and_verify` used a non-existent testfunction
+  (`filesystem.file_does_not_exist`, `path:`) and never ran its test; it now uses
+  `standard.file_does_not_exist` with a `file_present_before` control.
+  `open_app_and_verify` used the non-existent `visual.text_on_screen` (now `visual.exists`)
+  and never ran its test either.
+- Playbook `tests:` entries now reject unknown keys (e.g. a `paramter:` typo) at parse time,
+  with a `did you mean: parameter?` hint, instead of silently dropping the key and failing
+  at the end of the run with `NotAnAttrsClassError`. Validation errors from `parse_playbook`
+  are now a readable path-qualified `ValueError` rather than a bare cattrs `ClassValidationError`.
+- Runs list (`/api/runs`, `adare runs list`, web Runs page) is newest first across all
+  projects instead of project by project in database order, so running runs are on top.
+  The web Runs page sorts by any column (click a header), counts active runs, and
+  refreshes itself (every 5 s while a run is active, else 15 s) so CLI-started runs appear.
+- Times in the web UI were shown shifted by the UTC offset: the backend stores naive UTC and
+  the browser read the zone-less strings as local time; adare-web now reads them as UTC.
+  Dev-mode sessions, checkpoints and restored dev-session runs wrote local time instead of
+  UTC (which also skewed stale-session expiry); they now write UTC like everything else.
+  Rows written earlier by dev mode keep their local time.
+- Two VMs starting at the same moment no longer fail with "UNIQUE constraint failed:
+  vm_instance.websocket_port". The loser of the port race now moves on to the next
+  free port; its retry handler used to crash on a missing `session` attribute. A
+  clash on anything other than the port, such as a duplicate instance name, is
+  reported directly instead of being retried across the whole port range.
+- Unattended Windows 10 x64 builds: the answer file selects an edition (generic Pro
+  key, no activation), so the multi-edition 22H2 ISO no longer stops at "Windows
+  cannot read the <ProductKey> setting from the unattend answer file", and it loads
+  viostor from the Autounattend floppy (A:\) only, like Windows 11. `vm create`'s
+  Setup error watch now also stops on "Windows cannot ..." dialogs instead of waiting
+  for the 90-minute timeout.
+- `--test-mode host`: every host-evaluated test read as failed (UNKNOWN) whatever the test
+  function returned, because its result was handed on in the wrong shape; and tests with
+  `str | int | float` parameters (`standard.file_timestamps`) could not be loaded host-side.
+- Web API / web UI contract sweep (every route now has contract tests in
+  `tests/unit/adare/webapi`, asserting the fields adare-web reads):
+  - Security: `/api/playbooks/save` only accepts a bare file name; run-artifact and
+    static-file serving no longer admit same-prefix sibling directories; unknown
+    `/api/...` paths are JSON 404s instead of the SPA page.
+  - The web client rejects HTTP-200 `success: false` responses, so refused actions
+    show the server's error instead of a success toast.
+  - Runs: Test results tab lists each test once with its status; OS / VM box,
+    result column, run-to-environment (now the run's own environment, also for the
+    environment filter) and delete-by-ULID work.
+  - Experiments: real `project_path`, `run_count`/`last_run`, tag filter across
+    projects, list links by dotnotation, validate reports the verdict.
+  - VMs: running-VM links from the System page, Path column, instance names,
+    remove-stopped toast; snapshot delete on a QEMU host returns an error, not a 500.
+    `VmInstanceUsage.stopped_instances` (always 0) is now `cleanup_pending_instances`.
+  - Environments: OS label, sync and recipe badges, Verify without a project, one
+    malformed YAML no longer breaks the list, Check URL sends `vm_format`.
+  - Projects: get by path and delete by name no longer 500; vanished testfunctions are
+    hidden; `/api/web/sync` fails when nobody is logged in.
+  - Develop sessions: soft/hard reset work (web UI and `adare dev reset`), session
+    labels, checkpoint sizes, cleanup counts; unsafe checkpoint names are rejected.
+  - Action palette: `/api/actions/types` is generated from the playbook parser's
+    action classes, and the workbench emits actions the parser accepts.
+- Web UI: experiment pages opened from the Runs list or an Environment page showed
+  `["experiment", …] data is undefined`. Those links pass the `Project.experiment`
+  dotnotation, which `GET /api/experiments/{name}` now resolves (short names still
+  work); a missing experiment now shows "not found" instead. The page also scopes its
+  runs to the experiment's project and enables Run from the detail payload's
+  `environments`.
+- SMB file transfer no longer reverts host-written run files. The SMB share serves a
+  copy of the run directory taken at VM setup, and the writeback at retrieval copied
+  that whole copy back, resetting every file the host kept writing (`logs/mcp_gui.log`,
+  `qemu_debug.log`, ...) to its setup-time content and mtime: SMB runs (e.g. all
+  arm64 runs) kept only the cv-server's first ~2 s of log, losing every OCR/CV call.
+  The writeback now copies only files the guest created or changed since staging
+  (replacing the `adare.log`-only exclusion).
+- On Windows, any adare command that printed a character the console encoding
+  (cp1252) cannot represent crashed with `UnicodeEncodeError`; e.g. `adare db
+  migrate` (run by `make install`) aborted on a migration's `✓`. The CLI now
+  prints `?` for such characters instead.
+- Editing a playbook and starting a default (test-mode) `adare experiment run` or
+  `replicate` deleted the experiment and every run of it, production runs
+  included, and recreated it under a new id: the load before a test run used
+  `--force`. A changed experiment without production runs is now reloaded in
+  place (same id; metadata, environments, tags, tests and playbook refreshed; its
+  finished fake runs deleted with their run folders, unfinished ones and dev
+  sessions' runs kept). A changed experiment *with* production runs is refused in
+  both modes, naming the run count and the ways out (clone it under a new name,
+  restore the playbook, or `adare experiment load --force`), because a run does
+  not record the playbook it ran and would otherwise end up under one it never
+  executed. `adare experiment add-env` / `remove-env` reloaded with `--force` too
+  and now report such an experiment as failed (its `metadata.yml` is updated)
+  instead of replacing it. Only the explicit `adare experiment load --force` still
+  replaces the experiment with all its runs. `adare experiment playbook set` now refreshes the
+  experiment's content hash and tests too, so the next run no longer sees a
+  change, and refuses a changed playbook (writing nothing) when production runs
+  exist.
+- Re-ingesting a playbook while a run of the experiment was in progress deleted
+  the items that run had not executed yet, so its later action executions pointed
+  at missing items. While a run is unfinished and showed activity in the last 30
+  minutes (as `adare db compact` decides), every old item is kept, marked
+  superseded; the next re-ingest without an active run deletes the ones nothing
+  executed.
+- Nested run events stored the enclosing action's key in `event.parent_event_id`,
+  a foreign key to `event.id`, so every nested event was a foreign-key violation
+  (`adare db check` reported 44k `event -> event` violations in one project). The
+  key now lives in the new `event.parent_group_id` column; the
+  `move_parent_event_keys` project migration adds it (indexed) and moves the keys
+  earlier versions wrote, keeping any value that names a real event. Run views
+  and run tallies read the new column, and `adare runs info` no longer issues one
+  query per nested event to compute its indentation.
+- Loading an experiment's playbook again (`adare experiment playbook set`, or a
+  reload of a changed playbook) deleted all of its playbook items, so the action
+  executions of earlier runs pointed at items that no longer existed (`adare db
+  check` counted them as `action_execution_dangling_playbook_item`). Re-ingest now
+  keeps every item an execution references, marked superseded (new column
+  `playbook_item.superseded`, added by the `add_superseded_to_playbook_item`
+  migration), and deletes only the others; runs and the run controller use only
+  the current items. Removing the experiment still deletes all of them.
+- `adare db reset` and `adare db clean-install` deleted only the main database
+  file and left its `-wal`/`-shm`/`-journal` files behind, which could corrupt the
+  next database created under that name; they now remove all of them. Removing a
+  project closes its pooled database connections before deleting the directory.
+- Deleting runs left rows behind in the project database: every run delete
+  (`adare runs remove`, `adare experiment clean`, `adare experiment remove`,
+  fake-run cleanup after a test run, `adare environment remove --force`, and
+  replacing an in-use testfunction) kept the run's action executions (with their
+  result blobs), its run-files row and its two log-file rows, because foreign keys
+  are off in SQLite and the ORM cascade does not reach them. All of them now go
+  through one `delete_runs` helper that removes these rows too. A project
+  migration (`delete_orphan_run_rows`) deletes the action executions, run-files
+  and log-file rows earlier deletions left. The freed space is reused by the
+  database but the file only shrinks after a vacuum.
+- Replacing an in-use testfunction with `--force` said it deleted the runs that
+  used it but deleted none: it searched the global database, while runs live in
+  each project's database. It now deletes them in every registered project.
+- `adare runs list` took ~150 s on a project with 4.5k runs and now takes under a
+  second: every run's verdict lazy-loaded all of its events through an unindexed
+  column. Verdicts are now read for all runs in two queries (also in the web UI's
+  run list), and a migration indexes the columns that look up a run's events,
+  stages, action executions and playbook items. `adare runs info` loads only the
+  requested run instead of every run of every project.
+- `adare runs list` inside a project registered under a name other than its
+  directory's (e.g. `MyProject` at `.../adare`) listed no runs; it filters by the
+  registered name and no longer reads the other projects' databases.
+- The same directory-name-instead-of-registered-name mixup also affected
+  experiment/environment dotnotations resolved from the current directory and
+  the "current project" used to shorten names in experiment, environment and
+  testfunction listings. All of them now resolve the registered name through one
+  helper, `adare.backend.basics.registered_project_name` (falling back to the
+  directory name for an unregistered directory).
+- Database read helpers (`safe_query_*`, `safe_count`, `safe_get_*`), the global
+  reference manager and the current-project lookup caught every exception, so a
+  programming error looked like a missing row or an empty listing. They now turn
+  only the expected database errors (SQLAlchemy, sqlite3, the database API's own,
+  `OSError`) into their default and let anything else propagate.
+- Removing a dev session (or any old pooled QEMU instance) whose VM config was
+  already gone deleted only its database rows and left its full disk copy
+  (`<name>-base.qcow2`, ~4-50 GiB) behind; the copy is now removed by name. The
+  removal also no longer warns "Could not restore websocket_port" per session.
+- Two runs started at the same moment can no longer get the same CV/OCR server
+  port: `find_free_cv_port` also reserves the port with a lock file until the
+  server stops. VirtualBox experiment snapshots are named after the random tail
+  of the run ULID, not its timestamp, so runs started together no longer collide.
+- A crashed or killed run (`kill -9`, closed terminal, interrupted session) no
+  longer leaves its QEMU VM running with its RAM until the next run or
+  `adare vm prune`: the first QEMU run of a process starts a small reaper that
+  waits for the process to exit and then removes its leftover runs
+  (`reconcile_instances`; other processes' runs and dev sessions are untouched).
+- A crashed or killed run no longer leaves its CV/OCR server running (up to
+  ~1.6 GB each, holding its port): runs start it with the new
+  `adare-cv-server --exit-with-parent`, which exits once its `adare` process is
+  gone. Dev-session servers keep outliving the CLI as before.
+- `adare exp run`'s result summary (`--output json/yaml/...`) reports the run's
+  real duration and start/end time instead of 0.0, and a failed run says
+  "Experiment failed" instead of blaming the tests.
+- `adare vm slots status` reports the configured `ADARE_MAX_VMS` as the total
+  instead of the number of slot files on disk.
+- Two runs of the same experiment started in the same second no longer fail with
+  "Failed to create run directory structure ... File exists": the second run
+  gets `<timestamp>_2` (also for diff runs).
+- Project databases no longer fill up with screenshots: each action's result was
+  stored with its base64 screenshot inline (~170 KB per action, one project
+  reached 47 GB). Image payloads and strings over 16 KiB are now replaced by a
+  size marker; explicit screenshots stay on disk under `reporting/screenshots`.
+- The web UI's live VM view runs on the current VirtualSpice (with `vspice`,
+  MCP and one server per data dir): `adare ui start` gives its VirtualSpice its
+  own data dir (`~/.adare/virtualspice`), so it no longer fails while the
+  VirtualSpice app is open and ADARE's run VMs stay out of its library; reuses a
+  VirtualSpice already answering on the port; skips VirtualSpice builds too old
+  for this; says why VirtualSpice did not start; writes its output to
+  `~/.adare/virtualspice/adare-server.log` (an unread pipe could fill and freeze
+  it). `--spice-port` now also moves the viewer and `adare vm watch` lookup,
+  which were fixed to 8081. Clicking and typing in the viewer needs a
+  VirtualSpice with the input fix (mouse message ids, key releases).
 - VMs with shared folders start on libvirt 10.0 and newer (e.g. Ubuntu 24.04):
   defining the domain failed with "invalid idmap start/target/count settings".
   The virtio-fs `<idmap>` used attributes libvirt does not have; older libvirt
@@ -403,6 +855,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `pattern` to the shell unquoted, allowing command injection from a playbook.
 
 ### Removed
+- The unused `Event.parent_event` / `child_events` ORM relationship and the
+  broken `ActionEvent.display_level` property (it called a `query` attribute the
+  models do not have).
 - `adare server start`, which failed with `ModuleNotFoundError` and duplicated
   `adare web start` (now `adare ui start`), and the empty `adare help` group.
 - Duplicate libvirt domain teardown: the run path, its signal handler and

@@ -219,6 +219,31 @@ class PlanningAgent:
         b64, _png, _w, _h = await self.executor._capture()
         return b64
 
+    async def _screenshot_png(self) -> bytes:
+        _b64, png, _w, _h = await self.executor._capture()
+        return png
+
+    async def _record_step_done(self, start_png: bytes | None, success: str) -> None:
+        """Turn a verified sub-goal's ``success`` into a replayable ``wait_until`` gate.
+
+        The checker confirmed the "done when ..." statement on the live screen; the region
+        that changed over the sub-goal becomes the gate's image condition, so a replay
+        checks the same state at the same boundary (instead of the statement being lost).
+        """
+        recorder = self.executor.recorder
+        if recorder is None or start_png is None:
+            return
+        from .exceptions import AgentError
+
+        try:
+            done_png = await self._screenshot_png()
+            await asyncio.sleep(0.5)
+            confirm_png = await self._screenshot_png()
+        except AgentError as exc:
+            log.warning('No step-done gate (screenshot failed: %s)', exc)
+            return
+        recorder.record_step_done(start_png, done_png, confirm_png, success)
+
     def _plan_context(self, plan: Plan, index: int, hint: str) -> str:
         """The plan-wide context injected into the executor for this sub-goal."""
         parts = ['PLAN (you are executing the [>] step only):', plan.render()]
@@ -251,6 +276,7 @@ class PlanningAgent:
                 self._ckpt_seq += 1
                 await self._checkpoint(name)  # snapshot BEFORE
                 mark = recorder.mark() if recorder else None
+                start_png = await self._screenshot_png() if recorder else None
 
                 attempt = 0
                 outcome = 'abort'
@@ -273,6 +299,7 @@ class PlanningAgent:
                     ok, vreason = await self._verify(sg.success)
                     if ok:
                         log.info('Sub-goal %d verified: %s', i, sg.text)
+                        await self._record_step_done(start_png, sg.success)
                         sg.status = 'done'
                         sg.hint = ''
                         outcome = 'pass'

@@ -13,6 +13,8 @@ import VmsListPage from '@/pages/vms-list'
 import VmDetailPage from '@/pages/vm-detail'
 import WorkbenchPage from '@/pages/workbench'
 import VmWatchPage from '@/pages/vm-watch'
+import LivePage, { type LiveViewMode } from '@/pages/live'
+import SystemPage from '@/pages/system'
 
 interface RouterContext {
   queryClient: QueryClient
@@ -74,6 +76,12 @@ const environmentDetailRoute = createRoute({
   component: EnvironmentDetailPage,
 })
 
+const systemRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/system',
+  component: SystemPage,
+})
+
 const vmsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/vms',
@@ -82,8 +90,23 @@ const vmsRoute = createRoute({
 
 const vmDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/vms/$instanceId',
+  path: '/vms/$vmId',
   component: VmDetailPage,
+})
+
+const LIVE_MODES: readonly LiveViewMode[] = ['both', 'display', 'logs']
+
+const liveRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/live',
+  component: LivePage,
+  validateSearch: (search: Record<string, unknown>): { instance?: string; mode?: LiveViewMode } => {
+    const { instance, mode } = search
+    return {
+      ...(typeof instance === 'string' && instance.length > 0 ? { instance } : {}),
+      ...(LIVE_MODES.includes(mode as LiveViewMode) ? { mode: mode as LiveViewMode } : {}),
+    }
+  },
 })
 
 const developRoute = createRoute({
@@ -128,6 +151,8 @@ export const routeTree = rootRoute.addChildren([
   environmentDetailRoute,
   vmsRoute,
   vmDetailRoute,
+  liveRoute,
+  systemRoute,
   developRoute,
   vmWatchRoute,
 ])

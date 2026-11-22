@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckSquare, Copy, FlaskConical, Link2, Plus, Trash2 } from 'lucide-react'
+import { CheckSquare, Copy, FlaskConical, Link2, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { PageHeader } from '@/components/layout/page-header'
 import { AsyncBoundary } from '@/components/layout/async-boundary'
@@ -18,6 +18,9 @@ import {
   type Experiment,
 } from '@/api/hooks/use-experiments'
 import { toast } from '@/components/ui/toast'
+import { useProjects } from '@/api/hooks/use-projects'
+import { defaultProjectPath, useLaunchTerminal } from '@/components/terminal/use-launch-terminal'
+import { newExperimentPrompt } from '@/components/terminal/claude-prompts'
 
 const SKELETON_ROWS = 5
 const COLUMNS = 6
@@ -50,9 +53,9 @@ function LoadingTable() {
   )
 }
 
+/** The project's filesystem path, which the mutation endpoints take as `project_path`. */
 function projectPathOf(exp: Experiment): string {
-  const p = (exp as { project_path?: string; project?: string })
-  return String(p.project_path ?? p.project ?? '')
+  return exp.project_path ?? ''
 }
 
 export default function ExperimentsListPage() {
@@ -91,12 +94,25 @@ export default function ExperimentsListPage() {
         request: { project_path: projectPathOf(exp) },
       },
       {
-        onSuccess: () => toast.success('Experiment valid', exp.name),
+        onSuccess: (result) => {
+          if (result.is_valid) {
+            toast.success('Experiment valid', exp.name)
+            return
+          }
+          const failed = result.checks.filter((c) => !c.passed && !c.is_warning)
+          toast.error(
+            `${exp.name}: ${result.failed_count} check${result.failed_count === 1 ? '' : 's'} failed`,
+            failed.map((c) => `${c.name}: ${c.message}`).join('\n'),
+          )
+        },
         onError: (err) =>
           toast.error(`Validation failed: ${exp.name}`, (err as Error)?.message),
       },
     )
   }
+
+  const projects = useProjects()
+  const claude = useLaunchTerminal()
 
   return (
     <div className="p-6 space-y-6">
@@ -104,10 +120,27 @@ export default function ExperimentsListPage() {
         title="Experiments"
         description="Defined experiment configurations"
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus size={16} />
-            New experiment
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              disabled={claude.isPending}
+              onClick={() =>
+                claude.launch({
+                  kind: 'claude',
+                  cwd: defaultProjectPath(projects.data ?? []),
+                  prompt: newExperimentPrompt(),
+                  title: 'Claude · new experiment',
+                })
+              }
+            >
+              <Sparkles size={16} />
+              Build with Claude
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus size={16} />
+              New experiment
+            </Button>
+          </>
         }
       />
 
@@ -136,19 +169,26 @@ export default function ExperimentsListPage() {
           </TableHeader>
           <TableBody>
             {(data ?? []).map((exp) => {
-              const project = projectPathOf(exp) || '—'
+              const project = exp.project || '—'
               const tags: string[] = Array.isArray(exp.tags) ? exp.tags : []
-              const runCount = (exp as { run_count?: number }).run_count
+              const runCount = exp.run_count
               const envNames: string[] = exp.environment_names ?? []
               return (
-                <TableRow key={exp.name} className="hover:bg-muted/50">
+                <TableRow key={exp.dotnotation ?? `${exp.project}.${exp.name}`} className="hover:bg-muted/50">
                   <TableCell className="font-medium">
-                    <Link to="/experiments/$name" params={{ name: exp.name }} className="hover:underline">
+                    {/* Short names repeat across projects; the dotnotation is unique. */}
+                    <Link
+                      to="/experiments/$name"
+                      params={{ name: exp.dotnotation ?? exp.name }}
+                      className="hover:underline"
+                    >
                       {exp.name}
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <span className="font-mono text-xs">{project}</span>
+                    <span className="font-mono text-xs" title={exp.project_path}>
+                      {project}
+                    </span>
                   </TableCell>
                   <TableCell>
                     {envNames.length > 0 ? (

@@ -9,7 +9,7 @@ export interface RecipeInfo {
   iso: string
   iso_sha256: string
   template?: string
-  setup_level: number
+  setup_level?: number | null
   disk_size?: string
   ram_mb?: number
   cpus?: number
@@ -18,7 +18,11 @@ export interface RecipeInfo {
 
 export interface Environment {
   name: string
-  project_path?: string
+  // Human OS label ("Ubuntu 24.04"), built by the backend from the registered VM.
+  os?: string
+  // Publication state: on the server / part of a pending publish request. Neither = local only.
+  published?: boolean
+  in_request?: boolean
   vm?: string
   vm_type?: string
   vm_sha256?: string
@@ -63,6 +67,8 @@ export interface CheckUrlRequest {
   url: string
   sha256?: string
   kind: 'vm' | 'iso'
+  // Required by the backend for a baked VM whose URL has no disk extension (share links).
+  vm_format?: string
 }
 
 export interface CheckUrlResult {
@@ -94,7 +100,9 @@ export interface OsProfile {
 
 export interface VerifyEnvironmentRequest {
   name: string
-  project_path: string
+  // Environments are global: verify needs no project. Omitted -> the backend runs it in
+  // its verify scratch directory.
+  project_path?: string
 }
 
 export interface VerifyEnvironmentResponse {
@@ -179,7 +187,7 @@ export function useVerifyEnvironment() {
     mutationFn: async (request: VerifyEnvironmentRequest) => {
       const { data } = await api.post<ApiResponse<VerifyEnvironmentResponse>>(
         endpoints.verifyEnvironment(request.name),
-        { project_path: request.project_path },
+        request.project_path ? { project_path: request.project_path } : {},
       )
       return unwrap(data, `Failed to start verification of "${request.name}".`)
     },

@@ -7,6 +7,7 @@ subprocess for target detection in experiments.
 
 import asyncio
 import logging
+import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -40,10 +41,11 @@ def find_free_cv_port(preferred: int = DEFAULT_CV_PORT, window: int = CV_PORT_SC
     "free" from "bound but not listening yet", which is exactly the state a
     sibling run's cv-server is in while it imports cv2/PaddleOCR.
 
-    Note the residual TOCTOU window — the socket is closed again before the
-    cv-server binds it, so two runs starting in the same instant can still pick
-    the same port. The loser attaches to the winner's server (``start()`` with
-    ``allow_existing=True``) rather than crashing.
+    The bind probe alone has a TOCTOU window (the socket is closed again before the
+    cv-server binds), so the chosen port is also reserved with a per-port lock file
+    (``adare.backend.vm.slots.try_reserve_port``) held until :meth:`MCPServerManager.stop`
+    or process exit. Two runs starting in the same instant can no longer pick the same
+    port and the loser can no longer attach to the winner's server.
 
     Args:
         preferred: First port to try.
@@ -55,10 +57,13 @@ def find_free_cv_port(preferred: int = DEFAULT_CV_PORT, window: int = CV_PORT_SC
     Raises:
         LoggedException: If no port in the window is free.
     """
+    from adare.backend.vm.slots import try_reserve_port
     from adare.helperfunctions.port import is_localhost_port_free
 
     for port in range(preferred, preferred + window):
-        if is_localhost_port_free(port):
+        # The bind probe alone leaves a gap (see below); the cross-process port reservation
+        # closes it: whoever holds the lock owns the port, even before its server has bound it.
+        if is_localhost_port_free(port) and try_reserve_port("cv", port):
             if port != preferred:
                 log.info(f"CV/OCR port {preferred} is in use (likely a concurrent run); using {port} instead")
             return port
@@ -132,6 +137,61 @@ def load_cv_state(run_directory: Path, machine_key: str | None = None) -> tuple[
     return port, pid if isinstance(pid, int) else None
 
 
+def resolve_ocr_settings(experiment_directory) -> tuple[str | None, str | None]:
+    """The experiment's OCR pin (``ocr: {engine, lang}`` in metadata.yml), or ``(None, None)``.
+
+    None fields fall back to the global default (ADARE_OCR_ENGINE / ADARE_OCR_LANG) in
+    :class:`MCPServerManager`. An unreadable metadata file is not this function's
+    concern: the run already validated it, so it falls back to the default here.
+    """
+    from adare.exceptions import LoggedException
+
+    if experiment_directory is None:
+        return None, None
+    try:
+        ocr = experiment_directory.load_metadata().ocr
+    except (LoggedException, OSError) as e:
+        log.warning(f"Could not read the experiment's OCR pin, using the default: {e}")
+        return None, None
+    if ocr is None:
+        return None, None
+    return ocr.engine, ocr.lang
+
+
+async def record_ocr_provenance(
+    manager: 'MCPServerManager', run_directory: Path, machine_key: str | None = None
+) -> dict | None:
+    """Write the server's OCR engine info to ``<run>/ocr.yml`` (``ocr-<machine>.yml``). Best-effort.
+
+    Records what actually serves this run - including a server that was attached to
+    rather than spawned - and warns when that differs from the requested profile.
+    """
+    import yaml
+
+    from adare.backend.experiment.directory import ocr_info_file
+
+    info = await manager.fetch_engine_info()
+    if info is None:
+        return None
+    if info.get('error'):
+        log.error(f"OCR engine of the cv-server failed to load: {info['error']}")
+    if info.get('engine') != manager.ocr_engine or (
+        manager.ocr_engine == 'rapidocr' and info.get('lang') != manager.ocr_lang
+    ):
+        log.warning(
+            f"cv-server on port {manager.server_port} runs OCR profile {info.get('profile')!r}, "
+            f"but {manager.ocr_engine}/{manager.ocr_lang} was requested (attached to an existing server?)"
+        )
+    record = {'requested': {'engine': manager.ocr_engine, 'lang': manager.ocr_lang}, **info}
+    target = ocr_info_file(run_directory, machine_key)
+    try:
+        target.write_text(yaml.safe_dump(record, sort_keys=False), encoding='utf-8')
+        log.info(f"OCR profile {info.get('profile')!r} recorded in {target}")
+    except OSError as e:
+        log.warning(f"Could not record OCR provenance to {target}: {e}")
+    return info
+
+
 class MCPServerManager:
     """
     Manager for the MCP GUI server subprocess.
@@ -153,6 +213,9 @@ class MCPServerManager:
         log_file: Path | None = None,
         debug: bool = False,
         debug_output_dir: Path | None = None,
+        exit_with_parent: bool = False,
+        ocr_engine: str | None = None,
+        ocr_lang: str | None = None,
     ):
         """
         Initialize MCP server manager.
@@ -164,13 +227,25 @@ class MCPServerManager:
             log_file: Path to log file for MCP server output
             debug: Enable debug logging
             debug_output_dir: Directory for debug output images
+            exit_with_parent: The server exits when this process is gone, so a crashed
+                or killed run leaves no orphan holding its port and memory. Off for dev
+                sessions, whose server deliberately outlives the CLI command.
+            ocr_engine: OCR engine for the server (``rapidocr`` | ``paddle``); None uses
+                ``ADARE_OCR_ENGINE`` (see config.server). Experiments pin theirs via
+                :func:`resolve_ocr_settings`.
+            ocr_lang: OCR recognition language (``latin`` | ``en``); None uses ``ADARE_OCR_LANG``.
         """
+        from adare.config import server as server_config
+
+        self.ocr_engine: str = ocr_engine or server_config.OCR_ENGINE
+        self.ocr_lang: str = ocr_lang or server_config.OCR_LANG
         self.server_port = server_port
         self.process: subprocess.Popen | None = None
         self.server_url = f"http://localhost:{server_port}/mcp"
         self.log_file = log_file
         self.debug = debug
         self.debug_output_dir = debug_output_dir
+        self.exit_with_parent = exit_with_parent
         # PID of the cv-server this manager is entitled to stop. Set when we spawn
         # one, or restored by a resumed dev session from its recorded state (see
         # save_cv_state / load_cv_state). None means "we have not identified a
@@ -178,6 +253,46 @@ class MCPServerManager:
         # Never derived from ppid — start_new_session=True makes ppid=1 the normal
         # state for a healthy server, so ppid carries no ownership information.
         self.known_server_pid: int | None = None
+
+    @staticmethod
+    def _child_env() -> dict[str, str]:
+        """Environment for the cv-server process."""
+        from adare.config import server as server_config
+
+        env = dict(os.environ)
+        # PaddleX otherwise probes model hosters on every start (~3 s); the legacy
+        # paddle profile loads its models from the local cache either way.
+        env.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
+        if server_config.OCR_THREADS:
+            env['ADARE_OCR_THREADS'] = str(server_config.OCR_THREADS)
+        return env
+
+    async def fetch_engine_info(self, timeout: float = 300.0) -> dict | None:
+        """Ask the running server which OCR engine/models/params it uses (None if it can't say).
+
+        The server loads and verifies its pinned models to answer, so the first call
+        after start can take as long as a model download.
+        """
+        import json
+
+        from fastmcp import Client
+        from fastmcp.exceptions import ToolError
+
+        try:
+            async with Client(self.server_url, timeout=timeout) as client:
+                result = await client.call_tool("get_engine_info", {})
+        except (ToolError, httpx.HTTPError, OSError, RuntimeError, TimeoutError) as e:
+            log.warning(f"Could not get OCR engine info from {self.server_url}: {e}")
+            return None
+        if result.data is not None:
+            return dict(result.data)
+        if result.content:
+            try:
+                parsed: dict = json.loads(result.content[0].text)
+                return parsed
+            except (ValueError, AttributeError) as e:
+                log.warning(f"Unreadable OCR engine info from {self.server_url}: {e}")
+        return None
 
     async def start(self, allow_existing: bool = True) -> bool:
         """
@@ -190,6 +305,12 @@ class MCPServerManager:
         Returns:
             True if server started successfully, False otherwise
         """
+        # Best effort: keep this port reserved across processes while our server uses it
+        # (find_free_cv_port reserved it; a stop()/start() restart must not lose it).
+        from adare.backend.vm.slots import try_reserve_port
+
+        try_reserve_port("cv", self.server_port, reentrant=True)
+
         # Check if port is already in use (server running from another session)
         if self._is_port_in_use(self.server_port):
             if allow_existing:
@@ -219,6 +340,10 @@ class MCPServerManager:
 
             if self.debug_output_dir:
                 cmd.extend(["--debug-output-dir", str(self.debug_output_dir)])
+            if self.exit_with_parent:
+                cmd.append("--exit-with-parent")
+            # Always explicit, so the server's profile never depends on its inherited env.
+            cmd.extend(["--ocr-engine", self.ocr_engine, "--ocr-lang", self.ocr_lang])
 
             # Start process with start_new_session=True to detach from parent
             # This ensures it survives when the CLI tool exits
@@ -228,6 +353,7 @@ class MCPServerManager:
                 stderr=subprocess.STDOUT if log_file_handle else subprocess.PIPE,
                 text=True,
                 start_new_session=True,
+                env=self._child_env(),
             )
             # We spawned it, so we own it — this is what later entitles
             # stop(force_external=True) to terminate it after our Popen handle is
@@ -350,6 +476,10 @@ class MCPServerManager:
 
         except (OSError, subprocess.SubprocessError) as e:
             log.error(f"Error stopping MCP server: {e}")
+        finally:
+            from adare.backend.vm.slots import release_port
+
+            release_port("cv", self.server_port)
 
     def is_running(self) -> bool:
         """

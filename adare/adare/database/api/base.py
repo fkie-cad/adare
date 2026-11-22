@@ -11,6 +11,7 @@ This module provides a robust foundation for database operations with:
 
 import functools
 import logging
+import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -18,6 +19,7 @@ from typing import Any, TypeVar, cast
 
 import sqlalchemy
 import ulid
+from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
@@ -35,6 +37,64 @@ _ENGINES: dict[str, tuple[sqlalchemy.Engine, sessionmaker]] = {}
 _SCHEMA_READY: set[str] = set()
 _ENGINES_LOCK = threading.Lock()
 
+# Per-connection settings for every SQLite engine (see configure_sqlite).
+# busy_timeout comes first so the switch to WAL waits for a competing writer.
+SQLITE_CONNECT_PRAGMAS = (
+    'PRAGMA busy_timeout=30000',
+    'PRAGMA journal_mode=WAL',
+    'PRAGMA synchronous=NORMAL',
+    'PRAGMA journal_size_limit=67108864',
+)
+# The one pragma that writes to the database file; it may fail on a read-only one.
+SQLITE_JOURNAL_MODE_PRAGMA = 'PRAGMA journal_mode=WAL'
+# Files SQLite keeps next to a database: the write-ahead log, its shared-memory
+# index, and the rollback journal of the pre-WAL journal mode.
+SQLITE_SIDECAR_SUFFIXES = ('-wal', '-shm', '-journal')
+
+
+def configure_sqlite(engine: sqlalchemy.Engine) -> sqlalchemy.Engine:
+    """Apply the connection pragmas to every new connection of a SQLite ``engine``.
+
+    - ``busy_timeout=30000``: wait up to 30 s for a competing writer instead of
+      failing with "database is locked".
+    - ``journal_mode=WAL``: readers no longer block the writer and vice versa.
+      Persistent in the database file; an in-memory database stays ``memory``.
+      Switching a file to WAL writes to it: on a read-only database file or
+      directory the switch fails, and the connection keeps the file's current
+      journal mode (logged at debug level) so the database can still be read.
+    - ``synchronous=NORMAL``: safe with WAL (a power loss can drop the last
+      commits but never corrupts the file) and far fewer fsyncs than ``FULL``.
+    - ``journal_size_limit=67108864``: a checkpoint truncates a ``-wal`` that
+      grew past 64 MiB (a long write burst) back to that size instead of
+      leaving it at its peak.
+
+    ``foreign_keys`` stays off by decision. Non-SQLite engines are returned unchanged.
+    """
+    if engine.dialect.name != 'sqlite':
+        return engine
+
+    @event.listens_for(engine, 'connect')
+    def _set_sqlite_pragmas(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            for pragma in SQLITE_CONNECT_PRAGMAS:
+                if pragma != SQLITE_JOURNAL_MODE_PRAGMA:
+                    cursor.execute(pragma)
+                    continue
+                try:
+                    cursor.execute(pragma)
+                except sqlite3.OperationalError as e:
+                    log.debug('%s failed (%s); keeping the current journal mode', pragma, e)
+        finally:
+            cursor.close()
+
+    return engine
+
+
+def create_sqlite_engine(db_path: Path) -> sqlalchemy.Engine:
+    """New engine for the SQLite database file ``db_path``, with the connection pragmas applied."""
+    return configure_sqlite(sqlalchemy.create_engine(f'sqlite:///{db_path.as_posix()}', echo=False))
+
 
 def _engine_for(db_path: Path) -> tuple[sqlalchemy.Engine, sessionmaker]:
     """Cached engine + session factory for ``db_path``.
@@ -51,11 +111,7 @@ def _engine_for(db_path: Path) -> tuple[sqlalchemy.Engine, sessionmaker]:
         if cached is not None:
             cached[0].dispose()
             _SCHEMA_READY.discard(key)
-        engine = sqlalchemy.create_engine(
-            f'sqlite:///{db_path.as_posix()}',
-            echo=False,  # Set to True for SQL debugging
-            pool_pre_ping=True,  # Verify connections before use
-        )
+        engine = create_sqlite_engine(db_path)
         factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
         _ENGINES[key] = (engine, factory)
         return engine, factory
@@ -68,6 +124,65 @@ def dispose_engines() -> None:
             engine.dispose()
         _ENGINES.clear()
         _SCHEMA_READY.clear()
+
+
+#: ``PRAGMA optimize`` settings: wait at most 1 s for a writer, sample at most ~400 rows per index.
+OPTIMIZE_BUSY_TIMEOUT_MS = 1000
+OPTIMIZE_ANALYSIS_LIMIT = 400
+# 0x10002: ANALYZE every table whose statistics are missing or stale, not only the
+# tables this (fresh) connection has queried, which plain ``PRAGMA optimize`` limits itself to.
+_OPTIMIZE_PRAGMA = 'PRAGMA optimize=0x10002'
+
+
+def optimize_engines() -> None:
+    """Run ``PRAGMA optimize`` on the database of every cached engine, then dispose the engine.
+
+    Called when a CLI command or the web API ends, as SQLite recommends for
+    short-lived connections: it refreshes the query planner statistics of tables
+    that changed enough (bounded by ``analysis_limit``, usually milliseconds). A
+    database that is read-only, locked by another writer for more than
+    :data:`OPTIMIZE_BUSY_TIMEOUT_MS`, or gone is skipped -- this never raises.
+    The engines stay cached and reconnect on their next use.
+    """
+    with _ENGINES_LOCK:
+        cached = [(key, engine) for key, (engine, _factory) in _ENGINES.items()]
+    for key, engine in cached:
+        if engine.dialect.name != 'sqlite' or not Path(key).is_file():
+            continue  # connecting would create an empty file in place of a deleted one
+        try:
+            with engine.connect() as conn:
+                conn.exec_driver_sql(f'PRAGMA busy_timeout={OPTIMIZE_BUSY_TIMEOUT_MS}')
+                conn.exec_driver_sql(f'PRAGMA analysis_limit={OPTIMIZE_ANALYSIS_LIMIT}')
+                conn.exec_driver_sql(_OPTIMIZE_PRAGMA)
+                conn.commit()
+        except (sqlite3.OperationalError, SQLAlchemyError) as e:
+            log.debug('PRAGMA optimize skipped for %s: %s', key, e)
+        finally:
+            engine.dispose()
+
+
+def remove_database_files(db_path: Path) -> bool:
+    """Delete a SQLite database file and its ``-wal``/``-shm``/``-journal`` sidecars.
+
+    Disposes every cached engine first: pooled connections keep the files open
+    (Windows cannot delete them), and a leftover sidecar must never be paired
+    with a new database of the same name. Missing files are skipped.
+
+    Returns:
+        True if at least one file was removed.
+
+    Raises:
+        OSError: If an existing file cannot be deleted.
+    """
+    dispose_engines()
+    removed = False
+    for path in (db_path, *(db_path.with_name(db_path.name + suffix) for suffix in SQLITE_SIDECAR_SUFFIXES)):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            continue
+        removed = True
+    return removed
 
 
 def experiment_name_from_run_path(run_path: str | Path | None) -> str | None:
@@ -115,9 +230,7 @@ def handle_db_errors(func):
         except SQLAlchemyError as e:
             log.error(f"Database error in {func.__name__}: {e}")
             raise DatabaseError(log, f"Database operation failed: {e}") from e
-        except Exception as e:
-            log.error(f"Unexpected error in {func.__name__}: {e}", exc_info=True)
-            raise
+        # Anything else propagates unchanged and is reported at the CLI boundary.
 
     return wrapper
 
@@ -216,13 +329,17 @@ class EnhancedDatabaseApi:
         if not self._session:
             raise DatabaseError(log, "No active session for transaction")
 
+        committed = False
         try:
             yield self._session
             self._session.commit()
-        except Exception as e:
-            self._session.rollback()
-            log.error(f"Transaction rolled back: {e}")
-            raise
+            committed = True
+        finally:
+            # Any failure (in the block or in the commit, KeyboardInterrupt
+            # included) rolls back; the exception itself propagates.
+            if not committed:
+                self._session.rollback()
+                log.error("Transaction rolled back")
 
     @validate_input
     @handle_db_errors
@@ -670,6 +787,11 @@ class ProjectDatabaseApi(EnhancedDatabaseApi):
         except (SQLAlchemyError, ImportError) as e:
             log.error(f"Failed to create project database schema: {e}")
             raise DatabaseError(log, f"Cannot initialize project database: {e}") from e
+        # Once per file and process, like the schema: is an old, bulky database worth
+        # an `adare db compact` hint? (A stat for every database below 512 MiB.)
+        from adare.database.compact_hint import check_project_database
+
+        check_project_database(self.project_path, self.db_path)
 
 
 # Legacy alias for backward compatibility

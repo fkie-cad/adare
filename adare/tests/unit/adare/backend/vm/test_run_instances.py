@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from adare.backend.vm import run_instances
+from adare.backend.vm import run_instances, slots
+from adare.backend.vm.exceptions import VMError
 from adare.database.api.vm import VmApi
 from adare.database.models.global_models import Vm, VmInstance
 
@@ -62,6 +63,37 @@ class TestAllocate:
 
         assert first.owner_pid == os.getpid() and first.status == 'active'
         assert first.websocket_port != second.websocket_port
+
+    def test_holds_the_vm_slot_until_the_run_is_removed(self, global_db, tmp_path):
+        if not slots.slots_enabled():
+            pytest.skip('VM slots need fcntl (POSIX)')
+        slot_dir = tmp_path / 'vm_slots'
+        vm = _vm()
+        slot = slots.acquire_slot(max_slots=1, directory=slot_dir, timeout=0)
+
+        instance = run_instances.allocate_qemu_run_instance(vm, '01JAAAAAAAAAAAAAAAAAAAAAAA', slot=slot)
+        with pytest.raises(slots.VMSlotTimeout):
+            slots.acquire_slot(max_slots=1, directory=slot_dir, timeout=0)
+
+        with (
+            patch('adare.hypervisor.qemu.run_resources.destroy_run_domain'),
+            patch('adare.hypervisor.qemu.run_resources.remove_run_files'),
+        ):
+            run_instances.remove_qemu_run_instance(instance.instance_name)
+        slots.acquire_slot(max_slots=1, directory=slot_dir, timeout=0).release()
+
+    def test_releases_the_vm_slot_when_allocation_fails(self, global_db, tmp_path):
+        if not slots.slots_enabled():
+            pytest.skip('VM slots need fcntl (POSIX)')
+        slot_dir = tmp_path / 'vm_slots'
+        slot = slots.acquire_slot(max_slots=1, directory=slot_dir, timeout=0)
+
+        with (
+            patch('adare.backend.vm.port_manager.reserve_port_atomically', return_value=None),
+            pytest.raises(VMError),
+        ):
+            run_instances.allocate_qemu_run_instance(_vm(), '01JAAAAAAAAAAAAAAAAAAAAAAA', slot=slot)
+        slots.acquire_slot(max_slots=1, directory=slot_dir, timeout=0).release()
 
 
 class TestPidAlive:
@@ -151,3 +183,30 @@ class TestReconcile:
 
         assert report.empty
         hooks['remove_run'].assert_not_called()
+
+
+class TestReservePortRace:
+    def test_port_taken_after_the_scan_retries_the_next_port(self, global_db):
+        """Two runs starting at once both see 18765 free; the loser must move on, not fail."""
+        from adare.backend.vm.port_manager import PORT_RANGE_START, reserve_port_atomically
+
+        vm = _vm()
+        _instance(vm, 'winner', port=PORT_RANGE_START)  # the other process committed first
+
+        with VmApi() as api, patch.object(api, 'get_all_vm_instances', return_value=[]):  # stale scan
+            port = reserve_port_atomically(api, vm.id, 'loser', '01JAAAAAAAAAAAAAAAAAAAAAAA')
+
+        assert port == PORT_RANGE_START + 1
+        with VmApi() as api:
+            assert api.get_vm_instance_by_name('loser').websocket_port == PORT_RANGE_START + 1
+
+    def test_duplicate_instance_name_is_not_retried_over_ports(self, global_db):
+        from sqlalchemy.exc import IntegrityError
+
+        from adare.backend.vm.port_manager import reserve_port_atomically
+
+        vm = _vm()
+        _instance(vm, 'taken-name')
+
+        with VmApi() as api, pytest.raises(IntegrityError, match='instance_name'):
+            reserve_port_atomically(api, vm.id, 'taken-name', '01JAAAAAAAAAAAAAAAAAAAAAAA')

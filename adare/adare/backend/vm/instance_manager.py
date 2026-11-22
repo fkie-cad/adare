@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 
 from adare.backend.vm.exceptions import VMError
 from adare.backend.vm.port_manager import reserve_port_atomically
+from adare.backend.vm.slots import DEFAULT_MAX_VMS, SlotLease, acquire_slot
 from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.database.models.global_models import VmInstance
 from adare.hypervisor.base.identifier_strategy import (
@@ -43,11 +44,15 @@ class VmInstanceManager:
     """
 
     # Configuration
-    MAX_INSTANCES_PER_VM = 20  # Maximum instances per source VM
+    MAX_INSTANCES_PER_VM = DEFAULT_MAX_VMS  # Maximum instances per source VM
     CLEANUP_AGE_DAYS = 7  # Age threshold for automatic cleanup
 
     def __init__(self):
         self._lock = threading.Lock()
+        # Cross-process VM slots (adare.backend.vm.slots): one slot per live instance this
+        # process allocated, kept until the instance is released or removed. The kernel drops
+        # them if the process dies, so a crashed run does not leak a slot.
+        self._slot_leases: dict[str, SlotLease] = {}
 
     def find_available_instance(self, vm_id: str) -> VmInstance | None:
         """
@@ -347,6 +352,10 @@ class VmInstanceManager:
         lock_acquired = False
         start_time = time.time()
 
+        # Cross-process capacity: take one VM slot first (blocks up to ADARE_VM_SLOT_TIMEOUT,
+        # default 30 s, while other adare processes hold all ADARE_MAX_VMS slots).
+        slot = await asyncio.to_thread(acquire_slot)
+
         try:
             # Try to acquire lock with timeout
             log.debug("Attempting to acquire instance manager lock")
@@ -391,19 +400,38 @@ class VmInstanceManager:
                 log.info(f"Found available instance for reuse: {available_instance.instance_name}")
                 reused = await self.reuse_instance(available_instance, experiment_run_id)
                 if reused is not None:
-                    return reused
+                    return self._keep_slot(reused, slot)
                 log.info("Lost race to claim available instance, creating new instance instead")
             else:
                 log.info("No available instances found, creating new instance")
-            return await self.create_new_instance(vm_id, experiment_run_id)
+            return self._keep_slot(await self.create_new_instance(vm_id, experiment_run_id), slot)
 
         except Exception as e:
             log.error(f"Error in allocate_instance_for_experiment: {e}")
             raise
         finally:
+            if slot is not None and not self._slot_in_use(slot):
+                slot.release()
             if lock_acquired:
                 self._lock.release()
                 log.debug(f"Released instance manager lock after {time.time() - start_time:.2f}s total")
+
+    def _keep_slot(self, instance: VmInstance, slot: SlotLease) -> VmInstance:
+        """Tie ``slot`` to ``instance`` until it is released or removed."""
+        instance_id = str(instance.id)
+        previous = self._slot_leases.pop(instance_id, None)
+        if previous is not None:
+            previous.release()
+        self._slot_leases[instance_id] = slot
+        return instance
+
+    def _slot_in_use(self, slot: SlotLease) -> bool:
+        return any(lease is slot for lease in self._slot_leases.values())
+
+    def _release_slot(self, instance_id: str) -> None:
+        lease = self._slot_leases.pop(str(instance_id), None)
+        if lease is not None:
+            lease.release()
 
     async def release_instance(self, instance_id: str):
         """
@@ -413,6 +441,8 @@ class VmInstanceManager:
             instance_id: VM instance ID to release
         """
         from adare.database.api.vm import VmApi
+
+        self._release_slot(instance_id)
 
         with VmApi() as api:
             instance = api.get_vm_instance_by_id(instance_id)
@@ -471,6 +501,8 @@ class VmInstanceManager:
 
             # Delete from database
             api.delete_vm_instance(instance_id)
+
+        self._release_slot(instance_id)
 
     async def remove_all_instances(self):
         """
@@ -873,7 +905,9 @@ class VmInstanceManager:
             # during boot-retry cleanup of an already-removed attempt), and it
             # never returns falsy — so probe existence first.
             if not QEMUVMRegistry.vm_exists(instance.instance_name):
-                log.debug(f"QEMU VM config already gone, nothing to clean up: {instance.instance_name}")
+                # The config is gone but the instance's own disk copy (~12 GB) may not be.
+                removed = run_resources.remove_pooled_disk_files(instance_name)
+                log.debug(f"QEMU VM config already gone, removed by name: {[p.name for p in removed]}")
                 return
 
             vm = QEMUVMRegistry.get_vm_by_name(instance.instance_name)

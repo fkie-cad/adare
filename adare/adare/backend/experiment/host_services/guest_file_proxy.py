@@ -17,6 +17,16 @@ from .vm_operation_proxy import VMOperationProxy
 log = logging.getLogger(__name__)
 
 
+#: Error texts QGA returns when the path does not exist (Linux errno / Windows Win32 message)
+_NOT_FOUND_MARKERS = ('no such file', 'cannot find the file', 'cannot find the path', 'not found', 'does not exist')
+
+
+def is_not_found_error(message: str) -> bool:
+    """True if a QGA error message says the path does not exist (not a transport failure)."""
+    lowered = message.lower()
+    return any(marker in lowered for marker in _NOT_FOUND_MARKERS)
+
+
 @dataclass
 class FileMetadata:
     """Metadata collected from guest file via QGA stat."""
@@ -82,8 +92,8 @@ class GuestFileProxy(VMOperationProxy):
             Path to local copy of the file
 
         Raises:
-            FileNotFoundError: If file doesn't exist on guest
-            RuntimeError: If download fails
+            FileNotFoundError: If the guest reports that the file doesn't exist
+            RuntimeError: If the download fails for any other reason (transport, permission)
         """
         if not force and guest_path in self._cache:
             log.debug(f"GuestFileProxy: cache hit for {guest_path}")
@@ -92,11 +102,19 @@ class GuestFileProxy(VMOperationProxy):
         local_path = self._guest_path_to_local(guest_path)
         local_path.parent.mkdir(parents=True, exist_ok=True)
 
+        from adare.hypervisor.exceptions import HypervisorException
+
         try:
             from adare.hypervisor.qemu.qga_file_transfer import QGAFileTransfer
 
             transfer = QGAFileTransfer(self.vm)
             await transfer.download_file(guest_path, local_path)
+        except HypervisorException as e:
+            # Only a "no such file" answer from the guest means absent; anything else
+            # (agent unreachable, timeout, permission) says nothing about the file.
+            if is_not_found_error(str(e)):
+                raise FileNotFoundError(f"{guest_path} does not exist on guest: {e}") from e
+            raise RuntimeError(f"Failed to pull {guest_path} from guest: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Failed to pull {guest_path} from guest: {e}") from e
 

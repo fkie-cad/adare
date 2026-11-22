@@ -655,6 +655,15 @@ class SnapshotMixin(AbstractSnapshotMixin, _Host):
         return snapshot_success
 
     def restore_external_snapshot(self, memory_path: str, disk_path: str) -> bool:
+        """Restore VM from external snapshot files, then resync the stale guest clock."""
+        restored = self._restore_external_snapshot_state(memory_path, disk_path)
+        if restored:
+            from adare.hypervisor.qemu.guest_clock import resync_guest_clock
+
+            resync_guest_clock(self)
+        return restored
+
+    def _restore_external_snapshot_state(self, memory_path: str, disk_path: str) -> bool:
         """
         Restore VM from external snapshot files.
 

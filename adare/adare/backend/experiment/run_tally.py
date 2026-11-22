@@ -55,6 +55,8 @@ CONTAINER_KINDS = frozenset({'loop', 'block'})
 
 # WARNING is pass-with-warning, the same rule ExperimentRun.result_status uses.
 PASSING_TEST_STATUSES = frozenset({int(StatusEnum.SUCCESS), int(StatusEnum.WARNING)})
+# A passing negative test whose act is unproven: counted on its own, neither passed nor failed
+INCONCLUSIVE_TEST_STATUS = int(StatusEnum.INCONCLUSIVE)
 
 
 def event_kind(event_type_specific: str | None) -> str:
@@ -88,6 +90,7 @@ class EventRow:
     loop_iterations_planned: int | None = None  # from the loop start event
     loop_iterations_completed: int | None = None  # from the loop complete event
     loop_actions_executed: int | None = None
+    effect: str | None = None  # automatic effect check of a GUI action (changed | unchanged | ...)
 
     @property
     def is_complete(self) -> bool:
@@ -125,9 +128,12 @@ class ExperimentTally:
     total_tests: int = 0
     successful_tests: int = 0
     failed_tests: int = 0
+    inconclusive_tests: int = 0
     incomplete_tests: int = 0
     top_level_tests: int = 0
     nested_tests: int = 0
+    # GUI actions whose automatic effect check saw no screen change (evidence screenshots kept)
+    unchanged_actions: int = 0
 
     loops: tuple[LoopSummary, ...] = field(default_factory=tuple)
 
@@ -167,11 +173,12 @@ class _Counter:
         self.total = 0
         self.successful = 0
         self.failed = 0
+        self.inconclusive = 0
         self.incomplete = 0
         self.top_level = 0
         self.nested = 0
 
-    def add(self, *, nested: bool, completed: bool, passed: bool):
+    def add(self, *, nested: bool, completed: bool, passed: bool, inconclusive: bool = False):
         self.total += 1
         if nested:
             self.nested += 1
@@ -179,6 +186,8 @@ class _Counter:
             self.top_level += 1
         if not completed:
             self.incomplete += 1
+        elif inconclusive:
+            self.inconclusive += 1
         elif passed:
             self.successful += 1
         else:
@@ -196,6 +205,7 @@ def build_tally(rows: Iterable[EventRow]) -> ExperimentTally:
     actions = _Counter()
     tests = _Counter()
     loops: list[LoopSummary] = []
+    unchanged = 0
 
     for group_rows in groups.values():
         kind = event_kind(group_rows[0].event_type_specific)
@@ -217,13 +227,17 @@ def build_tally(rows: Iterable[EventRow]) -> ExperimentTally:
 
         is_test = group_rows[0].category == 'test'
         passed = _group_passed(complete, is_test=is_test)
+        inconclusive = is_test and complete is not None and complete.test_status == INCONCLUSIVE_TEST_STATUS
 
         if is_test:
-            tests.add(nested=nested, completed=complete is not None, passed=passed)
+            tests.add(nested=nested, completed=complete is not None, passed=passed, inconclusive=inconclusive)
 
         if kind in UTILITY_KINDS:
             continue
-        actions.add(nested=nested, completed=complete is not None, passed=passed)
+        if complete is not None and complete.effect == 'unchanged':
+            unchanged += 1
+        # The test action itself ran fine; its unproven verdict is reported on the test line
+        actions.add(nested=nested, completed=complete is not None, passed=passed or inconclusive)
 
     return ExperimentTally(
         total_actions=actions.total,
@@ -235,9 +249,11 @@ def build_tally(rows: Iterable[EventRow]) -> ExperimentTally:
         total_tests=tests.total,
         successful_tests=tests.successful,
         failed_tests=tests.failed,
+        inconclusive_tests=tests.inconclusive,
         incomplete_tests=tests.incomplete,
         top_level_tests=tests.top_level,
         nested_tests=tests.nested,
+        unchanged_actions=unchanged,
         loops=tuple(loops),
     )
 
@@ -289,12 +305,13 @@ def load_event_rows(session, experiment_run_ulid: str) -> list[EventRow]:
                 group_id=event.event_group_id or event.action_id or event.id,
                 category='action',
                 event_type_specific=event.event_type_specific or '',
-                parent_group_id=event.parent_event_id,
+                parent_group_id=event.parent_group_id,
                 success=event.success,
                 sequence_order=_coerce_int(data.get('sequence_order')),
                 loop_iterations_planned=_coerce_int(data.get('iteration_count')),
                 loop_iterations_completed=_coerce_int(data.get('iterations_completed')),
                 loop_actions_executed=_coerce_int(data.get('actions_executed')),
+                effect=data.get('effect') if isinstance(data.get('effect'), str) else None,
             )
         )
 
@@ -311,7 +328,7 @@ def load_event_rows(session, experiment_run_ulid: str) -> list[EventRow]:
                 group_id=event.event_group_id or event.id,
                 category='test',
                 event_type_specific=event.event_type_specific or '',
-                parent_group_id=event.parent_event_id,
+                parent_group_id=event.parent_group_id,
                 success=event.success,
                 test_status=status,
             )

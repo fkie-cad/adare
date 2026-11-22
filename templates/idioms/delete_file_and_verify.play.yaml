@@ -11,6 +11,9 @@ settings:
   idle: 1.0
   timeout: 1800
   continue_on_test_failure: false
+  # ADARE checks the screen near every click/key for a change (default: warn).
+  # Under strict, an action that changes nothing fails the step.
+  effect_check: warn
 
 variables:
   file_manager: Files
@@ -18,6 +21,8 @@ variables:
   file_path: /root/testfile.txt
 
 actions:
+  # Control: the file must be there before the delete, or its absence later proves nothing.
+  - test: file_present_before
   - keyboard:
       key: super
       description: Open the activities / application search
@@ -44,10 +49,19 @@ actions:
   - idle:
       duration: 1.0
       description: Let the delete settle
+  - test: file_is_deleted
 
 tests:
+  - name: file_present_before
+    function: standard.file_exists
+    description: The file exists before the GUI deletes it
+    parameter:
+      dst: "{{ file_path }}"
   - name: file_is_deleted
-    function: filesystem.file_does_not_exist
+    function: standard.file_does_not_exist
     description: The file must no longer exist after deletion
     parameter:
-      path: "{{ file_path }}"
+      dst: "{{ file_path }}"
+    # A negative test: it is INCONCLUSIVE (not SUCCESS) if an earlier GUI action showed
+    # no effect or was skipped, or if a control below did not pass.
+    controls: [file_present_before]

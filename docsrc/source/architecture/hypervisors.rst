@@ -177,11 +177,16 @@ retry, ``KEEP_NVRAM | KEEP_TPM``); removing the run's domain deletes it
 (``NVRAM | TPM``, see ``adare.hypervisor.qemu.libvirt_undefine``).
 
 **Clean-up.** The end of a run removes the domain, every file above marked "The
-run", and the instance row. A run that crashes leaves them behind; the next QEMU
-run and ``adare vm prune`` reap them (``adare.backend.vm.run_instances.
-reconcile_instances``): rows whose owning process is gone, run files without a
-row, and pooled instances from before per-run VMs (each a full disk copy). Dev
-sessions keep their run until ``adare dev remove``.
+run", and the instance row. A run that crashes or is killed would leave them
+behind -- the domain belongs to libvirt, not to the ``adare`` process -- so the
+first QEMU run of a process also starts a small reaper
+(``adare.backend.vm.run_reaper``, its own session) that waits for that process
+to exit and then calls ``adare.backend.vm.run_instances.reconcile_instances``.
+The next QEMU run and ``adare vm prune`` call it as well. It removes rows whose
+owning process is gone (with their domain and files), run files without a row,
+and pooled instances from before per-run VMs (each a full disk copy); rows of a
+live process are never touched. Dev sessions keep their run until
+``adare dev remove``.
 
 **Integrity.** Before a run the template's SHA256 is checked against the hash
 recorded at ``env load``. The digest is cached in ``~/.adare/state/disk-digests/``

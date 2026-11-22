@@ -2,26 +2,39 @@
  * Pure utility formatters — no React, no side effects, never throw.
  */
 
+/** An ISO date-time without a zone designator (`Z` or `±hh:mm`), e.g. `2026-01-02T03:04:05.123`. */
+const NAIVE_ISO_DATETIME = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/
+
 /**
- * Parse an ISO-ish timestamp (string, number, Date, null, undefined) and
- * return a local "YYYY-MM-DD HH:mm" string, or "—" for anything invalid.
+ * Parse a backend timestamp (ISO string, epoch seconds/ms, Date) into a Date, or null if invalid.
+ *
+ * The backend stores times as naive UTC and sends them without a zone; `new Date()` would read
+ * such a string as local time, so it is read as UTC here.
  */
-export function formatDateTime(value: unknown): string {
-  if (value == null) return '—'
+export function parseTimestamp(value: unknown): Date | null {
   let d: Date
   if (value instanceof Date) {
     d = value
   } else if (typeof value === 'number') {
     // Heuristic: epoch-seconds have ~10 digits, epoch-ms ~13 digits
-    const ms = value < 1e12 ? value * 1000 : value
-    d = new Date(ms)
+    d = new Date(value < 1e12 ? value * 1000 : value)
   } else if (typeof value === 'string') {
-    if (value.trim() === '') return '—'
-    d = new Date(value)
+    const s = value.trim()
+    if (s === '') return null
+    d = new Date(NAIVE_ISO_DATETIME.test(s) ? `${s.replace(' ', 'T')}Z` : s)
   } else {
-    return '—'
+    return null
   }
-  if (isNaN(d.getTime())) return '—'
+  return isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * Parse an ISO-ish timestamp (string, number, Date, null, undefined) and
+ * return a local "YYYY-MM-DD HH:mm" string, or "—" for anything invalid.
+ */
+export function formatDateTime(value: unknown): string {
+  const d = parseTimestamp(value)
+  if (!d) return '—'
 
   const pad = (n: number) => String(n).padStart(2, '0')
   const year = d.getFullYear()
@@ -37,20 +50,8 @@ export function formatDateTime(value: unknown): string {
  * "just now", "3 days ago", or "—" for null/undefined/invalid input.
  */
 export function formatRelativeTime(value: unknown): string {
-  if (value == null) return '—'
-  let d: Date
-  if (value instanceof Date) {
-    d = value
-  } else if (typeof value === 'number') {
-    const ms = value < 1e12 ? value * 1000 : value
-    d = new Date(ms)
-  } else if (typeof value === 'string') {
-    if (value.trim() === '') return '—'
-    d = new Date(value)
-  } else {
-    return '—'
-  }
-  if (isNaN(d.getTime())) return '—'
+  const d = parseTimestamp(value)
+  if (!d) return '—'
 
   const diffMs = Date.now() - d.getTime()
   const diffSec = Math.round(diffMs / 1000)
@@ -100,4 +101,26 @@ export function formatCount(value: unknown, singular: string, plural?: string): 
   const count = isNaN(n) ? 0 : Math.round(n)
   const label = count === 1 ? singular : (plural ?? `${singular}s`)
   return `${count} ${label}`
+}
+
+/**
+ * Human-readable binary size: 512 B, 3.4 GiB, 1.2 TiB. "—" for null/invalid.
+ */
+export function formatBytes(value: unknown, digits = 1): string {
+  if (value == null) return '—'
+  let n = typeof value === 'number' ? value : Number(value)
+  if (!isFinite(n) || isNaN(n)) return '—'
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
+  let i = 0
+  while (Math.abs(n) >= 1024 && i < units.length - 1) {
+    n /= 1024
+    i++
+  }
+  return i === 0 ? `${Math.round(n)} B` : `${n.toFixed(digits)} ${units[i]}`
+}
+
+/** A 0–100 percentage, rounded: "42%". */
+export function formatPercent(value: unknown): string {
+  const n = value == null ? NaN : Number(value)
+  return isFinite(n) ? `${Math.round(n)}%` : '—'
 }

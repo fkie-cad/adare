@@ -1,38 +1,27 @@
 import type { ReactNode } from 'react'
 import { useParams, Link } from '@tanstack/react-router'
-import { Download, FileText, Play } from 'lucide-react'
+import { Download, FileText, Play, Sparkles } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useProjects } from '@/api/hooks/use-projects'
+import { useLaunchTerminal } from '@/components/terminal/use-launch-terminal'
+import { debugRunPrompt } from '@/components/terminal/claude-prompts'
 import { PageHeader } from '@/components/layout/page-header'
 import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge, statusToVariant } from '@/components/ui/badge'
+import { Badge, statusToVariant, type BadgeVariant } from '@/components/ui/badge'
+import { VerdictBadge } from '@/components/ui/verdict-badge'
+import { isInconclusive } from '@/lib/verdict'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { useRun, useRunArtifacts, type RunArtifact } from '@/api/hooks/use-runs'
+import { useRun, useRunArtifacts, type RunArtifact, type RunDetail, type RunTestResult } from '@/api/hooks/use-runs'
 import { endpoints } from '@/api/endpoints'
 import { formatDateTime, formatDuration } from '@/lib/formatters'
 
-interface RunDetailShape {
-  ulid: string
-  experiment_name?: string
-  environment_name?: string
-  project_name?: string
-  start_time?: string
-  end_time?: string
-  duration_seconds?: number
-  status?: string
-  result_status?: string
-  overall_result?: string
-  published?: boolean
-  os_info?: string
-  vm_box?: string
-  test_results?: Array<Record<string, unknown>>
-}
-
-function OverviewTab({ run }: { run: RunDetailShape }) {
+function OverviewTab({ run }: { run: RunDetail }) {
   const rows: [string, ReactNode][] = [
     ['Status', <Badge variant={statusToVariant(run.status ?? null)}>{run.status ?? '—'}</Badge>],
-    ['Result', run.result_status || run.overall_result || '—'],
+    ['Result', <VerdictBadge status={run.result_status} />],
     [
       'Experiment',
       run.experiment_name ? (
@@ -58,8 +47,9 @@ function OverviewTab({ run }: { run: RunDetailShape }) {
     ['Ended', formatDateTime(run.end_time)],
     ['Duration', formatDuration(run.duration_seconds)],
     ['Published', <Badge variant={run.published ? 'success' : 'outline'}>{run.published ? 'Yes' : 'No'}</Badge>],
-    ['OS', run.os_info || '—'],
-    ['VM box', run.vm_box || '—'],
+    // Only shown when the run's environment is known and has a VM.
+    ...(run.os_info ? ([['OS', run.os_info]] as [string, ReactNode][]) : []),
+    ...(run.vm_box ? ([['VM box', run.vm_box]] as [string, ReactNode][]) : []),
   ]
 
   return (
@@ -78,7 +68,14 @@ function OverviewTab({ run }: { run: RunDetailShape }) {
   )
 }
 
-function TestResultsTab({ results }: { results: Array<Record<string, unknown>> }) {
+function resultVariant(result: RunTestResult): BadgeVariant {
+  // Checked before `passed`: an inconclusive result is neither a pass nor a fail.
+  if (isInconclusive(result.status)) return 'inconclusive'
+  if (result.status === 'WARNING') return 'warning'
+  return result.passed ? 'success' : 'destructive'
+}
+
+function TestResultsTab({ results }: { results: RunTestResult[] }) {
   if (results.length === 0) {
     return (
       <EmptyState
@@ -89,15 +86,23 @@ function TestResultsTab({ results }: { results: Array<Record<string, unknown>> }
     )
   }
   return (
-    <div className="space-y-2">
+    <ul className="space-y-2">
       {results.map((result, i) => (
-        <Card key={i}>
-          <CardContent className="pt-6">
-            <pre className="text-xs whitespace-pre-wrap break-all">{JSON.stringify(result, null, 2)}</pre>
-          </CardContent>
-        </Card>
+        <li key={`${result.name}-${i}`}>
+          <Card>
+            <CardContent className="pt-6 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium break-all">{result.name}</span>
+                <VerdictBadge status={result.status} variant={resultVariant(result)} />
+              </div>
+              {result.details && (
+                <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words">{result.details}</p>
+              )}
+            </CardContent>
+          </Card>
+        </li>
       ))}
-    </div>
+    </ul>
   )
 }
 
@@ -200,13 +205,33 @@ export default function RunDetailPage() {
   const { ulid } = useParams({ from: '/runs/$ulid' })
   const runQuery = useRun(ulid)
   const artifactsQuery = useRunArtifacts(ulid)
-  const run = runQuery.data as RunDetailShape | undefined
+  const run = runQuery.data
+  const projects = useProjects()
+  const claude = useLaunchTerminal()
 
   return (
     <div className="p-6 space-y-6">
       <PageHeader
         title={run?.experiment_name ? `${run.experiment_name} · ${ulid.slice(0, 8)}` : ulid}
         description="Run details"
+        actions={
+          <Button
+            variant="outline"
+            disabled={!run || claude.isPending}
+            onClick={() =>
+              run &&
+              claude.launch({
+                kind: 'claude',
+                cwd: projects.data?.find((p) => p.name === run.project_name)?.path,
+                prompt: debugRunPrompt(run),
+                title: `Claude · run ${ulid.slice(-6)}`,
+              })
+            }
+          >
+            <Sparkles size={14} />
+            Debug with Claude
+          </Button>
+        }
       />
 
       <AsyncBoundary

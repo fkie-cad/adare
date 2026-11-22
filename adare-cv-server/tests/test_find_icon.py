@@ -47,6 +47,19 @@ def test_find_icon_locates_the_icon_off_the_event_loop(monkeypatch):
     assert abs(x - 216) <= 3 and abs(y - 136) <= 3
 
 
+def test_find_icon_reports_a_box_size_per_location():
+    icon, screenshot = _icon_and_screenshot()
+    find_icon = getattr(server.find_icon, 'fn', server.find_icon)
+
+    result = asyncio.run(
+        find_icon(base64.b64encode(icon).decode(), base64.b64encode(screenshot).decode(), max_results=3)
+    )
+
+    assert len(result['sizes']) == len(result['locations']) > 0
+    w, h = result['sizes'][0]
+    assert abs(w - 32) <= 4 and abs(h - 32) <= 4
+
+
 def test_shared_decodes_reuses_one_decode_and_hands_out_copies(monkeypatch):
     icon, screenshot = _icon_and_screenshot()
     calls = []

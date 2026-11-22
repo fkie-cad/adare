@@ -70,6 +70,11 @@ class VMLifecycleManager:
 
         from adare.backend.vm.commands import ensure_vm_ready_for_experiment
 
+        if not context.config.dev_mode:  # never from inside a dev session, which may be resuming
+            from adare.backend.devmode.expiry import remove_expired_dev_sessions
+
+            await asyncio.to_thread(remove_expired_dev_sessions)  # opt-in: ADARE_DEV_SESSION_MAX_AGE_DAYS
+
         async def allocate() -> VmInstance | None:
             vm_instance_id = await ensure_vm_ready_for_experiment(
                 vm_id=vm_id,
@@ -88,12 +93,18 @@ class VMLifecycleManager:
         if vm_instance is None:
             return
 
-        with StageCtxManager(
-            VMRuntimePreparationStage(), context.experiment_run_ulid, event=context.user_interrupt_event
-        ):
-            await self._ensure_vm_runtime_ready(context)
+        hostside = context.config.backend == 'hostside'
+        if not hostside:  # the agent wheels are only for the in-guest agent
+            with StageCtxManager(
+                VMRuntimePreparationStage(), context.experiment_run_ulid, event=context.user_interrupt_event
+            ):
+                await self._ensure_vm_runtime_ready(context)
 
         await self.strategy.prepare_vm_for_experiment(context)
+        if hostside:
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            hostside_lifecycle.prepare(context, self.hypervisor_type)
 
         # VirtualBox: a pooled instance can have vanished from VirtualBox since it
         # was last used. verify_and_cleanup removes such a row; allocate again,
@@ -159,6 +170,9 @@ class VMLifecycleManager:
         - VirtualBox: Configure port forwarding via VBoxManage
         - QEMU: Save port forwarding rules to config (applied on VM start)
         """
+        if context.config.backend == 'hostside':
+            log.info("Host-side backend: no agent port forwarding to set up")
+            return
         with StageCtxManager(VMNetworkingStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
             await self.strategy.setup_networking(context)
 
@@ -171,6 +185,11 @@ class VMLifecycleManager:
         - QEMU: Stop VM if needed, copy files via libguestfs
         """
         log.info("Starting file transfer setup")
+        if context.config.backend == 'hostside':
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            await hostside_lifecycle.stage(context)
+            return
         with StageCtxManager(
             VMFileTransferSetupStage(), context.experiment_run_ulid, event=context.user_interrupt_event
         ) as stage_ctx:
@@ -190,6 +209,11 @@ class VMLifecycleManager:
         Note: Stages are now created inside strategy.start_and_initialize_vm()
         for better granularity (VMStartStage, VMGuestAgentWaitStage, etc.)
         """
+        if context.config.backend == 'hostside':
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            await hostside_lifecycle.boot(context)
+            return
         await self.strategy.start_and_initialize_vm(context)
 
     async def wait_until_ready(self, context: ExperimentRunCtx):
@@ -242,6 +266,12 @@ class VMLifecycleManager:
         # Don't check interrupt event when retrieving artifacts during post-interrupt cleanup
         event = None if post_interrupt else context.user_interrupt_event
 
+        if context.config.backend == 'hostside':
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            await hostside_lifecycle.retrieve(context, self.strategy, event)
+            return
+
         with StageCtxManager(VMFileTransferRetrievalStage(), context.experiment_run_ulid, event=event) as stage_ctx:
             if self.hypervisor_type == 'qemu' and hasattr(self.strategy, 'file_transfer'):
                 stage_ctx.stage.sub_msg = self.strategy.file_transfer.retrieval_description
@@ -270,6 +300,11 @@ class VMLifecycleManager:
 
         # Check diff mode (only run for 'host' or 'auto' mode)
         diff_mode = self._get_diff_mode(context)
+        if context.config.backend == 'hostside':
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            await hostside_lifecycle.diff(context, None if post_interrupt else context.user_interrupt_event)
+            return
         if diff_mode not in ('host', 'auto'):
             log.debug(f"Host-side diff skipped - diff mode is '{diff_mode}'")
             return
@@ -393,6 +428,45 @@ class VMLifecycleManager:
             return getattr(context.playbook.settings, 'diff_mode', 'auto')
 
         return 'auto'
+
+    async def perform_pcap_filter(self, context: ExperimentRunCtx, post_interrupt: bool = False):
+        """Drop ADARE's own traffic (agent WebSocket, SMB share) from the run's pcap files.
+
+        Runs AFTER VM shutdown, when QEMU has closed the filter-dump file. On by
+        default; ``--no-filter-pcap`` / ``settings.filter_pcap: false`` keeps the raw
+        capture. See :mod:`adare.hypervisor.qemu.pcap_filter`.
+        """
+        # QEMU VMs only (VirtualBox has no filter-dump capture); getattr: context.vm is typed VirtualBoxVM | None
+        vm_config = getattr(getattr(context, "vm", None), "config", None)
+        if self.hypervisor_type != "qemu" or vm_config is None:
+            return
+        pcap_paths = getattr(vm_config, "pcap_paths", None) or {}
+        if not pcap_paths:
+            return
+        if not self._is_pcap_filter_enabled(context):
+            log.info("pcap filter disabled - keeping the raw capture")
+            return
+
+        from adare.hypervisor.qemu.pcap_filter import filter_pcap_file, rules_for_vm_config
+
+        rules = rules_for_vm_config(vm_config)
+        for netdev_id, pcap_path in pcap_paths.items():
+            path = Path(pcap_path)
+            if not path.is_file():
+                log.warning(f"pcap filter: no capture file for {netdev_id} at {path}")
+                continue
+            try:
+                await asyncio.to_thread(filter_pcap_file, path, rules)
+            except OSError as e:
+                log.warning(f"pcap filter failed for {path} (raw capture kept): {e}", exc_info=True)
+
+    def _is_pcap_filter_enabled(self, context: ExperimentRunCtx) -> bool:
+        """CLI override first, then playbook settings (default: on)."""
+        override = getattr(context.config, 'filter_pcap', None)
+        if override is not None:
+            return bool(override)
+        settings = getattr(context.playbook, 'settings', None) if context.playbook else None
+        return bool(getattr(settings, 'filter_pcap', True)) if settings else True
 
     async def perform_disk_export(self, context: ExperimentRunCtx, post_interrupt: bool = False):
         """
@@ -579,6 +653,10 @@ class VMLifecycleManager:
         Delegates to hypervisor-specific strategy for:
         - Hypervisor-specific cleanup (port forwarding, etc.)
         """
+        if context.config.backend == 'hostside':
+            from adare.backend.hostside import lifecycle as hostside_lifecycle
+
+            await hostside_lifecycle.finish(context)
         event = None if post_interrupt else context.user_interrupt_event
         with StageCtxManager(VMDestroyStage(), context.experiment_run_ulid, event=event):
             # Create experiment snapshot if requested

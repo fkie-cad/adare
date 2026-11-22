@@ -9,7 +9,7 @@ import click
 import cv2
 from fastmcp import FastMCP
 
-from .constants import DEFAULT_HOST, DEFAULT_MAX_RESULTS, DEFAULT_PORT, MCP_PATH, CVConstants
+from .constants import DEFAULT_HOST, DEFAULT_MAX_RESULTS, DEFAULT_PORT, MCP_PATH, CVConstants, OCRProfiles
 from .exceptions import FeatureMatchingError, ImageDecodingError, OCRProcessingError
 from .feature_matching import CannyEdgeMatcher, MultiScaleTemplateMatcher, ORBMatcher, SIFTMatcher, TemplateMatcher
 from .image_processing import (
@@ -19,7 +19,8 @@ from .image_processing import (
     non_maximum_suppression,
     shared_decodes,
 )
-from .ocr_processing import TextDetector
+from .ocr_engines import configure_engine, get_engine, package_version
+from .ocr_processing import _OCR_EXECUTOR, TextDetector
 
 log = logging.getLogger(__name__)
 
@@ -147,6 +148,7 @@ def _aggregate_matches(
     final_similarities = []
     final_methods = []
     final_contributing_methods = []
+    final_sizes = []
 
     for loc in filtered_locations:
         matches_at_loc = location_to_matches.get(loc, [])
@@ -167,10 +169,12 @@ def _aggregate_matches(
         final_similarities.append(primary.weighted_similarity)
         final_methods.append(primary.method)
         final_contributing_methods.append(contributing)
+        primary_size = primary.size if primary.size != (0, 0) else _estimate_match_size(primary.scale, icon_size)
+        final_sizes.append([int(primary_size[0]), int(primary_size[1])])
 
     # Sort by similarity (descending)
     sorted_results = sorted(
-        zip(final_locations, final_similarities, final_methods, final_contributing_methods),
+        zip(final_locations, final_similarities, final_methods, final_contributing_methods, final_sizes),
         key=lambda x: x[1],
         reverse=True,
     )
@@ -181,7 +185,10 @@ def _aggregate_matches(
 
     # Unpack
     if sorted_results:
-        final_locations, final_similarities, final_methods, final_contributing_methods = zip(*sorted_results)
+        final_locations, final_similarities, final_methods, final_contributing_methods, final_sizes = zip(
+            *sorted_results
+        )
+        final_sizes = list(final_sizes)
         final_locations = list(final_locations)
         final_similarities = list(final_similarities)
         final_methods = list(final_methods)
@@ -191,6 +198,7 @@ def _aggregate_matches(
         final_similarities = []
         final_methods = []
         final_contributing_methods = []
+        final_sizes = []
 
     # Determine method_used
     unique_methods = set(final_methods)
@@ -215,6 +223,9 @@ def _aggregate_matches(
         'similarities': final_similarities,
         'methods': final_methods,
         'contributing_methods': final_contributing_methods,
+        # Matched box size (width, height) per location, at the detected scale.
+        # Additive: hosts that predate it fall back to the template's native size.
+        'sizes': final_sizes,
         'method_used': method_used,
     }
 
@@ -606,6 +617,28 @@ async def find_text(
         return {"error": f"Text search failed: {str(e)}", "locations": []}
 
 
+@mcp.tool()
+async def get_engine_info() -> dict[str, Any]:
+    """Describe the OCR engine this server runs: profile, engine and package versions,
+    model names + sha256, parameters, language, leading-glyph tolerance, server version.
+
+    Loads (and verifies) the pinned models first, so a model problem surfaces here
+    rather than at the first click. Clients record the result per run (ocr.yml).
+    """
+    engine = get_engine()
+    try:
+        await asyncio.get_running_loop().run_in_executor(_OCR_EXECUTOR, engine.load)
+    except OCRProcessingError as e:
+        log.error(f"OCR engine failed to load: {e}")
+        return {"error": f"OCR engine failed to load: {e}", **engine.fingerprint()}
+    info = engine.fingerprint()
+    info["versions"] = {
+        **info.get("versions", {}),
+        "adare-cv-server": package_version("adare-cv-server"),
+    }
+    return info
+
+
 def create_server():
     """Create the FastMCP server instance."""
     return mcp
@@ -618,7 +651,30 @@ def create_server():
 @click.option(
     '--debug-output-dir', type=click.Path(file_okay=False, dir_okay=True), help='Directory for debug output images.'
 )
-def main(port: int, host: str, debug: bool, debug_output_dir: str = None) -> None:
+@click.option(
+    '--exit-with-parent', is_flag=True, help='Exit when the process that started the server is gone (no orphans).'
+)
+@click.option(
+    '--ocr-engine',
+    type=click.Choice(OCRProfiles.ENGINES),
+    default=None,
+    help=f'OCR engine (default: $ADARE_OCR_ENGINE or {OCRProfiles.DEFAULT_ENGINE}).',
+)
+@click.option(
+    '--ocr-lang',
+    type=click.Choice(OCRProfiles.LANGS),
+    default=None,
+    help=f'OCR recognition language for rapidocr (default: $ADARE_OCR_LANG or {OCRProfiles.DEFAULT_LANG}).',
+)
+def main(
+    port: int,
+    host: str,
+    debug: bool,
+    debug_output_dir: str = None,
+    exit_with_parent: bool = False,
+    ocr_engine: str | None = None,
+    ocr_lang: str | None = None,
+) -> None:
     """Start the Adare CV server."""
 
     # Configure logging
@@ -626,6 +682,12 @@ def main(port: int, host: str, debug: bool, debug_output_dir: str = None) -> Non
     logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     log.info(f"Starting Adare CV server on {host}:{port}")
+    configure_engine(ocr_engine, ocr_lang)
+
+    if exit_with_parent:
+        from .parent_watch import exit_when_parent_dies
+
+        exit_when_parent_dies()
 
     if debug_output_dir:
         from pathlib import Path

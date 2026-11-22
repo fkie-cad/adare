@@ -7,8 +7,10 @@ that can be consumed by any frontend (CLI, Web UI, REST API).
 
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
+import ulid
 from sqlalchemy.exc import SQLAlchemyError
 
 from adare.config.database import get_project_database_location
@@ -21,49 +23,35 @@ from adare.core.dto.show import (
     RunDetail,
     RunListItem,
     RunListRequest,
+    RunPruneRequest,
+    RunPruneResult,
     RunRemoveRequest,
     RunRemoveResult,
     TestfunctionDetail,
     TestfunctionListItem,
 )
 from adare.core.result import Result
+from adare.services.environment_source import os_label, parse_env_source
+from adare.services.show_run_extras import find_run_project_path, load_run_extras, project_paths_by_name
 
 log = logging.getLogger(__name__)
 
 
-def _parse_env_source(file: str | None) -> tuple[str, str, str, str, str]:
-    """Read (vm, vm_type, vm_sha256, source_profile, source_iso_sha256) from an
-    environment YAML file.
+def _run_started_at(item: RunListItem) -> datetime:
+    """Sort key: the run's start time (naive UTC), else its ULID's creation time.
 
-    Best-effort: a missing/unparseable file yields empty strings so the list
-    still renders. Recipe environments have no baked ``vm`` and return empties.
-    The last two are optional, informational install-profile provenance (see
-    ``EnvironmentMetadata.source_profile``) and are empty for most environments.
+    A run that is still setting up has no ``start_time`` yet; its ULID was minted when the run
+    began, so it still sorts with the newest runs instead of falling to either end.
     """
-    empty = ("", "", "", "", "")
-    if not file:
-        return empty
-    env_path = Path(file)
-    if not env_path.exists():
-        return empty
-    try:
-        from adare.exceptions import DataStructuringError
-        from adare.types.environment import parse_environment_file
-
-        metadata = parse_environment_file(env_path)
-    except (OSError, ValueError, DataStructuringError) as e:
-        # A single malformed file must never break the whole list.
-        log.warning(f"Could not parse environment source from {env_path}: {e}")
-        return empty
-    if metadata is None:
-        return empty
-    return (
-        metadata.vm or "",
-        metadata.vm_type or "",
-        metadata.vm_sha256 or "",
-        metadata.source_profile or "",
-        metadata.source_iso_sha256 or "",
-    )
+    started = item.start_time
+    if started is None:
+        try:
+            started = ulid.ULID.from_str(item.ulid).datetime
+        except ValueError:
+            return datetime.min
+    if started.tzinfo is not None:
+        started = started.astimezone(UTC).replace(tzinfo=None)
+    return started
 
 
 class ShowService:
@@ -74,15 +62,18 @@ class ShowService:
     across different frontends.
     """
 
-    def _query_across_projects(self, query_fn: Callable) -> list:
-        """Run a StructuredDataApi query across all project databases, aggregating results."""
+    def _query_across_projects(self, query_fn: Callable, project_name: str | None = None) -> list:
+        """Run a StructuredDataApi query across all project databases (or only ``project_name``'s)."""
         from adare.database.api.structured_data import StructuredDataApi
+        from adare.database.compact_hint import check_project_database
 
         all_results = []
         with StructuredDataApi() as global_api:
             projects = global_api.get_projects_structured()
 
         for project in projects:
+            if project_name is not None and project.name != project_name:
+                continue
             project_path = Path(project.path) if project.path else None
             if not project_path:
                 continue
@@ -92,6 +83,8 @@ class ShowService:
             try:
                 with StructuredDataApi(db_path=db_path) as project_api:
                     all_results.extend(query_fn(project_api, project.name))
+                # This path skips ProjectDatabaseApi, so queue the compact hint here.
+                check_project_database(project_path, db_path)
             except FileNotFoundError:
                 log.warning(f"Project database not found for {project.name}")
             except OSError as e:
@@ -124,7 +117,8 @@ class ShowService:
                 lambda api, name: api.get_runs_structured(
                     project_name=name,
                     experiment_name=experiment_filter,
-                )
+                ),
+                project_name=project_filter,
             )
 
             items = [
@@ -152,6 +146,8 @@ class ShowService:
             if environment_filter:
                 items = [item for item in items if item.environment_name == environment_filter]
 
+            # Newest first across all projects (each project database is queried in turn).
+            items.sort(key=_run_started_at, reverse=True)
             return Result.ok(items)
 
         except FileNotFoundError as e:
@@ -196,7 +192,9 @@ class ShowService:
                     ulid = latest_run_data['id'].iloc[0]
 
             # Search across all project databases for the run
-            all_runs = self._query_across_projects(lambda api, name: api.get_runs_structured(project_name=name))
+            all_runs = self._query_across_projects(
+                lambda api, name: api.get_runs_structured(project_name=name, run_ids=[ulid])
+            )
 
             run = next((r for r in all_runs if r.ulid == ulid), None)
             if not run:
@@ -206,6 +204,7 @@ class ShowService:
                     solutions=['Use `adare runs list` to find valid run ULIDs'],
                 )
 
+            extras = load_run_extras(self._query_across_projects, run.ulid, run.project_name, run.environment_ulid)
             detail = RunDetail(
                 ulid=run.ulid,
                 experiment_name=run.experiment_name,
@@ -220,6 +219,9 @@ class ShowService:
                 result_status=run.overall_result,
                 published=run.published,
                 fake=run.fake,
+                os_info=extras.os_info,
+                vm_box=extras.vm_box,
+                test_results=extras.test_results,
             )
 
             return Result.ok(detail)
@@ -266,10 +268,15 @@ class ShowService:
 
     def remove_run(self, request: RunRemoveRequest) -> Result[RunRemoveResult]:
         """
-        Remove a single experiment run.
+        Remove a single experiment run: its database rows and, unless
+        ``request.keep_files``, its run folder.
+
+        The folder is deleted only if it passes the run-folder safety test
+        (``backend/experiment/run_folders.py``); a refused or failed folder delete
+        never fails the row delete, it is reported in ``folder_note``.
 
         Args:
-            request: RunRemoveRequest with ULID and optional project path
+            request: RunRemoveRequest with ULID, optional project path and keep_files
 
         Returns:
             Result[RunRemoveResult] with removal status.
@@ -287,13 +294,21 @@ class ShowService:
                     solutions=['Use `adare runs list` to find the ULID of the run to remove'],
                 )
 
-            # Get project path for database context
-            project_path = request.project_path or determine_projectdirectory(None)
+            # Project for the database context: the caller's, else whichever registered
+            # project holds the run (a ULID is globally unique), else the working directory's.
+            project_path = (
+                request.project_path
+                or find_run_project_path(self._query_across_projects, request.ulid)
+                or determine_projectdirectory(None)
+            )
             if not project_path:
                 return Result.fail(
-                    code="NoProjectFoundError",
-                    message="No project found in current directory or parent directories",
-                    solutions=['Run this command from within a project directory'],
+                    code="RunNotFoundError",
+                    message=f"Run with ULID {request.ulid} not found in any project",
+                    solutions=[
+                        'Use `adare runs list` to find valid run ULIDs',
+                        'Run this command from within a project directory',
+                    ],
                 )
 
             with ExperimentApi(project_path) as api:
@@ -306,19 +321,20 @@ class ShowService:
                         solutions=['Use `adare runs list` to find valid run ULIDs'],
                     )
 
-                was_fake = run.fake
+                was_fake = bool(run.fake)
 
-                # Delete the run
-                api.delete_experiment_run(run)
+                # Delete the run and every row it owns
+                paths = api.delete_experiment_run(run)
                 api._session.commit()
 
-                return Result.ok(
-                    RunRemoveResult(
-                        removed=True,
-                        ulid=request.ulid,
-                        was_fake=was_fake,
-                    )
-                )
+            result = RunRemoveResult(removed=True, ulid=request.ulid, was_fake=was_fake)
+            if paths:
+                result.folder = paths[0]
+                if request.keep_files:
+                    result.folder_note = 'kept (--keep-files)'
+                else:
+                    self._remove_run_folder(Path(project_path), request.ulid, paths[0], result)
+            return Result.ok(result)
 
         except NoProjectFoundError as e:
             return Result.from_exception(e)
@@ -330,6 +346,68 @@ class ShowService:
                 code="RunRemovalError",
                 message=f"Failed to remove run: {e}",
                 solutions=['Check database permissions', 'Ensure the run exists'],
+            )
+
+    @staticmethod
+    def _remove_run_folder(project_path: Path, run_id: str, db_path: str, result: RunRemoveResult) -> None:
+        """Delete a removed run's folder through the safe helper; a refusal only goes into ``result``.
+
+        A dev session's run (its id is the session id) keeps its folder.
+        """
+        from adare.backend.experiment.run_folders import (
+            DevSessionRefs,
+            remove_db_run_folders,
+            try_load_dev_session_refs,
+        )
+
+        dev_sessions = try_load_dev_session_refs()
+        if isinstance(dev_sessions, DevSessionRefs) and dev_sessions.refers_to(run_id=run_id):
+            dev_sessions = dev_sessions.with_run_paths([db_path])
+        (removal,) = remove_db_run_folders(project_path, [db_path], dev_sessions=dev_sessions)
+        result.folder = str(removal.path)
+        result.folder_removed = removal.removed
+        if removal.missing:
+            result.folder_note = 'no folder on disk'
+        elif not removal.removed:
+            result.folder_note = f'folder kept: {removal.reason}'
+
+    def prune_runs(self, request: RunPruneRequest) -> Result[RunPruneResult]:
+        """List (dry run) or remove run folders without a database row and, with ``fake``, fake runs.
+
+        Only the current project (``request.project_path``) is pruned. Nothing is
+        deleted unless ``request.execute`` is set.
+        """
+        from adare.backend.basics import determine_projectdirectory
+        from adare.backend.experiment.run_folders import RunReferencesUnavailableError
+        from adare.backend.experiment.run_prune import execute_prune, plan_prune
+
+        project_path = request.project_path or determine_projectdirectory(None)
+        if not project_path:
+            return Result.fail(
+                code="NoProjectFoundError",
+                message="No project found in current directory or parent directories",
+                solutions=['Run this command from within a project directory'],
+            )
+        project_path = Path(project_path)
+        try:
+            entries = plan_prune(project_path, fake=request.fake, older_than_days=request.older_than_days)
+            result = RunPruneResult(project_path=str(project_path), dry_run=not request.execute, entries=entries)
+            if request.execute and entries:
+                result.rows_deleted = execute_prune(project_path, entries)
+            return Result.ok(result)
+        except RunReferencesUnavailableError as e:
+            log.warning(f"Not pruning runs of {project_path}: {e}")
+            return Result.fail(
+                code="RunPruneRefused",
+                message=f"Nothing was pruned: {e}",
+                solutions=['Fix the database or project named above, then run the prune again'],
+            )
+        except SQLAlchemyError as e:
+            log.error(f"Failed to prune runs of {project_path}: {e}")
+            return Result.fail(
+                code="RunPruneError",
+                message=f"Failed to prune runs: {e}",
+                solutions=['Check the project database', 'Run `adare db status`'],
             )
 
     # =========================================================================
@@ -399,7 +477,7 @@ class ShowService:
 
             items = []
             for env in environments:
-                vm, vm_type, vm_sha256, _source_profile, _source_iso_sha256 = _parse_env_source(env.file)
+                source = parse_env_source(env.file)
                 disk_path = vm_files.get(env.vm_id) or ''
                 # Only a local path can be stat'ed; a URL-baked env has nothing to check
                 # here, which is reported as unknown rather than as missing.
@@ -423,11 +501,13 @@ class ShowService:
                         in_request=env.in_request,
                         created_at=env.created_at,
                         file=env.file,
-                        vm=vm,
-                        vm_type=vm_type,
-                        vm_sha256=vm_sha256,
+                        vm=source.vm,
+                        vm_type=source.vm_type,
+                        vm_sha256=source.vm_sha256,
                         disk_path=disk_path,
                         disk_present=disk_present,
+                        os=os_label(env.osinfo_os, env.osinfo_distribution, env.osinfo_version, env.os_info),
+                        recipe=source.recipe,
                     )
                 )
 
@@ -466,7 +546,7 @@ class ShowService:
                     solutions=['Use `adare env list` to list available environments'],
                 )
 
-            vm, vm_type, vm_sha256, source_profile, source_iso_sha256 = _parse_env_source(env.file)
+            source = parse_env_source(env.file)
 
             # Same disk check as list_environments, so `env info` cannot report an
             # environment as healthy when the qcow2 a run would boot has been pruned.
@@ -498,13 +578,15 @@ class ShowService:
                 in_request=env.in_request,
                 created_at=env.created_at,
                 file=env.file,
-                vm=vm,
-                vm_type=vm_type,
-                vm_sha256=vm_sha256,
-                source_profile=source_profile,
-                source_iso_sha256=source_iso_sha256,
+                vm=source.vm,
+                vm_type=source.vm_type,
+                vm_sha256=source.vm_sha256,
+                source_profile=source.source_profile,
+                source_iso_sha256=source.source_iso_sha256,
                 disk_path=disk_path,
                 disk_present=disk_present,
+                os=os_label(env.osinfo_os, env.osinfo_distribution, env.osinfo_version, env.os_info),
+                recipe=source.recipe,
             )
 
             return Result.ok(detail)
@@ -534,9 +616,17 @@ class ShowService:
             Result[List[ExperimentListItem]] with list of experiments.
         """
         try:
+            wanted_tags = set(tags or [])
+            # Tags live in each project's database, so filter on the rows aggregated from them
+            # (all requested tags must be present).
             experiments = self._query_across_projects(
-                lambda api, name: api.get_experiments_structured(project_name=name)
+                lambda api, name: [
+                    exp
+                    for exp in api.get_experiments_structured(project_name=name)
+                    if wanted_tags <= set(exp.tags or [])
+                ]
             )
+            project_paths = project_paths_by_name()
 
             items = [
                 ExperimentListItem(
@@ -556,21 +646,10 @@ class ShowService:
                     created_at=exp.created_at,
                     run_count=exp.run_count,
                     last_run=exp.last_run,
+                    project_path=project_paths.get(exp.project, ""),
                 )
                 for exp in experiments
             ]
-
-            if tags:
-                from adare.database.api.tag import TagApi
-
-                with TagApi() as tag_api:
-                    result = tag_api.get_entities_by_tags(
-                        tag_names=tags,
-                        entity_type='experiments',
-                        match_all=True,
-                    )
-                matching_ids = {exp.id for exp in result.get('experiments', [])}
-                items = [item for item in items if item.ulid in matching_ids]
 
             return Result.ok(items)
 
@@ -640,6 +719,7 @@ class ShowService:
                 created_at=exp.created_at,
                 run_count=exp.run_count,
                 last_run=exp.last_run,
+                project_path=project_paths_by_name().get(exp.project, ""),
             )
 
             return Result.ok(detail)

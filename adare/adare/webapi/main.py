@@ -31,8 +31,14 @@ from adare.core.dto.devmode import (
     DevSessionStartRequest,
     DevSessionStateRequest,
     DevSessionStopRequest,
+    checkpoint_name_error,
 )
+from adare.core.result import Result
 from adare.webapi.adapters import result_to_response
+from adare.webapi.routes.actions import router as actions_router
+from adare.webapi.routes.system import router as system_router
+from adare.webapi.terminal import manager as terminal_manager
+from adare.webapi.terminal import router as terminal_router
 from adare.webapi.websocket_manager import ws_manager
 
 logger = logging.getLogger(__name__)
@@ -45,9 +51,20 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Create the appdata directory tree before serving requests."""
+    """Create the appdata directory tree, sample host usage while serving; on exit hang up terminals
+    and ``PRAGMA optimize`` the databases the server used."""
+    from adare.backend.system.history import sample_forever
+
     ensure_directories()
-    yield
+    sampler = asyncio.create_task(sample_forever())
+    try:
+        yield
+    finally:
+        sampler.cancel()
+        await terminal_manager.shutdown()
+        from adare.database.api.base import optimize_engines
+
+        await asyncio.to_thread(optimize_engines)
 
 
 # Initialize FastAPI app
@@ -373,6 +390,14 @@ async def create_checkpoint(session_id: str, request: CheckpointCreateRequest):
     """
     logger.info(f"Creating checkpoint '{request.name}' for session {session_id}")
 
+    # Checkpoint names are URL path segments for restore/delete; reject the ones that
+    # could be created but never addressed again (e.g. containing "/").
+    name_error = checkpoint_name_error(request.name)
+    if name_error:
+        return result_to_response(
+            Result.fail("INVALID_CHECKPOINT_NAME", name_error, ["Use letters, digits, spaces, '.', '_' or '-' only"])
+        )
+
     dto = DevCheckpointCreateRequest(session_id=session_id, name=request.name, description=request.description)
 
     result = await asyncio.to_thread(api.devmode.create_checkpoint, dto)
@@ -461,7 +486,12 @@ def save_playbook(request: PlaybookSaveRequest):
     playbooks_dir = Path("playbooks")
     playbooks_dir.mkdir(exist_ok=True)
 
-    file_path = playbooks_dir / request.filename
+    # A bare file name only: no directories, no absolute paths, no `..`, so a
+    # request can never write outside the playbooks directory.
+    name = Path(request.filename)
+    if name.is_absolute() or name.name != request.filename or name.name in ("", ".", ".."):
+        raise HTTPException(status_code=400, detail="filename must be a plain file name without directories")
+    file_path = playbooks_dir / name
     if not file_path.suffix:
         file_path = file_path.with_suffix(".yml")
 
@@ -498,6 +528,11 @@ def load_playbook(filename: str):
     with open(file_path) as f:
         playbook_dict = yaml.safe_load(f)
 
+    if playbook_dict is None:  # empty file
+        playbook_dict = {}
+    if not isinstance(playbook_dict, dict):
+        raise HTTPException(status_code=422, detail=f"Playbook '{filename}' is not a YAML mapping")
+
     return {
         "success": True,
         "data": {
@@ -505,105 +540,6 @@ def load_playbook(filename: str):
             "settings": playbook_dict.get("settings", {}),
         },
     }
-
-
-@app.get("/api/actions/types")
-def get_action_types():
-    """
-    Get metadata for all available action types.
-
-    Returns:
-        Action type definitions
-    """
-    # Define action type metadata
-    action_types = {
-        "Click": {
-            "category": "GUI",
-            "description": "Click on a target (image or text)",
-            "required_fields": ["target"],
-            "optional_fields": ["strategy", "button", "click_count", "wait"],
-        },
-        "Keyboard": {
-            "category": "GUI",
-            "description": "Type text or press keys",
-            "required_fields": ["text"],
-            "optional_fields": ["wait"],
-        },
-        "Scroll": {
-            "category": "GUI",
-            "description": "Scroll in a direction",
-            "required_fields": ["direction"],
-            "optional_fields": ["clicks", "wait"],
-        },
-        "Block": {
-            "category": "Control Flow",
-            "description": "Group actions together",
-            "required_fields": ["actions"],
-            "optional_fields": ["description"],
-        },
-        "Loop": {
-            "category": "Control Flow",
-            "description": "Repeat actions",
-            "required_fields": ["actions", "count"],
-            "optional_fields": ["description"],
-        },
-        "Command": {
-            "category": "System",
-            "description": "Execute shell command",
-            "required_fields": ["command"],
-            "optional_fields": ["timeout", "wait"],
-        },
-        "Screenshot": {
-            "category": "Data",
-            "description": "Capture screenshot",
-            "required_fields": ["filename"],
-            "optional_fields": ["wait"],
-        },
-        "Wait": {
-            "category": "Control Flow",
-            "description": "Wait for duration",
-            "required_fields": ["seconds"],
-            "optional_fields": [],
-        },
-        "WaitFor": {
-            "category": "Control Flow",
-            "description": "Wait for condition",
-            "required_fields": ["condition"],
-            "optional_fields": ["timeout"],
-        },
-        "SetVariable": {
-            "category": "Data",
-            "description": "Set a variable",
-            "required_fields": ["name", "value"],
-            "optional_fields": [],
-        },
-        "FileRead": {
-            "category": "Data",
-            "description": "Read file contents",
-            "required_fields": ["path"],
-            "optional_fields": ["variable"],
-        },
-        "FileWrite": {
-            "category": "Data",
-            "description": "Write to file",
-            "required_fields": ["path", "content"],
-            "optional_fields": [],
-        },
-        "RegistryRead": {
-            "category": "System",
-            "description": "Read Windows registry",
-            "required_fields": ["key", "value"],
-            "optional_fields": ["variable"],
-        },
-        "Test": {
-            "category": "Tests",
-            "description": "Run test function",
-            "required_fields": ["function"],
-            "optional_fields": ["args"],
-        },
-    }
-
-    return {"success": True, "data": action_types}
 
 
 # =============================================================================
@@ -675,6 +611,7 @@ from adare.webapi.spice_proxy import router as spice_proxy_router
 from adare.webapi.vm_watch import router as vm_watch_router
 
 app.include_router(projects_router)
+app.include_router(actions_router)
 app.include_router(experiments_router)
 app.include_router(environments_router)
 app.include_router(runs_router)
@@ -684,6 +621,8 @@ app.include_router(vm_instances_router)
 app.include_router(gui_agent_router)
 app.include_router(web_sync_router)
 app.include_router(manage_router)
+app.include_router(system_router)
+app.include_router(terminal_router)
 app.include_router(vm_watch_router)
 app.include_router(spice_proxy_router)
 
@@ -706,9 +645,14 @@ def spa_fallback(path: str):
     """Serve static files from the built frontend, with SPA index.html fallback."""
     if not _frontend_dist.is_dir():
         raise HTTPException(status_code=404, detail="Frontend not built. Run: pnpm build")
-    file_path = (_frontend_dist / path).resolve()
-    # Prevent path traversal
-    if not str(file_path).startswith(str(_frontend_dist)):
+    # Unknown API paths must stay JSON 404s; serving index.html for them would
+    # hide backend 404s from the frontend.
+    if path == "api" or path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not Found")
+    dist = _frontend_dist.resolve()
+    file_path = (dist / path).resolve()
+    # Prevent path traversal (a string-prefix check would admit `dist-private/`).
+    if not file_path.is_relative_to(dist):
         raise HTTPException(status_code=404)
     if file_path.is_file():
         return FileResponse(file_path)

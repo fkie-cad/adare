@@ -323,6 +323,7 @@ class TestLoader:
 
                         # Also capture any new metadata generated
                         metadata = self.variable_resolver.get_placeholder_metadata()
+                        _attach_guest_utc_offset(metadata, runtime_execution_context)
                         if metadata:
                             resolved_test['_VARIABLE_METADATA'] = metadata
                             log.info(f"Generated metadata during runtime resolution: {list(metadata.keys())}")
@@ -619,7 +620,11 @@ class TestLoader:
             # Structure the test using cattrs
             import cattrs
 
+            _register_primitive_union_hook()
             test_instance = cattrs.structure(resolved_test, test_class)
+            # The placeholder metadata (!re, !timestamp) travels as `_VARIABLE_METADATA`, which
+            # cattrs does not map onto `variable_metadata`; set it as the agent does.
+            test_instance.variable_metadata = resolved_test.get('_VARIABLE_METADATA', {})
 
             log.debug(f"Test Loader: Structured host test '{test_name}' as {test_class.__name__}")
             return test_instance
@@ -630,3 +635,49 @@ class TestLoader:
         except (TypeError, KeyError, AttributeError) as e:
             log.error(f"Test Loader: Failed to structure test '{test_name}': {e}", exc_info=True)
             raise ValueError(f"Failed to structure test: {e}") from e
+
+
+_PRIMITIVE_UNION_HOOK = False
+
+
+def _register_primitive_union_hook() -> None:
+    """Let cattrs structure ``str | int | float`` style parameters (passed through unchanged).
+
+    Test functions declare e.g. ``expected_time: str | int | float``. cattrs refuses such unions without
+    a hook, so a test using one (``standard.file_timestamps``) could not be structured for host
+    execution, while the guest agent structures it. The value is already a plain YAML scalar.
+    """
+    global _PRIMITIVE_UNION_HOOK
+    if _PRIMITIVE_UNION_HOOK:
+        return
+    import types
+    import typing
+
+    import cattrs
+
+    scalars = (str, int, float, bool, type(None))
+
+    def _is_scalar_union(t) -> bool:
+        if typing.get_origin(t) not in (typing.Union, types.UnionType):
+            return False
+        args = typing.get_args(t)
+        return bool(args) and all(a in scalars for a in args)
+
+    cattrs.register_structure_hook_func(_is_scalar_union, lambda value, _type: value)
+    _PRIMITIVE_UNION_HOOK = True
+
+
+def _attach_guest_utc_offset(metadata: dict[str, Any], runtime_execution_context: dict[str, Any]) -> None:
+    """Tell timestamp comparisons the guest's UTC offset, measured right before this test.
+
+    Without it a test reads "local" artifact times in the timezone of the machine
+    running the test, which in host mode is the host, not the guest.
+    """
+    from adare.backend.experiment.clock import GUEST_UTC_OFFSET_KEY
+
+    guest_utc_offset = runtime_execution_context.get(GUEST_UTC_OFFSET_KEY)
+    if not guest_utc_offset:
+        return
+    for entry in metadata.values():
+        if isinstance(entry, dict) and entry.get('type') == 'timestamp':
+            entry['guest_utc_offset'] = guest_utc_offset

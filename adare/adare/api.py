@@ -13,6 +13,7 @@ Available API facades:
 - api.show - Data retrieval and display
 - api.vm - Virtual machine operations
 - api.web - Web integration and sync
+- api.system - Host resources, storage, usage history, run capacity
 
 All API methods return Result[T] objects for consistent error handling.
 """
@@ -50,9 +51,13 @@ class DevModeAPI:
         """Cleanup stale sessions."""
         return self._service.cleanup_stale_sessions(request)
 
-    def reset_session(self, request):
-        """Reset session (soft or hard)."""
-        return self._service.reset_session(request)
+    def reset_soft(self, request):
+        """Soft reset: restore the initial external snapshot without an OS boot (QEMU) / reset variables (VirtualBox)."""
+        return self._service.reset_soft(request)
+
+    def reset_hard(self, request):
+        """Hard reset: stop the VM, restore its initial snapshot, restart it and reconnect."""
+        return self._service.reset_hard(request)
 
     def execute_action(self, request):
         """Execute a single action."""
@@ -283,6 +288,16 @@ class ManageAPI:
         """Reset the database."""
         return self._service.reset_db()
 
+    def compact_db(self, project=None, all_databases=False, dry_run=False, progress=None):
+        """Strip screenshot copies from old action results and VACUUM the database(s)."""
+        return self._service.compact_db(
+            project=project, all_databases=all_databases, dry_run=dry_run, progress=progress
+        )
+
+    def check_db(self, project=None, all_databases=False):
+        """Read-only database health check (quick_check, foreign keys, orphaned rows)."""
+        return self._service.check_db(project=project, all_databases=all_databases)
+
     def reset_all_vms(self, force=False):
         """Reset all VMs."""
         return self._service.reset_all_vms(force=force)
@@ -416,6 +431,10 @@ class ShowAPI:
     def remove_run(self, request):
         """Remove a run."""
         return self._service.remove_run(request)
+
+    def prune_runs(self, request):
+        """List or remove run folders without a database row (and fake runs)."""
+        return self._service.prune_runs(request)
 
     def get_run_files(self, ulid):
         """Resolve a run's on-disk directory and known artifact file paths."""
@@ -608,6 +627,37 @@ class WebAPI:
         return SubmitService().precheck_submission(entity_type, name)
 
 
+class SystemAPI:
+    """Host resources, storage, usage history and run capacity API."""
+
+    def __init__(self, service=None):
+        if service is None:
+            from adare.services.system_service import SystemService
+
+            service = SystemService()
+        self._service = service
+
+    def get_resources(self):
+        """Live CPU, memory, disk and running VMs."""
+        return self._service.get_resources()
+
+    def get_storage(self, refresh=False):
+        """Disk usage of ADARE's directories, run disks by owner, projects."""
+        return self._service.get_storage(refresh=refresh)
+
+    def get_history(self, hours=24):
+        """Host usage history."""
+        return self._service.get_history(hours=hours)
+
+    def get_run_usage(self, environment_name=None, limit=100):
+        """Measured resource usage of recent runs."""
+        return self._service.get_run_usage(environment_name=environment_name, limit=limit)
+
+    def get_capacity(self):
+        """How many more runs of each environment fit."""
+        return self._service.get_capacity()
+
+
 class AdareAPI:
     """
     Main ADARE API facade.
@@ -624,6 +674,7 @@ class AdareAPI:
     - api.show - Data retrieval and display
     - api.vm - Virtual machine operations
     - api.web - Web integration and sync
+    - api.system - Host resources, storage, usage history, run capacity
     """
 
     @cached_property
@@ -661,3 +712,7 @@ class AdareAPI:
     @cached_property
     def web(self):
         return WebAPI()
+
+    @cached_property
+    def system(self):
+        return SystemAPI()

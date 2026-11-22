@@ -7,7 +7,7 @@ is still running.
 """
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from adare.backend.devmode.session import DevModeSession, DevModeSnapshot
@@ -23,7 +23,9 @@ from adare.database.models.devsession import DevSession
 log = logging.getLogger(__name__)
 
 
-async def restore_infrastructure_context(session: DevModeSession, db_session: DevSession) -> bool:
+async def restore_infrastructure_context(
+    session: DevModeSession, db_session: DevSession, for_cleanup: bool = False
+) -> bool:
     """
     Restore underlying infrastructure context (VM, directories, config).
 
@@ -66,8 +68,8 @@ async def restore_infrastructure_context(session: DevModeSession, db_session: De
         # But we need to manually set the experiment_run_ulid for proper functioning
         # We use session_id directly as the experiment run ID (aligned with session.py)
         session.experiment_ctx.experiment_run_ulid = session.session_id
-        session.experiment_ctx.timestamp_start = datetime.now()
-        session.experiment_ctx.timestamp_before_vm_start = datetime.now()
+        session.experiment_ctx.timestamp_start = datetime.now(UTC)
+        session.experiment_ctx.timestamp_before_vm_start = datetime.now(UTC)
         session.experiment_ctx.adarevm = ADAREVM_DIR
         session.experiment_ctx.adarelib = ADARELIB_DIR
 
@@ -168,6 +170,9 @@ async def restore_infrastructure_context(session: DevModeSession, db_session: De
                 vm_instance = vm_api.get_vm_instance_by_name(vm_name)
                 if vm_instance and vm_instance.websocket_port:
                     session.experiment_ctx.config.websocket_port = vm_instance.websocket_port
+                elif for_cleanup:
+                    # Removal only destroys the VM; the agent port does not matter.
+                    log.debug(f"No websocket_port recorded for VM instance {vm_name}")
                 else:
                     log.warning(f"Could not restore websocket_port for VM instance {vm_name}")
         except (ImportError, DatabaseError, OSError, AttributeError) as e:
@@ -269,6 +274,7 @@ async def restore_application_context(
                 MCPServerManager,
                 find_free_cv_port,
                 load_cv_state,
+                resolve_ocr_settings,
             )
             from adare.backend.experiment.run import step_start_mcp_server
 
@@ -286,8 +292,12 @@ async def restore_application_context(
             else:
                 log.info(f"Reclaiming this session's CV port {recorded_port} (pid={recorded_pid})")
 
+            ocr_engine, ocr_lang = resolve_ocr_settings(session.experiment_ctx.experiment_directory)
             session.experiment_ctx.mcp_server = MCPServerManager(
-                server_port=recorded_port, log_file=session.experiment_ctx.experiment_run_directory.mcp_gui_log_file
+                server_port=recorded_port,
+                log_file=session.experiment_ctx.experiment_run_directory.mcp_gui_log_file,
+                ocr_engine=ocr_engine,
+                ocr_lang=ocr_lang,
             )
             session.experiment_ctx.mcp_server.known_server_pid = recorded_pid
 
@@ -387,7 +397,7 @@ async def restore_application_context(
         # or just set current time if re-running)
         # Assuming caller tracks this, or we just set it to now if not available
         if not session.started_at:
-            session.started_at = datetime.now()
+            session.started_at = datetime.now(UTC)
 
         log.info(f"Successfully restored dev session application context {session.session_id}")
         return True

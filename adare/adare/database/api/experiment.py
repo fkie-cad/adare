@@ -12,6 +12,7 @@ from adare.backend.experiment.directory import ExperimentDirectory
 from adare.config.configdirectory import PROG_PARSEANDTEST_DIR
 from adare.database.api.base import ProjectDatabaseApi
 from adare.database.api.project import ProjectDbApi
+from adare.database.api.run_cleanup import delete_runs
 from adare.database.exceptions import EnvironmentMissingError
 from adare.database.fixtures import fixture_stages, fixture_status
 from adare.database.models.global_models import Tag, TestFunction, TestFunctionFile
@@ -61,11 +62,14 @@ class ExperimentApi(ProjectDatabaseApi):
         with ProjectDbApi() as project_api:
             return project_api.get_project_by_path(project_path)
 
-    def delete_experiment_run(self, experiment_run: ExperimentRun):
+    def delete_experiment_run(self, experiment_run: ExperimentRun) -> list[str]:
         """
-        Deletes the experiment run from the database.
+        Deletes the experiment run and every row it owns (see :func:`delete_runs`).
+
+        Returns:
+            The run's directory path (empty if it never got one), for removing it from disk.
         """
-        self._session.delete(experiment_run)
+        return delete_runs(self._session, [experiment_run])
 
     def get_experiment_by_project_and_name(self, project_path: Path, experiment_name: str) -> Experiment:
         # In the new architecture, experiments are stored per-project
@@ -120,7 +124,10 @@ class ExperimentApi(ProjectDatabaseApi):
         """
         Get environment by name from the global database.
         project_name is ignored since environments are now global.
+        The environment is returned detached, with its ``vm`` already loaded.
         """
+        from sqlalchemy.orm import joinedload
+
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
 
@@ -128,6 +135,7 @@ class ExperimentApi(ProjectDatabaseApi):
             with GlobalDatabaseApi() as global_api:
                 return (
                     global_api._session.query(Environment)
+                    .options(joinedload(Environment.vm))
                     .filter(Environment.name == environment_name, Environment.is_current)
                     .first()
                 )
@@ -165,42 +173,100 @@ class ExperimentApi(ProjectDatabaseApi):
         self._session.flush()
 
         # Handle tags from metadata
-        if metadata.tags:
-            from adare.database.models.project_models import Tag as ProjectTag
-
-            for tag_name in metadata.tags:
-                # Create or get existing project-specific tag
-                tag = self._session.query(ProjectTag).filter(ProjectTag.name == tag_name.strip().lower()).first()
-                if not tag:
-                    tag = ProjectTag(name=tag_name.strip().lower())
-                    self._session.add(tag)
-
-                if tag not in experiment.tags:
-                    experiment.tags.append(tag)
+        for tag in self.__project_tags(metadata.tags or []):
+            if tag not in experiment.tags:
+                experiment.tags.append(tag)
 
         # Populate playbook models from YAML file
-        if experiment_directory.playbookfile.exists():
-            from adare.database.api.playbook import PlaybookApi
-
-            # Create a PlaybookApi that reuses our existing session
-            playbook_api = PlaybookApi(self.project_path)
-            playbook_api._session = self._session  # Reuse the current session
-            playbook_api._engine = self._engine  # Reuse the current engine
-
-            try:
-                playbook_api.populate_playbook_from_file(
-                    experiment, experiment_directory.playbookfile, parsed_playbook=experiment_directory._cached_playbook
-                )
-                log.debug(f'populated playbook models for experiment {experiment.id}')
-            except (SQLAlchemyError, OSError) as e:
-                log.error(f'failed to populate playbook models for experiment {experiment.id}: {e}')
-                raise
+        self.__populate_playbook(experiment, experiment_directory)
 
         if auto_commit:
             self._session.commit()
 
         log.debug(f'added experiment {experiment.id} to database')
         return experiment
+
+    def __project_tags(self, tag_names: list[str]) -> list:
+        """The project tags of ``tag_names`` (stripped, lower-cased), created if missing."""
+        from adare.database.models.project_models import Tag as ProjectTag
+
+        tags: list = []
+        for tag_name in tag_names:
+            name = tag_name.strip().lower()
+            tag = self._session.query(ProjectTag).filter(ProjectTag.name == name).first()
+            if not tag:
+                tag = ProjectTag(name=name)
+                self._session.add(tag)
+            if tag not in tags:
+                tags.append(tag)
+        return tags
+
+    def __populate_playbook(self, experiment: Experiment, experiment_directory: ExperimentDirectory):
+        """(Re-)ingest the experiment's playbook.yml in this session (commits); None without the file."""
+        if not experiment_directory.playbookfile.exists():
+            return None
+        from adare.database.api.playbook import PlaybookApi
+
+        # Create a PlaybookApi that reuses our existing session
+        playbook_api = PlaybookApi(self.project_path)
+        playbook_api._session = self._session  # Reuse the current session
+        playbook_api._engine = self._engine  # Reuse the current engine
+
+        try:
+            playbook = playbook_api.populate_playbook_from_file(
+                experiment, experiment_directory.playbookfile, parsed_playbook=experiment_directory._cached_playbook
+            )
+        except (SQLAlchemyError, OSError) as e:
+            log.error(f'failed to populate playbook models for experiment {experiment.id}: {e}')
+            raise
+        log.debug(f'populated playbook models for experiment {experiment.id}')
+        return playbook
+
+    def refresh_experiment(
+        self, experiment: Experiment, experiment_directory: ExperimentDirectory, include_metadata: bool = True
+    ):
+        """Bring a loaded experiment in line with its changed files, in place, and commit.
+
+        The row (and its id) and its runs stay. Refreshed is what :meth:`create_experiment`
+        derives from the files: the hashes, the tests and the playbook (re-ingested:
+        version bump, items that executions reference are kept as superseded, see
+        ``PlaybookApi.populate_playbook_from_file``) and, with ``include_metadata``,
+        description, environments, tags and the metadata hash.
+
+        The server identity (set by ``experiment_sync``) belongs to the old content hash
+        and is dropped when the hash changes; the next sync looks the new hash up.
+
+        Returns:
+            The re-ingested ``Playbook`` (None when the experiment has no playbook file).
+        """
+        testset = experiment_directory.load_testset()
+        experiment.abstract_tests = [obj for obj in self.__get_abstracttests_from_testsetfile(testset) if obj]
+        # The columns a load sets (as create_experiment does); setattr because the
+        # legacy Column-typed model gives mypy Column[...] for these attributes.
+        columns: dict = {
+            'sha256': experiment_directory.sha256,
+            'sha256_playbook': experiment_directory.sha256_playbook,
+        }
+        if include_metadata:
+            metadata = experiment_directory.load_metadata()
+            experiment.tags = self.__project_tags(metadata.tags or [])
+            columns.update(
+                description=metadata.description,
+                environment_ids=self.get_environments_by_name(metadata.environments),
+                sha256_metadata=experiment_directory.sha256_metadata,
+            )
+        if experiment.sha256 != experiment_directory.sha256 and experiment.sync_metadata is not None:
+            stale_identity = experiment.sync_metadata
+            experiment.sync_metadata = None
+            self._session.delete(stale_identity)
+        for column, value in columns.items():
+            setattr(experiment, column, value)
+        self._session.flush()
+
+        playbook = self.__populate_playbook(experiment, experiment_directory)
+        self._session.commit()
+        log.debug(f'refreshed experiment {experiment.id} in place')
+        return playbook
 
     def get_experiment(self, name: str, environment_id: str) -> Experiment:
         """Get experiment by name that uses the specified environment ID."""
@@ -425,19 +491,23 @@ class ExperimentApi(ProjectDatabaseApi):
             experiment_run.end_time = timestamp
             self._session.commit()
 
-    def remove_experiment_by_ulid(self, experiment_ulid: str):
+    def remove_experiment_by_ulid(self, experiment_ulid: str) -> list[str]:
+        """Remove the experiment and its runs; return the deleted runs' directory paths."""
         if experiment := self._session.query(Experiment).filter(Experiment.id == experiment_ulid).first():
-            self.remove_experiment(experiment)
-        else:
-            raise ValueError(f'experiment with ulid {experiment_ulid} not found')
+            return self.remove_experiment(experiment)
+        raise ValueError(f'experiment with ulid {experiment_ulid} not found')
 
-    def remove_experiment(self, experiment: Experiment):
-        # delete all experiment runs
-        for run in experiment.runs:
-            self._session.delete(run)
+    def remove_experiment(self, experiment: Experiment) -> list[str]:
+        """Remove the experiment and all its runs; return the deleted runs' directory paths."""
+        paths = delete_runs(self._session, list(experiment.runs))
+        # The runs are gone; reload the collection so the experiment's delete cascade
+        # does not visit them a second time.
+        self._session.expire(experiment, ['runs'])
         self._session.delete(experiment)
+        return paths
 
-    def remove_fake_experiment_run(self, experiment_run_ulid: str):
+    def remove_fake_experiment_run(self, experiment_run_ulid: str) -> list[str]:
+        """Remove a fake run; return its directory path (empty if not found or it has none)."""
         experiment_run = (
             self._session.query(ExperimentRun)
             .filter(ExperimentRun.id == experiment_run_ulid, ExperimentRun.fake)
@@ -445,10 +515,10 @@ class ExperimentApi(ProjectDatabaseApi):
         )
         if experiment_run:
             # Query already filtered for fake == True, so if it exists, it's guaranteed to be fake
-            self._session.delete(experiment_run)
-        else:
-            # Experiment run not found or not fake - log and continue (may have been already deleted)
-            log.debug(f'Fake experiment run with ulid {experiment_run_ulid} not found (may have been already deleted)')
+            return delete_runs(self._session, [experiment_run])
+        # Experiment run not found or not fake - log and continue (may have been already deleted)
+        log.debug(f'Fake experiment run with ulid {experiment_run_ulid} not found (may have been already deleted)')
+        return []
 
     def experiment_sha256_equals(self, experiment_ulid: str, sha256: str) -> bool:
         experiment = self._session.query(Experiment).filter(Experiment.id == experiment_ulid).first()
@@ -637,25 +707,61 @@ class ExperimentApi(ProjectDatabaseApi):
         Returns:
             Number of fake runs removed
         """
+        count, _paths = self.remove_fake_runs_of_experiment(project_path, experiment_name)
+        return count
+
+    def remove_fake_runs_of_experiment(self, project_path: Path, experiment_name: str) -> tuple[int, list[str]]:
+        """
+        Remove the finished fake runs of the experiment ``experiment_name`` and commit.
+
+        Fake runs that may still be in use are kept: any not in a terminal status
+        (PENDING, RUNNING, ...) and every dev session's run (its id is the session id,
+        or its path is the session's run folder).
+
+        Returns:
+            (number of fake runs removed, their directory paths -- runs without one are not listed)
+
+        Raises:
+            ValueError: The experiment does not exist.
+            RunReferencesUnavailableError: The dev sessions could not be read (nothing removed).
+        """
         # Get the experiment
         experiment = self.get_experiment_by_project_and_name(project_path, experiment_name)
         if not experiment:
             raise ValueError(f'experiment "{experiment_name}" not found in project {project_path}')
 
-        # Find all fake runs for this experiment
-        fake_runs = (
+        fake_runs = self.removable_fake_runs(experiment)
+        paths = delete_runs(self._session, fake_runs)
+        self._session.commit()
+        return len(fake_runs), paths
+
+    def removable_fake_runs(self, experiment: Experiment) -> list[ExperimentRun]:
+        """The experiment's fake runs that are finished and belong to no dev session.
+
+        The others may still be in use and are left out (and logged): any not in a
+        terminal status (PENDING, RUNNING, ...) and every dev session's run.
+
+        Raises:
+            RunReferencesUnavailableError: The dev sessions could not be read.
+        """
+        from adare.backend.experiment.run_folders import TERMINAL_RUN_STATUSES, load_dev_session_refs
+
+        dev_sessions = load_dev_session_refs()
+        fake_runs: list[ExperimentRun] = []
+        kept: list[ExperimentRun] = []
+        for run in (
             self._session.query(ExperimentRun)
             .filter(ExperimentRun.experiment_id == experiment.id, ExperimentRun.fake)
             .all()
-        )
-
-        # Count and delete them
-        count = len(fake_runs)
-        for fake_run in fake_runs:
-            self._session.delete(fake_run)
-
-        self._session.commit()
-        return count
+        ):
+            in_use = run.status not in TERMINAL_RUN_STATUSES or dev_sessions.refers_to(run_id=run.id, path=run.path)
+            (kept if in_use else fake_runs).append(run)
+        if kept:
+            log.warning(
+                f'kept {len(kept)} fake run(s) of "{experiment.name}" that are still pending/running or belong '
+                f'to a dev session: {", ".join(str(run.id) for run in kept)}'
+            )
+        return fake_runs
 
     def mark_run_as_published(self, run_ulid: str):
         """

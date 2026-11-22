@@ -32,6 +32,7 @@ A `Target` says *what on screen* an action refers to. Fields:
 | `strategy`   | strategy object | which match to pick when several are found |
 | `offset`     | Offset          | shift the click off the matched point |
 | `use_cache`  | bool            | reuse the previously matched location (skip re-search) |
+| `min_margin` | float           | image targets: accept only if the match beats the runner-up by this much |
 
 **Author rule:** prefer `text:` targets. Do not invent `image:` filenames — you
 have no crops to reference.
@@ -96,6 +97,23 @@ it only fires if every condition holds:
     key: esc
     when:
       - exists: { text: "Tip of the Day" }
+```
+
+### verify / effect  (optional, on click | keyboard | drag | scroll | goto)
+After the input, `verify:` (exactly one of `exists` / `not_exists`, a target) is
+polled for up to `verify_timeout` seconds (default 3); if it does not hold, the
+step fails. `click` also takes `retries:` (re-click while verify fails).
+`effect: none` marks a step that is expected to change nothing on screen.
+```yaml
+- keyboard:
+    key: delete
+    verify: { not_exists: { text: "report.txt" } }
+    description: delete the selected file
+- click:
+    target: { text: "Save" }
+    verify: { exists: { text: "Saved" } }
+    retries: 1
+    description: save
 ```
 
 ### drag

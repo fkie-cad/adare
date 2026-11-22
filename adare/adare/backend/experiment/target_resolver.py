@@ -6,6 +6,7 @@ for CV/OCR capabilities (find_icon and find_text tools).
 """
 
 import base64
+import binascii
 import json
 import logging
 from dataclasses import dataclass
@@ -374,6 +375,28 @@ class MCPTargetResolver:
             log.error(f"Error resolving target via MCP: {e}")
             return None
 
+    async def dump_all_text(self, screenshot_base64: str):
+        """Full OCR dump of a screenshot (``get_all_text``), for failure evidence.
+
+        Returns the detections as a JSON-safe list/dict, or None if the CV server could not
+        be reached or returned nothing.
+        """
+        if not screenshot_base64:
+            return None
+        try:
+            async with Client(self.mcp_gui_url, timeout=120.0) as client:
+                result = await client.call_tool(
+                    "get_all_text",
+                    {"screenshot_base64": screenshot_base64, "offset_x": 0, "offset_y": 0, "format": "json"},
+                )
+            data = self._parse_mcp_result(result)
+        except (OSError, ConnectionError, TimeoutError, RuntimeError, json.JSONDecodeError, ValueError, KeyError) as e:
+            log.warning(f"OCR dump failed: {e}")
+            return None
+        if isinstance(data, dict) and "all_text" in data:
+            return data["all_text"]
+        return data
+
     async def find_element(
         self,
         description: str,
@@ -502,17 +525,14 @@ class MCPTargetResolver:
             log.warning(f"Icon '{target.icon}' not found via MCP")
             return None
 
-        matches = []
-        for i, (x, y) in enumerate(locations):
-            confidence = similarities[i] if i < len(similarities) else 0.8
-            matches.append(TargetMatch(coordinates=(x, y), confidence=confidence, method='image'))
+        matches = self._build_image_matches(locations, similarities, locations_data.get("sizes"), icon_base64, target)
 
         if target.strategy is None:
             target.strategy = BestConfidenceStrategy()
             log.info("No strategy specified for icon target, using default BestConfidenceStrategy")
 
         target_desc = f"icon '{target.icon}'"
-        return self._apply_strategy_and_select(matches, target, reference_coords, target_desc)
+        return self._apply_strategy_and_select(matches, target, reference_coords, target_desc, image_candidates=True)
 
     async def _resolve_image_target(self, client, target, screenshot_base64, offset_x, offset_y, reference_coords):
         """Resolve an image-based target using MCP find_icon."""
@@ -546,11 +566,7 @@ class MCPTargetResolver:
             log.warning(f"Image '{target.image}' not found via MCP")
             return None
 
-        # Create matches for all found locations using actual similarities
-        matches = []
-        for i, (x, y) in enumerate(locations):
-            confidence = similarities[i] if i < len(similarities) else 0.8
-            matches.append(TargetMatch(coordinates=(x, y), confidence=confidence, method='image'))
+        matches = self._build_image_matches(locations, similarities, locations_data.get("sizes"), icon_base64, target)
 
         # Set default strategy if none provided
         if target.strategy is None:
@@ -558,7 +574,53 @@ class MCPTargetResolver:
             log.info("No strategy specified for image target, using default BestConfidenceStrategy")
 
         target_desc = f"image '{target.image}'"
-        return self._apply_strategy_and_select(matches, target, reference_coords, target_desc)
+        return self._apply_strategy_and_select(matches, target, reference_coords, target_desc, image_candidates=True)
+
+    @staticmethod
+    def _template_native_size(icon_base64: str) -> tuple[int, int] | None:
+        """Pixel size (width, height) of a base64-encoded template image, or None if unreadable."""
+        try:
+            import io
+
+            from PIL import Image
+
+            with Image.open(io.BytesIO(base64.b64decode(icon_base64))) as img:
+                return int(img.size[0]), int(img.size[1])
+        except (ImportError, OSError, ValueError, binascii.Error):
+            return None
+
+    def _build_image_matches(self, locations, similarities, sizes, icon_base64, target) -> list[TargetMatch]:
+        """Build TargetMatch objects for image/icon candidates.
+
+        ``locations`` are match centres. A ``region`` is attached only when the target
+        has an offset whose ``base`` is not ``center``: the base then anchors on the
+        matched box (same as for text targets). For ``center`` (the default) no region
+        is set, so existing playbooks resolve to exactly the same pixel as before.
+        The box size is the one reported by the CV server (``sizes``) or, for a server
+        that does not report it, the template's native size.
+        """
+        need_region = bool(target.offset) and target.offset.base != 'center'
+        native = self._template_native_size(icon_base64) if need_region else None
+
+        matches = []
+        for i, (x, y) in enumerate(locations):
+            confidence = similarities[i] if i < len(similarities) else 0.8
+            match = TargetMatch(coordinates=(x, y), confidence=confidence, method='image')
+            if need_region:
+                size = None
+                if sizes and i < len(sizes) and sizes[i]:
+                    size = (int(sizes[i][0]), int(sizes[i][1]))
+                elif native:
+                    size = native
+                if size and size[0] > 0 and size[1] > 0:
+                    w, h = size
+                    match.region = (int(x) - w // 2, int(y) - h // 2, w, h)
+                else:
+                    log.warning(
+                        f"Offset base '{target.offset.base}' requested but the match size is unknown; using centre"
+                    )
+            matches.append(match)
+        return matches
 
     def _read_icon_file(self, image_path: Path) -> str | None:
         """Read and base64-encode an icon file. Returns None on non-fatal read errors."""
@@ -662,8 +724,28 @@ class MCPTargetResolver:
         log.error("No data found in MCP result")
         return None
 
-    def _apply_strategy_and_select(self, matches, target, reference_coords, target_desc):
-        """Log matches, apply strategy, and return the selected match or None."""
+    def _apply_strategy_and_select(self, matches, target, reference_coords, target_desc, image_candidates=False):
+        """Log matches, apply strategy, and return the selected match or None.
+
+        For image/icon candidates (``image_candidates=True``) the CV matcher returns many
+        weak locations, so candidates below the confidence floor are dropped *before* the
+        strategy runs (a weak candidate must not win a spatial strategy and then fail the
+        floor check, nor count as the runner-up). If ``target.min_margin`` is set, the
+        selected match is accepted only when its confidence beats the best other
+        above-floor candidate by at least that margin.
+        """
+        all_candidates = matches
+        if image_candidates:
+            matches = [m for m in all_candidates if m.confidence >= self.confidence_floor]
+            if len(matches) < len(all_candidates):
+                log.info(
+                    f"Dropped {len(all_candidates) - len(matches)} of {len(all_candidates)} candidates for "
+                    f"{target_desc} below floor {self.confidence_floor:.3f}"
+                )
+            if not matches:
+                log.error(f"Rejected {target_desc}: no candidate at or above floor {self.confidence_floor:.3f}")
+                return None
+
         # Log all found matches
         log.info(f"Found {len(matches)} matches for {target_desc}:")
         for i, match in enumerate(matches):
@@ -686,6 +768,15 @@ class MCPTargetResolver:
                         f"{selected_match.confidence:.3f} is below floor {self.confidence_floor:.3f}"
                     )
                     return None
+                margin = getattr(target, 'min_margin', None) if image_candidates else None
+                if margin is not None:
+                    others = [m.confidence for m in matches if m is not selected_match]
+                    if others and selected_match.confidence - max(others) < margin:
+                        log.error(
+                            f"Rejected {target_desc}: selected confidence {selected_match.confidence:.3f} does not "
+                            f"beat the runner-up {max(others):.3f} by min_margin {margin:.3f}"
+                        )
+                        return None
                 selected_index = matches.index(selected_match) + 1
                 if selected_match.text:
                     log.info(

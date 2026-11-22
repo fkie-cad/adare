@@ -93,6 +93,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         type=click.Choice(['auto', 'agent', 'host']),
         help='Test execution mode: auto (default), agent (WebSocket), or host (QGA for QEMU only)',
     )
+    @click.option(
+        '--backend',
+        type=click.Choice(['agent', 'hostside']),
+        help='Guest backend: agent (in-guest adarevm, default) or hostside (agent-free: QMP GUI, offline-image tests, '
+        'qemufile step markers; QEMU Linux guests)',
+    )
     @click.option('--diff/--no-diff', default=None, help='Enable/disable filesystem diff (overrides playbook setting)')
     @click.option(
         '--diff-mode',
@@ -109,6 +115,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         '--capture-pcap/--no-capture-pcap',
         default=None,
         help='Capture outside-world VM traffic to artifacts/pcap/ (QEMU only; overrides playbook setting; off by default)',
+    )
+    @click.option(
+        '--filter-pcap/--no-filter-pcap',
+        default=None,
+        help="Remove ADARE's own traffic (agent WebSocket, SMB share) from the captured pcap after the run "
+        '(overrides playbook setting filter_pcap; on by default; --no-filter-pcap keeps the raw capture)',
     )
     @click.option(
         '--export-memory-dump/--no-export-memory-dump',
@@ -135,10 +147,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         vm_cpus,
         gui_mode,
         test_mode,
+        backend,
         diff,
         diff_mode,
         export_disk_image,
         capture_pcap,
+        filter_pcap,
         export_memory_dump,
         allow_emulation,
         project,
@@ -173,10 +187,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             vm_cpus=vm_cpus,
             gui_mode=gui_mode,
             test_mode=test_mode,
+            backend=backend,
             diff=diff,
             diff_mode=diff_mode,
             export_disk_image=export_disk_image,
             capture_pcap=capture_pcap,
+            filter_pcap=filter_pcap,
             export_memory_dump=export_memory_dump,
             allow_emulation=allow_emulation,
             project=project,
@@ -227,10 +243,12 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.argument('experiment')
     @click.option('--project', '-p', help='Name of the project')
     def clean(experiment, project):
-        """Remove all fake experiment runs for the specified experiment.
+        """Remove the finished fake experiment runs for the specified experiment.
 
         Fake runs are created during testing and development. This command
-        permanently deletes all fake runs associated with the experiment.
+        permanently deletes the finished fake runs of the experiment, and
+        their run folders (only folders that are clearly ADARE run folders).
+        Fake runs still pending or running, and dev sessions' runs, are kept.
         """
         from adare.cli.experiment import exec_experiment_clean
 
@@ -242,7 +260,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--project', '-p', help='Name of the project')
     @click.option('--force', '-f', is_flag=True, help='Force removal even if experiment has productive runs')
     @click.option(
-        '--keep-files', is_flag=True, help='Keep experiment directory on filesystem (only remove from database)'
+        '--keep-files',
+        is_flag=True,
+        help='Keep the experiment directory and the run folders on filesystem (only remove from database)',
     )
     def remove(experiment, project, force, keep_files):
         """Remove an experiment from the database and optionally from filesystem.
@@ -253,7 +273,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         \b
         By default, the command will:
         - Fail if the experiment has productive runs (use --force to override)
-        - Delete the experiment directory from filesystem (use --keep-files to preserve)
+        - Delete the experiment directory and the runs' folders (use --keep-files to preserve)
 
         \b
         EXPERIMENT can be:

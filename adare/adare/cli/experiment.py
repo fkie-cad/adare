@@ -254,28 +254,11 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             ],
         )
 
-    # Load experiment once before running on all environments
-    if not arguments.test:  # Production mode
-        from adare.backend.experiment import database as experiment_database
-
-        experiment_ulid = experiment_database.get_experiment_by_project_and_name(
-            project_directory, experiment_name, trigger_error=False
-        )
-        if experiment_ulid:
-            run_count = experiment_database.get_experiment_run_count(
-                project_directory, experiment_ulid, exclude_fake=True
-            )
-            if run_count > 0:
-                # In production mode with existing runs, load without force (strict integrity)
-                experiment_load(project_directory, experiment_name, force=False, silent=True)
-            else:
-                # No existing runs, can force load
-                experiment_load(project_directory, experiment_name, force=True, silent=True)
-        else:
-            experiment_load(project_directory, experiment_name, force=False, silent=True)
-    else:  # Test mode (default)
-        # Allow force loading in test mode to handle file changes during development
-        experiment_load(project_directory, experiment_name, force=True, silent=True)
+    # Load experiment once before running on all environments. Same in test and
+    # production mode: a changed experiment is reloaded in place (finished fake runs
+    # deleted) or, when it has production runs, refused. Never force=True here: that
+    # replaces the experiment and deletes every run (only `experiment load --force`).
+    experiment_load(project_directory, experiment_name, force=False, silent=True)
 
     print(f"Running experiment '{experiment_name}' on {len(environments)} environment(s)...")
     print(f"Environments: {', '.join([env.name for env in environments])}")
@@ -309,8 +292,9 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             if env_file_log_level is not None:
                 env_run_kwargs['file_log_level'] = env_file_log_level
 
+            verdict: dict = {}
             was_interrupted, was_successful = await experiment_run(
-                project_directory, experiment_name, env_name, **env_run_kwargs
+                project_directory, experiment_name, env_name, verdict_out=verdict, **env_run_kwargs
             )
 
             env_end_time = datetime.now(UTC)
@@ -334,6 +318,18 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             elif was_successful:
                 results.append({'environment': env_name, 'status': 'SUCCESS', 'duration': duration, 'error': None})
                 print(f"✅ Environment '{env_name}' completed successfully ({duration:.1f}s)")
+            elif verdict.get('verdict') == 'INCONCLUSIVE':
+                from adare.backend.experiment.run import INCONCLUSIVE_MESSAGE
+
+                results.append(
+                    {
+                        'environment': env_name,
+                        'status': 'INCONCLUSIVE',
+                        'duration': duration,
+                        'error': INCONCLUSIVE_MESSAGE,
+                    }
+                )
+                print(f"❔ Environment '{env_name}' inconclusive - a negative result is unproven ({duration:.1f}s)")
             else:
                 results.append(
                     {
@@ -454,10 +450,12 @@ def exec_experiment_run(arguments):
                     vm_cpus=arguments.vm_cpus,
                     gui_mode=arguments.gui_mode,
                     test_exec_mode=getattr(arguments, 'test_mode', None),
+                    backend=getattr(arguments, 'backend', None),
                     diff=getattr(arguments, 'diff', None),
                     diff_mode=getattr(arguments, 'diff_mode', 'auto'),
                     export_disk_image=getattr(arguments, 'export_disk_image', None),
                     capture_pcap=getattr(arguments, 'capture_pcap', None),
+                    filter_pcap=getattr(arguments, 'filter_pcap', None),
                     export_memory_dump=getattr(arguments, 'export_memory_dump', None),
                     allow_emulation=getattr(arguments, 'allow_emulation', False),
                 )
@@ -508,28 +506,11 @@ def exec_experiment_run(arguments):
                     break
             set_console_log_level(logging.CRITICAL)
         try:
-            # In production mode, use strict loading; in test mode, allow modifications
-            if not arguments.test:  # Production mode
-                from adare.backend.experiment import database as experiment_database
-
-                experiment_ulid = experiment_database.get_experiment_by_project_and_name(
-                    project_directory, experiment_name, trigger_error=False
-                )
-                if experiment_ulid:
-                    run_count = experiment_database.get_experiment_run_count(
-                        project_directory, experiment_ulid, exclude_fake=True
-                    )
-                    if run_count > 0:
-                        # Production mode with existing runs - strict integrity
-                        experiment_load(project_directory, experiment_name, force=False, silent=True)
-                    else:
-                        # No existing runs, can force load
-                        experiment_load(project_directory, experiment_name, force=True, silent=True)
-                else:
-                    experiment_load(project_directory, experiment_name, force=False, silent=True)
-            else:  # Test mode (default)
-                # Allow force loading in test mode to handle file changes during development
-                experiment_load(project_directory, experiment_name, force=True, silent=True)
+            # Same load in test and production mode: a changed experiment is reloaded in
+            # place (finished fake runs deleted) or, when it has production runs, refused.
+            # Never force=True here: that replaces the experiment and deletes every run
+            # (reserved for the explicit `adare experiment load --force`).
+            experiment_load(project_directory, experiment_name, force=False, silent=True)
 
             # Validate environment and experiment compatibility before starting execution
             from adare.database.api.experiment import ExperimentApi
@@ -581,10 +562,12 @@ def exec_experiment_run(arguments):
                 vm_cpus=arguments.vm_cpus,
                 gui_mode=arguments.gui_mode,
                 test_exec_mode=getattr(arguments, 'test_mode', None),
+                backend=getattr(arguments, 'backend', None),
                 diff=getattr(arguments, 'diff', None),
                 diff_mode=getattr(arguments, 'diff_mode', 'auto'),
                 export_disk_image=getattr(arguments, 'export_disk_image', None),
                 capture_pcap=getattr(arguments, 'capture_pcap', None),
+                filter_pcap=getattr(arguments, 'filter_pcap', None),
                 export_memory_dump=getattr(arguments, 'export_memory_dump', None),
                 allow_emulation=getattr(arguments, 'allow_emulation', False),
             )
@@ -592,12 +575,16 @@ def exec_experiment_run(arguments):
             if file_log_level is not None:
                 run_kwargs['file_log_level'] = file_log_level
 
+            from datetime import UTC, datetime
+
+            run_started = datetime.now(UTC)
+            verdict: dict = {}
             was_interrupted, was_successful = asyncio.run(
-                experiment_run(project_directory, experiment_name, environment_name, **run_kwargs)
+                experiment_run(project_directory, experiment_name, environment_name, verdict_out=verdict, **run_kwargs)
             )
+            run_ended = datetime.now(UTC)
 
             # Handle output formatting for single runs
-            from datetime import timedelta
 
             from adare.backend.experiment.batch_runner import BatchRunSummary, ExperimentResult
             from adare.run import get_formatter_from_context
@@ -607,31 +594,30 @@ def exec_experiment_run(arguments):
 
             if dual_output or formatter.format_type.value != 'rich':
                 # Create a summary for single run (similar to batch run format)
-                if was_interrupted:
-                    status = StatusEnum.INTERRUPTED
-                    error_msg = "User interrupted"
-                elif was_successful:
-                    status = StatusEnum.SUCCESS
-                    error_msg = None
-                else:
-                    status = StatusEnum.FAILED
-                    error_msg = "Experiment tests failed"
+                from adare.backend.experiment.run import INCONCLUSIVE_MESSAGE, run_status
+
+                status = run_status(was_interrupted, was_successful, verdict)
+                error_msg = {
+                    StatusEnum.INTERRUPTED: "User interrupted",
+                    StatusEnum.SUCCESS: None,
+                    StatusEnum.INCONCLUSIVE: INCONCLUSIVE_MESSAGE,
+                }.get(status, "Experiment failed (see the run log)")
 
                 # Create a single result entry
                 single_result = ExperimentResult(
                     environment=environment_name,
                     experiment=experiment_name,
                     status=status,
-                    duration=timedelta(seconds=0),  # We don't have duration from single run
+                    duration=run_ended - run_started,
                     error_message=error_msg,
                     run_ulid=None,  # Would need to get this from the experiment run
-                    start_time=None,
-                    end_time=None,
+                    start_time=run_started,
+                    end_time=run_ended,
                 )
 
                 # Create summary with single result
                 summary = BatchRunSummary(
-                    results=[single_result], total_combinations=1, total_duration=timedelta(seconds=0)
+                    results=[single_result], total_combinations=1, total_duration=run_ended - run_started
                 )
 
                 # Output using formatter

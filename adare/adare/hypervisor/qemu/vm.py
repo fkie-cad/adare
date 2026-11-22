@@ -49,6 +49,7 @@ from adare.hypervisor.qemu.mixins.networking import NetworkingMixin
 from adare.hypervisor.qemu.mixins.registry import RegistryMixin
 from adare.hypervisor.qemu.mixins.snapshots import SnapshotMixin
 from adare.hypervisor.qemu.models import CommandResult
+from adare.hypervisor.qemu.utilities.click_timing import click_settle_seconds
 from adare.hypervisor.qemu.utilities.disk_utils import try_cow_clone
 
 if TYPE_CHECKING:
@@ -1489,7 +1490,6 @@ class QEMUVM(
         # Normalize coordinates for USB tablet device
         norm_x, norm_y = self._normalize_coordinates(x, y)
 
-        # Map button names to QMP button strings
         button_map = {'left': 'left', 'right': 'right', 'middle': 'middle', 'double': 'left'}
         qmp_button = button_map.get(button, 'left')
 
@@ -1509,7 +1509,7 @@ class QEMUVM(
             log.error(f"QMP mouse move failed: {move_response.get('error')}")
             return False
 
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(click_settle_seconds())  # move-to-press gap (ADARE_CLICK_SETTLE_MS)
 
         # Step 2: Press button
         press_command = {

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useParams, useNavigate, Link } from '@tanstack/react-router'
-import { Bot, FlaskConical, Play } from 'lucide-react'
+import { Bot, FlaskConical, Play, Sparkles } from 'lucide-react'
+import { useLaunchTerminal } from '@/components/terminal/use-launch-terminal'
+import { experimentPrompt } from '@/components/terminal/claude-prompts'
 import { PageHeader } from '@/components/layout/page-header'
 import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,9 +24,11 @@ import { useExperiment, useRunExperiment } from '@/api/hooks/use-experiments'
 import { useRuns } from '@/api/hooks/use-runs'
 import { formatDateTime, formatDuration } from '@/lib/formatters'
 import { toast } from '@/components/ui/toast'
+import { verdictLabel } from '@/lib/verdict'
 
-function projectPathOf(exp: { project_path?: string; project?: string } | undefined): string {
-  return String(exp?.project_path ?? exp?.project ?? '')
+/** The project's filesystem path (not its name): run/validate/link all take it as `project_path`. */
+function projectPathOf(exp: { project_path?: string } | undefined): string {
+  return exp?.project_path ?? ''
 }
 
 function RunExperimentDialog({
@@ -106,15 +110,24 @@ function RunExperimentDialog({
 }
 
 export default function ExperimentDetailPage() {
-  const { name } = useParams({ from: '/experiments/$name' })
-  const experimentQuery = useExperiment(name)
-  const runsQuery = useRuns({ experiment: name })
+  // The route param is either a short name (Experiments list) or a
+  // `Project.experiment` dotnotation (links built from run rows). The backend
+  // resolves both; everything after the lookup uses the resolved experiment's
+  // own short name and project, which is what the run/develop endpoints expect.
+  const { name: routeName } = useParams({ from: '/experiments/$name' })
+  const experimentQuery = useExperiment(routeName)
+  const exp = experimentQuery.data
+  const name = exp?.name ?? routeName
+  // Short names repeat across projects, so scope the runs to this project.
+  const runsQuery = useRuns({ project: exp?.project, experiment: exp?.name }, { enabled: !!exp })
   const [runOpen, setRunOpen] = useState(false)
 
-  const exp = experimentQuery.data
-  const envNames: string[] = exp?.environment_names ?? []
+  // The detail payload carries `environments`; the list payload `environment_names`.
+  const envNames: string[] =
+    exp?.environment_names ?? (exp?.environments as string[] | undefined) ?? []
   const tags: string[] = Array.isArray(exp?.tags) ? exp.tags : []
   const projectPath = projectPathOf(exp)
+  const claude = useLaunchTerminal()
 
   return (
     <div className="p-6 space-y-6">
@@ -123,13 +136,28 @@ export default function ExperimentDetailPage() {
         description="Experiment details"
         actions={
           <>
+            <Button
+              variant="outline"
+              disabled={!projectPath || claude.isPending}
+              onClick={() =>
+                claude.launch({
+                  kind: 'claude',
+                  cwd: projectPath,
+                  prompt: experimentPrompt(name, envNames),
+                  title: `Claude · ${name}`,
+                })
+              }
+            >
+              <Sparkles size={14} />
+              Work on it with Claude
+            </Button>
             <Button variant="outline" asChild>
               <Link to="/develop" search={{ experiment: name, environment: envNames[0] }}>
                 <Bot size={14} />
                 Develop
               </Link>
             </Button>
-            <Button onClick={() => setRunOpen(true)} disabled={envNames.length === 0}>
+            <Button onClick={() => setRunOpen(true)} disabled={envNames.length === 0 || !projectPath}>
               <Play size={14} />
               Run
             </Button>
@@ -155,7 +183,8 @@ export default function ExperimentDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Project</p>
-                  <p className="text-sm font-mono">{projectPath || '—'}</p>
+                  <p className="text-sm">{exp.project || '—'}</p>
+                  {projectPath && <p className="text-xs font-mono text-muted-foreground">{projectPath}</p>}
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tags</p>
@@ -199,7 +228,7 @@ export default function ExperimentDetailPage() {
         </CardHeader>
         <CardContent>
           <AsyncBoundary
-            isPending={runsQuery.isPending}
+            isPending={experimentQuery.isPending || (!!exp && runsQuery.isPending)}
             isError={runsQuery.isError}
             error={runsQuery.error}
             onRetry={() => runsQuery.refetch()}
@@ -221,18 +250,16 @@ export default function ExperimentDetailPage() {
               </TableHeader>
               <TableBody>
                 {(runsQuery.data ?? []).map((run) => (
-                  <TableRow key={String(run.ulid)} className="hover:bg-muted/50">
+                  <TableRow key={run.ulid} className="hover:bg-muted/50">
                     <TableCell>
-                      <Link to="/runs/$ulid" params={{ ulid: String(run.ulid) }} className="inline-flex">
-                        <Badge variant={statusToVariant((run as { status?: string }).status ?? null)}>
-                          {(run as { status?: string }).status ?? '—'}
-                        </Badge>
+                      <Link to="/runs/$ulid" params={{ ulid: run.ulid }} className="inline-flex">
+                        <Badge variant={statusToVariant(run.status ?? null)}>{run.status ?? '—'}</Badge>
                       </Link>
                     </TableCell>
-                    <TableCell>{(run as { environment_name?: string }).environment_name || '—'}</TableCell>
-                    <TableCell>{formatDateTime((run as { start_time?: string }).start_time)}</TableCell>
-                    <TableCell>{formatDuration((run as { duration_seconds?: number }).duration_seconds)}</TableCell>
-                    <TableCell>{(run as { overall_result?: string }).overall_result || '—'}</TableCell>
+                    <TableCell>{run.environment_name || '—'}</TableCell>
+                    <TableCell>{formatDateTime(run.start_time)}</TableCell>
+                    <TableCell>{formatDuration(run.duration_seconds)}</TableCell>
+                    <TableCell>{verdictLabel(run.result_status)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

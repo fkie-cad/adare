@@ -178,7 +178,7 @@ def exec_vm_watch(arguments):
     import webbrowser
     from urllib.parse import quote
 
-    from adare.webapi.vm_watch import DEFAULT_SPICE_PORT, resolve_vm_uuid
+    from adare.webapi.vm_watch import resolve_vm_uuid
 
     # ADARE web server port (default of `adare ui start`); the in-app viewer is
     # served here, so the live view opens same-origin, not on VirtualSpice's :8081.
@@ -187,7 +187,7 @@ def exec_vm_watch(arguments):
     name = arguments.name
     view_only = getattr(arguments, 'view_only', True)
 
-    uuid = resolve_vm_uuid(name, spice_port=DEFAULT_SPICE_PORT)
+    uuid = resolve_vm_uuid(name)
     if uuid is None:
         print_error_message(
             title=f"Could not open a live view for '{name}'",
@@ -598,6 +598,46 @@ def _print_unreferenced_vms() -> None:
         click.echo(f"  {name}  ({vm_id})")
 
 
+def _print_stopped_dev_sessions() -> None:
+    """Point at the disk stopped dev sessions hold. Never deleted by prune: a stopped session
+    can be resumed, so removing it is a decision (`adare dev remove --stopped`)."""
+    import click
+
+    from adare.backend.system.storage import group_disk_owners
+    from adare.database.api.devmode import DevModeApi
+    from adare.database.exceptions import DatabaseError
+    from adare.hypervisor.qemu.mixins.configuration import get_qemu_disk_dir
+
+    try:
+        with DevModeApi() as api:
+            names = {s.vm_name for s in api.list_sessions() if s.status in ('stopped', 'crashed')}
+    except DatabaseError:
+        return
+    held = sum(o.bytes for o in group_disk_owners(get_qemu_disk_dir(), set(), {}) if o.name in names)
+    if held:
+        click.echo(
+            f"\nStopped dev sessions keep {held / 1024**3:.1f} GiB of VM disks (kept; review and remove "
+            "with `adare dev remove --stopped [--older-than 14d]`)."
+        )
+
+
+def _expire_dev_sessions(dry_run: bool) -> None:
+    """Opt-in (ADARE_DEV_SESSION_MAX_AGE_DAYS): remove dev sessions unused for longer than that."""
+    import click
+
+    from adare.backend.devmode.expiry import MAX_AGE_ENV, max_age, remove_expired_dev_sessions
+
+    limit = max_age()
+    if limit is None:
+        return
+    ids = remove_expired_dev_sessions(dry_run=dry_run)
+    if ids:
+        verb = 'Would remove' if dry_run else 'Removed'
+        click.echo(f"{verb} {len(ids)} dev session(s) unused for more than {limit.days} day(s) ({MAX_AGE_ENV}):")
+        for session_id in ids:
+            click.echo(f"  {session_id}")
+
+
 def exec_vm_prune(arguments):
     """Reclaim orphaned QEMU base disks / NVRAM (and optionally dead sockets).
 
@@ -622,9 +662,13 @@ def exec_vm_prune(arguments):
     dry_run = getattr(arguments, 'dry_run', True)
     include_sockets = getattr(arguments, 'sockets', False)
 
+    # Opt-in expiry first, so the disks it frees are reclaimed below in the same pass.
+    _expire_dev_sessions(dry_run)
+
     # 0. Instances: crashed runs, run files without a row, pooled QEMU leftovers.
     _print_reconcile_report(run_blocking(reconcile_instances(dry_run=dry_run)), dry_run)
     _print_unreferenced_vms()
+    _print_stopped_dev_sessions()
 
     # 1. Referenced set: every registered VM + instance name from the DB.
     referenced: set[str] = set()

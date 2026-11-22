@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
+from adare.backend.experiment.clock import ClockRecorder
 from adare.backend.experiment.target_resolver import MCPConditionChecker, MCPTargetResolver
 from adare.backend.experiment.websocket_client import AdareVMClient
 from adare.types.playbook import (
@@ -49,6 +50,24 @@ log = logging.getLogger(__name__)
 
 # Re-export ActionResult for backward compatibility
 __all__ = ['ActionExecutor', 'ActionResult', 'MachineHandles']
+
+
+def _action_detail(action) -> str | None:
+    """A short, human-readable account of what an action does (for step markers)."""
+    for attr in ('command', 'text', 'key', 'variable', 'name'):
+        value = getattr(action, attr, None)
+        if isinstance(value, str) and value:
+            return f'{attr}={value[:120]}'
+    combo = getattr(action, 'combination', None)
+    if combo:
+        return 'combination=' + '+'.join(combo)
+    target = getattr(action, 'target', None)
+    if target is not None:
+        for attr in ('text', 'image', 'icon'):
+            value = getattr(target, attr, None)
+            if value:
+                return f'target.{attr}={str(value)[:120]}'
+    return None
 
 
 @dataclass
@@ -175,6 +194,17 @@ class ActionExecutor:
 
         self.test_actions = TestActionsExecutor(experiment_run_directory=experiment_run_directory, playbook=playbook)
 
+        settings = getattr(playbook, 'settings', None)
+        from adare.backend.experiment.execution.effect_check import resolve_effect_mode
+
+        # Which recorded effects count against a negative test (warn: failures only; prove/strict: all)
+        self.test_actions.effect_ledger.mode = resolve_effect_mode(settings)
+        # Host-side backend (set by run_setup): step markers into the qemufile run directory.
+        self.hostside: Any | None = None
+        # The guest clock is read through QGA or the in-guest agent; the host-side backend has neither.
+        clock_enabled = getattr(settings, 'clock_log', True) and not getattr(self.client, 'is_hostside', False)
+        self.clock = ClockRecorder(experiment_run_directory, self.execution_context, enabled=clock_enabled)
+
     def _rebind_to_machine(self, handles: MachineHandles) -> None:
         """Point this executor and its sub-executors at one machine's handles.
 
@@ -212,6 +242,40 @@ class ActionExecutor:
         self.test_loader = test_loader  # Keep reference for backward compatibility
 
     async def execute_action(
+        self,
+        action: ActionType,
+        parent_event_id=None,
+        event_emitter=None,
+        variable_resolver=None,
+        action_context=None,
+    ) -> ActionResult:
+        """Execute one action; the host-side backend brackets it with step markers (qemufile run directory)."""
+        session = self.hostside
+        if session is None:
+            return await self._execute_action_impl(
+                action, parent_event_id, event_emitter, variable_resolver, action_context
+            )
+        step = (action_context or '').split('_', 1)[0] or None
+        kind = type(action).__name__
+        info = {
+            'context': action_context,
+            'description': getattr(action, 'description', '') or None,
+            'detail': _action_detail(action),
+        }
+        session.markers.marker('adare.step.start', step=step, action=kind, **info)
+        result = await self._execute_action_impl(
+            action, parent_event_id, event_emitter, variable_resolver, action_context
+        )
+        session.markers.marker(
+            'adare.step.end',
+            step=step,
+            action=kind,
+            success=bool(result.success),
+            message=(result.message or '')[:200] or None,
+        )
+        return result
+
+    async def _execute_action_impl(
         self,
         action: ActionType,
         parent_event_id: str = None,
@@ -254,6 +318,15 @@ class ActionExecutor:
             action_type = type(resolved_action).__name__
             description = getattr(resolved_action, 'description', '')
             log.debug(f"Executing {action_type}: {description}")
+
+            # Bracket leaf actions with guest clock reads; containers' children bracket themselves.
+            # Before a test, also refresh the guest timezone the test reads local times with.
+            is_test = isinstance(resolved_action, ActionTestAction)
+            bracket = not isinstance(resolved_action, (BlockAction, LoopAction))
+            if bracket:
+                await self.clock.probe(
+                    'before', action_type, description, target_key, self.client, self.vm, with_timezone=is_test
+                )
 
             # Dispatch to appropriate executor and capture result
             result = None
@@ -347,6 +420,12 @@ class ActionExecutor:
 
             else:
                 result = ActionResult(success=False, message=f"Unknown action type: {action_type}")
+
+            if bracket and not is_test:
+                await self.clock.probe('after', action_type, description, target_key, self.client, self.vm)
+
+            # Evidence for negative tests: skipped / unchanged / failed GUI actions (nested ones too)
+            self.test_actions.effect_ledger.record_action(resolved_action, result)
 
             # Post-execution debug screenshot (if enabled and action was successful)
             if self.debug_screenshots and result and result.success:

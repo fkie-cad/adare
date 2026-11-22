@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from '@tanstack/react-router'
-import { Camera, Eye, HardDrive, Trash2 } from 'lucide-react'
+import { Link, useParams, useNavigate } from '@tanstack/react-router'
+import { Activity, Camera, Eye, HardDrive, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { AsyncBoundary } from '@/components/layout/async-boundary'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -67,7 +67,8 @@ function SnapshotsPanel({ instanceId }: { instanceId: string }) {
 function InstanceRow({ instance }: { instance: VmInstance }) {
   const [expanded, setExpanded] = useState<'live' | 'snapshots' | null>(null)
   const removeMutation = useRemoveVmInstance()
-  const vmName = String(instance.name ?? instance.id)
+  // instance_name is the hypervisor domain name, which /api/vm-watch-url resolves
+  const vmName = String(instance.instance_name ?? instance.id)
 
   return (
     <div className="rounded-md border border-border">
@@ -86,6 +87,14 @@ function InstanceRow({ instance }: { instance: VmInstance }) {
             <Eye size={14} />
             Watch
           </Button>
+          {instance.status === 'active' && (
+            <Button variant="ghost" size="sm" asChild title="Display and live logs">
+              <Link to="/live" search={{ instance: String(instance.id) }}>
+                <Activity size={14} />
+                Live
+              </Link>
+            </Button>
+          )}
           <Button
             variant={expanded === 'snapshots' ? 'default' : 'ghost'}
             size="sm"
@@ -126,7 +135,7 @@ function InstanceRow({ instance }: { instance: VmInstance }) {
 }
 
 export default function VmDetailPage() {
-  const { instanceId: vmId } = useParams({ from: '/vms/$instanceId' })
+  const { vmId } = useParams({ from: '/vms/$vmId' })
   const navigate = useNavigate()
   const vmQuery = useLocalVm(vmId)
   const instancesQuery = useVmInstances(vmId)
@@ -149,7 +158,7 @@ export default function VmDetailPage() {
     <div className="p-6 space-y-6">
       <PageHeader
         title={vmQuery.data?.name || vmId}
-        description={vmQuery.data?.path ? String(vmQuery.data.path) : undefined}
+        description={vmQuery.data?.file_path || undefined}
         actions={
           <Button variant="outline" onClick={handleDeleteVm} disabled={deleteMutation.isPending}>
             <Trash2 size={14} />

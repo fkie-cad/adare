@@ -11,11 +11,12 @@ import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, create_autospec, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+from adare.api import DevModeAPI
 from adare.core.dto.devmode import DevActionResult, DevSessionInfo
 from adare.core.result import Result
 
@@ -92,12 +93,14 @@ def client():
         current_variables={},
         available_snapshots=[],
     )
-    devmode = MagicMock()
+    # autospec: a route calling a method the real facade lacks fails here instead of passing on a MagicMock
+    devmode = create_autospec(DevModeAPI, instance=True)
     devmode.start_session = _service(Result.ok(session))
     devmode.stop_session = _service(Result.ok(None))
     devmode.execute_action = _service(Result.ok(DevActionResult(success=True, message='ok', execution_time=0.1)))
     devmode.create_checkpoint = _service(Result.ok(None))
     devmode.reset_soft = _service(Result.ok(None))
+    devmode.reset_hard = _service(Result.ok(None))
     devmode.restore_checkpoint = _service(Result.ok(None))
     devmode.list_sessions = _service(Result.ok([]))
 
@@ -117,6 +120,7 @@ def client():
         ('post', '/api/sessions/s1/actions/execute', {'action_yaml': 'type: wait'}),
         ('post', '/api/sessions/s1/checkpoints', {'name': 'cp'}),
         ('post', '/api/sessions/s1/reset?reset_type=soft', None),
+        ('post', '/api/sessions/s1/reset?reset_type=hard', None),
         ('post', '/api/sessions/s1/checkpoints/cp/restore', None),
         ('get', '/api/sessions', None),
     ],
