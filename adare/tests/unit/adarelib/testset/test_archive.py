@@ -357,7 +357,7 @@ def test_size_cap_while_streaming(tmp_path, work):
 
 
 def test_companions_are_extracted_next_to_member(tmp_path, work):
-    archive = _zip(tmp_path / 'profile.zip', {'places.sqlite': b'db', 'places.sqlite-wal': b'wal'})
-    res = _resolve(f'{archive}!/places.sqlite', work, companions=('-wal', '-journal'))
+    archive = _zip(tmp_path / 'app-data.zip', {'records.db': b'db', 'records.db-wal': b'wal'})
+    res = _resolve(f'{archive}!/records.db', work, companions=('-wal', '-journal'))
     assert _read(res.paths[0] + '-wal') == b'wal'
     assert not os.path.exists(res.paths[0] + '-journal')

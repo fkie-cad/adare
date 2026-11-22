@@ -94,20 +94,20 @@ def test_content_contains_in_rotated_log(tmp_path):
 
 
 def test_sqlite_query_in_zip(tmp_path):
-    db = tmp_path / 'places.sqlite'
+    db = tmp_path / 'records.db'
     con = sqlite3.connect(db)
-    con.execute('CREATE TABLE moz_places (url TEXT)')
-    con.execute("INSERT INTO moz_places VALUES ('https://example.org')")
+    con.execute('CREATE TABLE entries (url TEXT)')
+    con.execute("INSERT INTO entries VALUES ('https://example.org')")
     con.commit()
     con.close()
-    archive = tmp_path / 'profile.zip'
+    archive = tmp_path / 'app-data.zip'
     with zipfile.ZipFile(archive, 'w') as zf:
-        zf.write(db, 'profile/places.sqlite')
+        zf.write(db, 'app/records.db')
 
     result = _run(
         'sqlite.query_result',
-        dst=f'{archive}!/profile/places.sqlite',
-        query="SELECT url FROM moz_places WHERE url LIKE '%example%'",
+        dst=f'{archive}!/app/records.db',
+        query="SELECT url FROM entries WHERE url LIKE '%example%'",
         expected_rows=1,
     )
 
