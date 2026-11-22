@@ -17,6 +17,8 @@ The JSON testset enables detailed validation of JSON files and data structures. 
 
 Key paths are dot paths from the root: ``*`` expands all values of an object, ``name[*]`` all elements of an array, ``name[0]`` / ``name[-1]`` one element; a leading ``[0]`` / ``[*]`` addresses a top-level array and ``['a.b']`` a key that contains dots. LZ4-compressed JSON is read through the archive separator (``dst: /home/user/data/store.jsonlz4!``), a file inside an archive with ``archive.zip!/member``.
 
+Every JSON function takes ``encoding``: by default UTF-8/16/32 is detected with or without BOM; a name (``latin-1``) decodes BOM-less files with it. ``expected_value`` is required wherever a value is compared (``value_matches``, ``array_contains``); an invalid ``!re`` or unknown placeholder is an error.
+
 Absence is checked with ``value_count`` and ``expected_count: 0``: it passes when the key path selects nothing (or no value matches), while a missing or invalid file is an error.
 
 Test Functions

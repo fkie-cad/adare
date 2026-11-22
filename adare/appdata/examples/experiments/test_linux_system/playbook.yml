@@ -85,8 +85,8 @@ tests:
     description: 'Test log_entry_exists with systemd pattern'
     function: linux.log_entry_exists
     parameter:
-      log_file: '{{test_log}}'
-      pattern: 'systemd'
+      dst: '{{test_log}}'
+      content: 'systemd'
       max_lines: 1000
 
   - name: test_log_entry_not_found
@@ -94,8 +94,8 @@ tests:
     function: linux.log_entry_exists
     expect_to_fail: true
     parameter:
-      log_file: '{{test_log}}'
-      pattern: 'nonexistent-log-pattern-12345'
+      dst: '{{test_log}}'
+      content: 'nonexistent-log-pattern-12345'
       max_lines: 100
 
 actions:

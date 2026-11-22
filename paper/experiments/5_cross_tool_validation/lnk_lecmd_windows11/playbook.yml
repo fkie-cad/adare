@@ -130,7 +130,7 @@ tests:
       dst: '{{ out_dir }}/lecmd_L1.json'
       conditions:
         SourceFile: 'L1\.lnk$'
-      match_mode: any
+      wildcard_mode: any
       regex_match: true
 
   - name: l1_local_path
@@ -140,7 +140,7 @@ tests:
       dst: '{{ out_dir }}/lecmd_L1.json'
       conditions:
         LocalPath: 'C:\Windows\System32\notepad.exe'
-      match_mode: any
+      wildcard_mode: any
 
   - name: l1_working_directory
     description: "LECmd recovered the WORKING_DIR string"
@@ -149,7 +149,7 @@ tests:
       dst: '{{ out_dir }}/lecmd_L1.json'
       conditions:
         WorkingDirectory: 'C:\Windows\System32'
-      match_mode: any
+      wildcard_mode: any
 
   - name: l1_volume_label
     description: "LECmd recovered the VolumeID label — part of its high verbosity"
@@ -158,7 +158,7 @@ tests:
       dst: '{{ out_dir }}/lecmd_L1.json'
       conditions:
         VolumeLabel: 'ADARE-LAB'
-      match_mode: any
+      wildcard_mode: any
 
   # --- L2: valid link + 512 bytes of non-standard appended data --------------
   - name: l2_output_exists
@@ -183,7 +183,7 @@ tests:
       dst: '{{ out_dir }}/lecmd_L2.json'
       conditions:
         LocalPath: 'C:\Windows\System32\notepad.exe'
-      match_mode: any
+      wildcard_mode: any
 
   - name: l2_working_directory
     description: "LECmd recovered L2's WORKING_DIR string"
@@ -192,7 +192,7 @@ tests:
       dst: '{{ out_dir }}/lecmd_L2.json'
       conditions:
         WorkingDirectory: 'C:\Windows\System32'
-      match_mode: any
+      wildcard_mode: any
 
   # --- L3: valid link + 4096 bytes of non-standard appended data -------------
   - name: l3_output_exists
@@ -215,7 +215,7 @@ tests:
       dst: '{{ out_dir }}/lecmd_L3.json'
       conditions:
         LocalPath: 'C:\Windows\System32\notepad.exe'
-      match_mode: any
+      wildcard_mode: any
 
   - name: l3_working_directory
     description: "LECmd recovered L3's WORKING_DIR string"
@@ -224,7 +224,7 @@ tests:
       dst: '{{ out_dir }}/lecmd_L3.json'
       conditions:
         WorkingDirectory: 'C:\Windows\System32'
-      match_mode: any
+      wildcard_mode: any
 
 actions:
   # --- setup and tool provenance --------------------------------------------

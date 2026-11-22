@@ -52,6 +52,19 @@ Usage Example
          section: General
          key: last_opened
 
+Common Use Cases
+----------------
+
+**A setting was written**
+  The key exists after the action, whatever its value.
+
+See Also
+--------
+
+* :doc:`value_matches` — the value of the key.
+* :doc:`value_count` — how often the key occurs (``0`` for absence).
+* :doc:`section_exists` — only the section.
+
 Return Values
 -------------
 

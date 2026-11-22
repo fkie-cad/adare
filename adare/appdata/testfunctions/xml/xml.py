@@ -334,8 +334,11 @@ def element_text_matches(
 ):
     """Pass when the text of the element(s) selected by ``xpath`` equals/matches ``expected_value``.
 
-    Use for: asserting an XML setting or record value. "Text" is ``element.text``: only the
-    text before the element's first child, not stripped (missing -> ``''``).
+    Use for: asserting an XML setting or record value, and document properties of office
+    files: the author of a .docx is ``dc:creator`` in ``report.docx!/docProps/core.xml``
+    (xpath ``./dc:creator``, namespaces ``{dc: 'http://purl.org/dc/elements/1.1/'}``).
+    "Text" is ``element.text``: only the text before the element's first child, not
+    stripped (missing -> ``''``). To count elements use xml.element_count.
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file

@@ -13,6 +13,7 @@ ERROR can never become a pass.
 """
 
 import csv as stdlib_csv
+import sqlite3
 from pathlib import Path
 
 import pandas as pd
@@ -75,6 +76,8 @@ def files(tmp_path):
         'bad_ini': tmp_path / 'bad.ini',
         'bad_png': tmp_path / 'bad.png',
         'bad_image': tmp_path / 'bad.jpg',
+        'db': tmp_path / 'good.db',
+        'bad_db': tmp_path / 'bad.db',
     }
     paths['csv'].write_text('a,b\nc,d\n')
     paths['json'].write_text('{"a": 1, "arr": [1, 2], "s": "text"}')
@@ -97,6 +100,10 @@ def files(tmp_path):
         b'\x89PNG\r\n\x1a\n' + b'\x00\x00\x00\x03tEXtk\x00v' + b'\x00\x00\x00\x00' + b'\x00\x00\x00\x00IEND\xaeB`\x82'
     )
     paths['bad_image'].write_bytes(b'not an image')
+    with sqlite3.connect(str(paths['db'])) as conn:
+        conn.execute('CREATE TABLE t (a TEXT)')
+        conn.executemany('INSERT INTO t VALUES (?)', [('a',), ('c',)])
+    paths['bad_db'].write_bytes(b'SQLite format 3\x00' + b'\xff' * 200)
     out = {k: str(v) for k, v in paths.items()}
     out['xlsx'] = _workbook(tmp_path / 'good.xlsx', {'S': [['a', 'b'], ['c', 'd']]})
     out['other_xlsx'] = _workbook(tmp_path / 'other.xlsx', {'S': [['a', 'b'], ['x', 'y']]})
@@ -141,6 +148,9 @@ CORRUPT = [
     ('json.value_count', 'bad_json', {'key_path': 'a', 'expected_count': 1}),
     ('csv.row_count', 'bad_csv_bytes', {'entry': ['a', 'b'], 'expected_count': 1}),
     ('text.line_count', 'bad_csv_bytes', {'content': 'a', 'expected_count': 1}),
+    ('sqlite.query_result', 'bad_db', {'query': 'SELECT * FROM t'}),
+    ('sqlite.row_count', 'bad_db', {'query': 'SELECT * FROM t', 'expected_count': 1}),
+    ('excel.row_count', 'bad_xlsx', {'entry': ['a', 'b'], 'expected_count': 1}),
 ]
 
 
@@ -231,6 +241,15 @@ BAD_PARAMS = [
     ('text.occurrence_count', 'txt', {'content': 'zz', 'expected_count': 1, 'content_type': 'hex'}),
     ('text.line_count', 'txt', {'content': '[unclosed', 'expected_count': 1, 'regex_match': True}),
     ('text.line_count', 'txt', {'content': 'a', 'expected_count': 1, 'encoding': 'no-such-codec'}),
+    ('text.line_count', 'txt', {'content': 'a', 'expected_count': 1, 'case_sensitive': 'yes'}),
+    ('sqlite.row_count', 'db', {'query': 'SELECT * FROM t', 'expected_count': -1}),
+    ('sqlite.row_count', 'db', {'query': 'SELECT * FROM t', 'expected_count': 1, 'comparison_type': 'roughly'}),
+    ('sqlite.row_count', 'db', {'query': 'SELECT * FROM missing_table', 'expected_count': 0}),
+    ('excel.row_count', 'xlsx', {'entry': 'a,b', 'expected_count': 1}),
+    ('excel.row_count', 'xlsx', {'entry': ['a', 'b'], 'expected_count': 'one'}),
+    ('ini.value_matches', 'txt', {'section': '', 'key': 'a', 'expected_value': 'b', 'wildcard_mode': 'some'}),
+    ('image.png_text_matches', 'txt', {'keyword': 'k', 'wildcard_mode': 'some'}),
+    ('image.exif_value_matches', 'txt', {'tag': 'Make', 'expected_value': 'x', 'wildcard_mode': 'some'}),
 ]
 
 
@@ -283,6 +302,7 @@ def test_excel_cell_value_needs_exactly_one_placeholder(files):
     [
         ('excel.cell_value_matches', {'row': 0, 'column': 0, 'expected_value': 'a', 'sheet': 'Nope'}),
         ('excel.contains_row', {'entry': ['a', 'b'], 'sheet': 'Nope'}),
+        ('excel.row_count', {'entry': ['a', 'b'], 'expected_count': 0, 'sheet': 'Nope'}),
         ('excel.validate_columns', {'expected_columns': ['a'], 'sheet': 'Nope'}),
         ('excel.compare_rows', {'reference_rows': [['a', 'b']], 'sheet': 7}),
     ],
@@ -370,6 +390,9 @@ MISMATCH = [
     ('jsonl.line_count', 'jsonl', {'expected_count': 0, 'comparison_type': 'less'}),
     ('text.occurrence_count', 'txt', {'content': 'o', 'expected_count': 1}),
     ('text.line_count', 'txt', {'content': 'hello', 'expected_count': 0}),
+    ('text.line_count', 'txt', {'content': 'HELLO', 'expected_count': 0, 'case_sensitive': False}),
+    ('sqlite.row_count', 'db', {'query': 'SELECT * FROM t', 'expected_count': 1}),
+    ('excel.row_count', 'xlsx', {'entry': ['a', 'b'], 'expected_count': 2}),
 ]
 
 

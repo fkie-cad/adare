@@ -19,91 +19,91 @@ tests:
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Summary
+    sheet: Summary
 - name: test_sheet_operating_system_information_exists
   description: Verify Operating System Information sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Operating System Information
+    sheet: Operating System Information
 - name: test_sheet_web_bookmarks_exists
   description: Verify Web Bookmarks sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Web Bookmarks
+    sheet: Web Bookmarks
 - name: test_sheet_usb_device_attached_exists
   description: Verify USB Device Attached sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: USB Device Attached
+    sheet: USB Device Attached
 - name: test_sheet_web_cookies_exists
   description: Verify Web Cookies sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Web Cookies
+    sheet: Web Cookies
 - name: test_sheet_web_search_exists
   description: Verify Web Search sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Web Search
+    sheet: Web Search
 - name: test_sheet_data_source_usage_exists
   description: Verify Data Source Usage sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Data Source Usage
+    sheet: Data Source Usage
 - name: test_sheet_recycle_bin_exists
   description: Verify Recycle Bin sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Recycle Bin
+    sheet: Recycle Bin
 - name: test_sheet_web_history_exists
   description: Verify Web History sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Web History
+    sheet: Web History
 - name: test_sheet_operating_system_user_account_exists
   description: Verify Operating System User Account sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Operating System User Account
+    sheet: Operating System User Account
 - name: test_sheet_shell_bags_exists
   description: Verify Shell Bags sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Shell Bags
+    sheet: Shell Bags
 - name: test_sheet_installed_programs_exists
   description: Verify Installed Programs sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Installed Programs
+    sheet: Installed Programs
 - name: test_sheet_recent_documents_exists
   description: Verify Recent Documents sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Recent Documents
+    sheet: Recent Documents
 - name: test_sheet_tagged_files_exists
   description: Verify Tagged Files sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Tagged Files
+    sheet: Tagged Files
 - name: test_sheet_tagged_results_exists
   description: Verify Tagged Results sheet exists
   function: excel.sheet_exists
   parameter:
     dst: '{{ case_directory }}/Reports/*/Excel.xlsx'
-    sheet_name: Tagged Results
+    sheet: Tagged Results
 - name: test_columns_operating_system_information
   description: Validate Operating System Information sheet column headers
   function: excel.validate_columns

@@ -188,6 +188,47 @@ def test_png_text_duplicates_any_match(png):
     assert '0/2' in result.details[0]
 
 
+@pytest.mark.parametrize(
+    ('expected_value', 'regex_match', 'wildcard_mode', 'status'),
+    [
+        ('first', False, 'any', StatusEnum.SUCCESS),
+        ('first', False, 'all', StatusEnum.FAILED),
+        (r'^(first|zweiter)', True, 'all', StatusEnum.SUCCESS),
+        ('third', False, 'any', StatusEnum.FAILED),
+    ],
+)
+def test_png_text_wildcard_mode(png, expected_value, regex_match, wildcard_mode, status):
+    # two Comment chunks: 'first' (tEXt) and 'zweiter Kommentar' (iTXt)
+    result = _run(
+        PngTextMatches,
+        dst=png,
+        keyword='Comment',
+        expected_value=expected_value,
+        regex_match=regex_match,
+        wildcard_mode=wildcard_mode,
+    )
+    _assert(result, status)
+    assert f'(mode: {wildcard_mode})' in result.details[0]
+    if status == StatusEnum.FAILED:
+        assert result.details[2].startswith('non-matching texts: ')
+
+
+def test_png_text_wildcard_all_with_re_placeholder(png):
+    variables = {'regex_0_resolved': {'raw_value': 'zweiter .*', 'resolved_value': 'zweiter .*', 'type': 'regex'}}
+    for mode, status in (('any', StatusEnum.SUCCESS), ('all', StatusEnum.FAILED)):
+        param = image.png_text_matches._parameter_class(
+            dst=png, keyword='Comment', expected_value='{{regex_0_resolved}}', wildcard_mode=mode
+        )
+        _assert(PngTextMatches(name='t', parameter=param, variable_metadata=variables).test(), status)
+
+
+@pytest.mark.parametrize('params', [{'wildcard_mode': 'some'}, {'wildcard_mode': 'some', 'expected_value': 'first'}])
+def test_png_text_invalid_wildcard_mode_is_error(png, params):
+    result = _run(PngTextMatches, dst=png, keyword='Comment', **params)
+    _assert(result, StatusEnum.ERROR)
+    assert 'Invalid wildcard_mode' in result.details[0]
+
+
 def test_png_text_regex(png):
     _assert(
         _run(PngTextMatches, dst=png, keyword='Source', expected_value=r'\d+$', regex_match=True), StatusEnum.SUCCESS
@@ -332,6 +373,49 @@ def test_exif_regex(jpeg):
         StatusEnum.SUCCESS,
     )
     _assert(_run(ExifValueMatches, dst=jpeg, tag='Make', expected_value='(', regex_match=True), StatusEnum.ERROR)
+
+
+@pytest.fixture
+def jpeg_two_makes(tmp_path):
+    """Make (0x010F) in IFD0 and, unusually, in the Exif IFD with another value."""
+    exif = Image.Exif()
+    exif[0x010F] = 'ACME'
+    exif.get_ifd(image.EXIF_IFD)[0x010F] = 'ACME Imaging'
+    path = tmp_path / 'two.jpg'
+    Image.new('RGB', (10, 10)).save(path, 'JPEG', exif=exif)
+    return str(path)
+
+
+@pytest.mark.parametrize(
+    ('expected_value', 'regex_match', 'wildcard_mode', 'status'),
+    [
+        ('ACME', False, 'any', StatusEnum.SUCCESS),
+        ('ACME', False, 'all', StatusEnum.FAILED),
+        ('^ACME', True, 'all', StatusEnum.SUCCESS),
+        ('Imaging', True, 'all', StatusEnum.FAILED),
+        ('Other', False, 'any', StatusEnum.FAILED),
+    ],
+)
+def test_exif_wildcard_mode(jpeg_two_makes, expected_value, regex_match, wildcard_mode, status):
+    result = _run(
+        ExifValueMatches,
+        dst=jpeg_two_makes,
+        tag='Make',
+        expected_value=expected_value,
+        regex_match=regex_match,
+        wildcard_mode=wildcard_mode,
+    )
+    _assert(result, status)
+    assert result.details[0].startswith('EXIF tag Make: ')
+    assert f'/2 occurrences match (mode: {wildcard_mode})' in result.details[0]
+    if status == StatusEnum.FAILED:
+        assert result.details[2].startswith('non-matching values: ')
+
+
+def test_exif_invalid_wildcard_mode_is_error(jpeg):
+    result = _run(ExifValueMatches, dst=jpeg, tag='Make', expected_value='ACME', wildcard_mode='every')
+    _assert(result, StatusEnum.ERROR)
+    assert 'Invalid wildcard_mode' in result.details[0]
 
 
 @pytest.mark.parametrize('tag', ['NoSuchTag', '0xZZ', 0x10000, -1, True, 1.5])

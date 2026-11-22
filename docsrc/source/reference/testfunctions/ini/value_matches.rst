@@ -11,7 +11,7 @@ value_matches
 **Tests if an INI value equals or matches an expected value (regex and placeholders supported).**
 
 Compares the raw value text of ``key`` in ``section``. With duplicate keys or a section that appears more than
-once, one matching occurrence is enough. A missing key fails.
+once, one matching occurrence is enough (``wildcard_mode: all``: every occurrence must match). A missing key fails.
 
 Parameters
 ----------
@@ -44,6 +44,9 @@ Parameters
    * - ``encoding``
      - string
      - **Optional.** Text encoding. Default: auto (BOM, BOM-less UTF-16, else UTF-8).
+   * - ``wildcard_mode``
+     - string
+     - **Optional.** With several occurrences (duplicate keys or sections): ``any``: one must match; ``all``: every one must match. Other values are an error. Default: ``any``.
 
 Usage Example
 -------------
@@ -68,15 +71,26 @@ Usage Example
          expected_value: 'report\.txt$'
          regex_match: true
 
+     - name: ini_all_recent_files_in_documents
+       function: ini.value_matches
+       parameter:
+         dst: /home/user/.config/app/settings.ini
+         section: RecentFiles
+         key: file
+         expected_value: '^/home/user/Documents/'
+         regex_match: true
+         wildcard_mode: all
+
 Return Values
 -------------
 
 **Success**
-  The value (or one of the occurrences) matches.
+  The value matches (with several occurrences: one of them, or every one with ``wildcard_mode: all``).
 
 **Failure**
-  The file was read and the key is missing or no occurrence matches.
+  The file was read and the key is missing, no occurrence matches, or (``wildcard_mode: all``) one
+  does not match; the details list the non-matching values with their line numbers.
 
 **Error**
   The file does not exist, a glob matches no file or more than one, the file cannot be read or
-  decoded, the encoding is unknown, or the regex is invalid.
+  decoded, the encoding is unknown, the regex is invalid, or ``wildcard_mode`` is not ``any``/``all``.

@@ -265,3 +265,92 @@ def test_xxh32_across_unpack_chunks():
     body = struct.pack('<I', 0x80000000 | 60000) + data[:60000] + b'\x00\x00\x00\x00'
     frame = _frame(0x64, 0x40, body + struct.pack('<I', lz4.xxh32(data[:60000])))
     assert lz4.decompress(frame, CAP) == data[:60000]
+
+
+# --- size caps -----------------------------------------------------------------
+
+
+def test_literals_over_the_cap():
+    with pytest.raises(lz4.Lz4SizeError, match='size cap of 3 bytes'):
+        _decode_block(b'\x50hello', max_bytes=3)
+
+
+def test_overlapping_match_over_the_cap():
+    # 'ab' + match offset 2 length 10 = 12 bytes before the last literal
+    with pytest.raises(lz4.Lz4SizeError):
+        _decode_block(b'\x26ab\x02\x00\x10!', max_bytes=11)
+
+
+def test_output_exactly_at_the_cap_is_fine():
+    assert _decode_block(b'\x26ab\x02\x00\x10!', max_bytes=13) == b'abababababab!'
+    assert lz4.decompress(JSON_FRAME_CHECKED, len(JSON_TEXT)) == JSON_TEXT
+
+
+def test_uncompressed_block_over_the_cap():
+    body = struct.pack('<I', 0x80000005) + b'hello' + b'\x00\x00\x00\x00'
+    with pytest.raises(lz4.Lz4SizeError):
+        lz4.decompress(_frame(0x60, 0x40, body), 4)
+
+
+def test_block_with_header_announcing_the_cap_exactly():
+    assert lz4.decompress(_with_header(b'\x50hello', 5), 5) == b'hello'
+
+
+def test_cap_counts_all_concatenated_frames():
+    # the second frame announces its size, which together with the first is over the cap
+    with pytest.raises(lz4.Lz4SizeError, match='announces'):
+        lz4.decompress(JSON_FRAME + JSON_FRAME_CHECKED, 2 * len(JSON_TEXT) - 1)
+    assert lz4.decompress(JSON_FRAME + JSON_FRAME_CHECKED, 2 * len(JSON_TEXT)) == JSON_TEXT * 2
+
+
+def test_cap_counts_frames_without_a_content_size():
+    with pytest.raises(lz4.Lz4SizeError, match='size cap'):
+        lz4.decompress(JSON_FRAME + JSON_FRAME, 2 * len(JSON_TEXT) - 1)
+
+
+def test_block_larger_than_the_frame_block_maximum():
+    # block size code 4 = 64 KiB; a stored block that claims more is corrupt
+    body = struct.pack('<I', 0x80000000 | (64 << 10) + 1) + bytes((64 << 10) + 1) + b'\x00\x00\x00\x00'
+    with pytest.raises(lz4.Lz4Error, match='maximum'):
+        lz4.decompress(_frame(0x60, 0x40, body), CAP)
+
+
+# --- announced content size vs decoded size ------------------------------------
+
+
+def _sized_frame(content_size: int, payload: bytes = b'hello') -> bytes:
+    """An independent-block frame with a content size field and one stored block."""
+    body = struct.pack('<I', 0x80000000 | len(payload)) + payload + b'\x00\x00\x00\x00'
+    return _frame(0x68, 0x40, body, extra_descriptor=struct.pack('<Q', content_size))
+
+
+def test_frame_with_a_correct_content_size():
+    assert lz4.decompress(_sized_frame(5), CAP) == b'hello'
+
+
+@pytest.mark.parametrize('announced', [0, 4, 6, 1000])
+def test_frame_content_size_mismatch(announced):
+    with pytest.raises(lz4.Lz4Error, match=f'decoded to 5 bytes, header announces {announced}') as info:
+        lz4.decompress(_sized_frame(announced), CAP)
+    assert not isinstance(info.value, lz4.Lz4SizeError)
+
+
+def test_frame_content_size_is_not_checked_when_stopping_early():
+    # sniffing (stop_at) returns the head without reading the rest of the frame
+    assert lz4.decompress(_sized_frame(1000), CAP, stop_at=2) == b'hello'
+
+
+def test_block_with_header_announcing_more_bytes_than_it_holds():
+    with pytest.raises(lz4.Lz4Error, match='decoded to 5 bytes, header announces 9') as info:
+        lz4.decompress(_with_header(b'\x50hello', 9), CAP)
+    assert not isinstance(info.value, lz4.Lz4SizeError)
+
+
+def test_block_with_header_announcing_fewer_bytes_than_it_holds():
+    with pytest.raises(lz4.Lz4Error, match='header announces 4') as info:
+        lz4.decompress(_with_header(b'\x50hello', 4), CAP)
+    assert not isinstance(info.value, lz4.Lz4SizeError)
+
+
+def test_block_with_header_announcing_zero_bytes():
+    assert lz4.decompress(_with_header(b'', 0), CAP) == b''

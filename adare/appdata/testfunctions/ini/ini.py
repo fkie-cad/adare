@@ -24,7 +24,7 @@ from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.testset.content import decode_text, read_bytes_capped
-from adarelib.testset.structured import compare_count, compare_value, count_parameter_errors
+from adarelib.testset.structured import WILDCARD_MODES, compare_count, compare_value, count_parameter_errors
 
 # configure logging
 import logging
@@ -242,11 +242,13 @@ def value_matches(
     regex_match: bool = False,
     case_sensitive: bool = True,
     encoding: str = None,
+    wildcard_mode: str = 'any',
 ):
     """Pass when the value of ``key`` in ``section`` of ``dst`` equals (or matches) ``expected_value``.
 
     Use for: asserting a setting's value. With duplicate keys or sections, one matching
-    occurrence is enough. A missing key fails.
+    occurrence is enough (``wildcard_mode: all``: every occurrence must match). A missing
+    key fails.
 
     Args:
         dst: Guest path to the INI file; a glob must match exactly one path. A missing,
@@ -262,6 +264,8 @@ def value_matches(
         case_sensitive: ``False`` compares section and key names case-insensitively; values
             are always compared as given.
         encoding: Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8).
+        wildcard_mode: With several occurrences, ``any`` (default): one must match; ``all``:
+            every one must match. Other values are an error.
 
     Example:
         function: ini.value_matches
@@ -271,6 +275,8 @@ def value_matches(
           key: language
           expected_value: de_DE
     """
+    if wildcard_mode not in WILDCARD_MODES:
+        return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
     ini, error = _load_ini(ctx.resolve_globfilepath(dst), dst, encoding)
     if error is not None:
         return error
@@ -286,11 +292,12 @@ def value_matches(
         _, ok, message = results[0]
         return TestResult.success([message]) if ok else TestResult.failed([message])
     matching = [e for e, ok, _ in results if ok]
-    head = f'{_where(section, key)}: {len(matching)}/{len(results)} occurrences match'
-    if matching:
+    head = f'{_where(section, key)}: {len(matching)}/{len(results)} occurrences match (mode: {wildcard_mode})'
+    passed = bool(matching) if wildcard_mode == 'any' else len(matching) == len(results)
+    if passed:
         return TestResult.success([head, f'matching value at line {matching[0].line}: {matching[0].value}'])
-    values = ', '.join(f'line {e.line}: {e.value}' for e in found[:5])
-    return TestResult.failed([head, f'expected: "{expected_value}"', f'values: {values}'])
+    misses = ', '.join([f'line {e.line}: {e.value}' for e, ok, _ in results if not ok][:5])
+    return TestResult.failed([head, f'expected: "{expected_value}"', f'non-matching values: {misses}'])
 
 
 @testfunction(

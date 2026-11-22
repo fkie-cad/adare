@@ -11,7 +11,8 @@ exif_value_matches
 **Tests if an EXIF tag (IFD0, Exif or GPS IFD) equals or matches an expected value.**
 
 Reads EXIF data with Pillow and compares the tag's text form (see :doc:`index`) with ``expected_value``.
-A tag present in several IFDs passes when one occurrence matches; a missing tag fails. For an absent tag
+A tag present in several IFDs passes when one occurrence matches (``wildcard_mode: all``: every
+occurrence); a missing tag fails. For an absent tag
 use ``exif_value_count`` with ``expected_count: 0``.
 
 Parameters
@@ -36,6 +37,9 @@ Parameters
    * - ``regex_match``
      - boolean
      - **Optional.** Search ``expected_value`` as a regex (``re.search``, unanchored). Default: ``false``.
+   * - ``wildcard_mode``
+     - string
+     - **Optional.** With the tag in several IFDs (a number is looked up in all three): ``any``: one must match; ``all``: every one must match. Other values are an error. Default: ``any``.
 
 Usage Example
 -------------
@@ -57,15 +61,26 @@ Usage Example
          tag: GPSLatitude
          expected_value: '51, 30, 12.5'
 
+     - name: exif_software_everywhere
+       function: image.exif_value_matches
+       parameter:
+         dst: /home/user/Pictures/photo.jpg
+         tag: Software
+         expected_value: '^Editor '
+         regex_match: true
+         wildcard_mode: all
+
 Return Values
 -------------
 
 **Success**
-  The tag (or one of its occurrences) matches.
+  The tag matches (with several occurrences: one of them, or every one with ``wildcard_mode: all``).
 
 **Failure**
-  The file was read and the tag is missing or no occurrence matches.
+  The file was read and the tag is missing, no occurrence matches, or (``wildcard_mode: all``) one
+  does not match; the details list the non-matching values.
 
 **Error**
   The file does not exist, a glob matches no file or more than one, the file cannot be read, is not
-  an image or has corrupt EXIF data, an unknown tag name or invalid tag number, or an invalid regex.
+  an image or has corrupt EXIF data, an unknown tag name or invalid tag number, an invalid regex, or a
+  ``wildcard_mode`` other than ``any``/``all``.

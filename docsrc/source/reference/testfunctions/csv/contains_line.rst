@@ -28,6 +28,9 @@ Parameters
    * - ``entry``
      - list
      - **Required.** Array of values representing the expected CSV row. Supports exact values, regex patterns, and placeholder matching.
+   * - ``encoding``
+     - string
+     - **Optional.** Default ``null``: a BOM (UTF-8/16/32) or BOM-less UTF-16 is detected, else UTF-8. A name (``cp1252``) reads BOM-less files with it; an unknown name is an ERROR.
 
 Usage Example
 -------------

@@ -126,7 +126,7 @@ root element; prefixed names need ``namespaces``.
      parameter:
        dst: /home/user/Documents/report.docx!/docProps/core.xml
        xpath: ./cp:lastModifiedBy
-       expected_text: analyst
+       expected_value: analyst
        namespaces:
          cp: http://schemas.openxmlformats.org/package/2006/metadata/core-properties
          dc: http://purl.org/dc/elements/1.1/
@@ -137,7 +137,7 @@ root element; prefixed names need ``namespaces``.
      parameter:
        dst: /home/user/Documents/report.docx!/docProps/core.xml
        xpath: ./cp:revision
-       expected_text: '2'
+       expected_value: '2'
        namespaces:
          cp: http://schemas.openxmlformats.org/package/2006/metadata/core-properties
 
@@ -146,7 +146,7 @@ root element; prefixed names need ``namespaces``.
      parameter:
        dst: /home/user/Documents/doc.odt!/meta.xml
        xpath: ./office:meta/meta:editing-cycles
-       expected_text: '3'
+       expected_value: '3'
        namespaces:
          office: urn:oasis:names:tc:opendocument:xmlns:office:1.0
          meta: urn:oasis:names:tc:opendocument:xmlns:meta:1.0
@@ -156,7 +156,7 @@ root element; prefixed names need ``namespaces``.
      parameter:
        dst: /home/user/Documents/book.xlsx!/docProps/app.xml
        xpath: ./ep:Company
-       expected_text: Example Ltd
+       expected_value: Example Ltd
        namespaces:
          ep: http://schemas.openxmlformats.org/officeDocument/2006/extended-properties
 

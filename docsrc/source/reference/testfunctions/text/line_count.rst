@@ -27,7 +27,7 @@ Parameters
      - **Required.** Path to the text file. A glob must match exactly one file; ``archive.zip!/member`` reads a file inside an archive.
    * - ``content``
      - string
-     - **Required.** Substring a line must contain (case-sensitive); an empty string counts every line. With ``regex_match`` a regex (``(?i)`` for case-insensitive).
+     - **Required.** Substring a line must contain; an empty string counts every line. With ``regex_match`` a regex searched in each line. A ``!re`` / ``!timestamp`` tag is an error: write the pattern with ``regex_match``.
    * - ``expected_count``
      - integer
      - **Required.** Non-negative number to compare the count with. ``0`` asserts absence.
@@ -40,6 +40,9 @@ Parameters
    * - ``regex_match``
      - boolean
      - **Optional.** Treat ``content`` as a regex searched in each line. Default: ``false``.
+   * - ``case_sensitive``
+     - boolean
+     - **Optional.** Default: ``true``. ``false`` compares the substring after casefolding the line and ``content`` (``Report`` = ``REPORT``, sharp s = ``ss``), or compiles the regex with ``re.IGNORECASE``. A non-boolean is an error.
 
 Usage Example
 -------------
@@ -62,6 +65,14 @@ Usage Example
          content: secret-project
          expected_count: 0
 
+     - name: errors_in_any_case
+       function: text.line_count
+       parameter:
+         dst: /home/user/data/app.log
+         content: error
+         case_sensitive: false
+         expected_count: 0
+
 Return Values
 -------------
 
@@ -74,4 +85,5 @@ Return Values
 **Error**
   The file does not exist or is a directory, a glob matches no file or more than one, the file
   cannot be read or is not valid in the encoding, an unknown encoding, an invalid regex, a
-  negative or non-integer ``expected_count``, or an unknown ``comparison_type``.
+  negative or non-integer ``expected_count``, an unknown ``comparison_type``, or a non-boolean
+  ``case_sensitive``.

@@ -66,6 +66,24 @@ Usage Example
          expected_count: 1
          comparison_type: greater_equal
 
+Common Use Cases
+----------------
+
+**How many files were written**
+  Exactly three exports, at least one rotated log, one file inside an archive.
+
+**A group of files is gone**
+  ``expected_count: 0`` on a glob: cleared cache or temp files, a deleted folder content.
+
+See Also
+--------
+
+* :doc:`file_exists` — one file (or a glob) exists.
+* :doc:`file_does_not_exist` — one file (or a glob) is absent.
+* :doc:`dir_content` — the exact names in a directory.
+* :doc:`file_size` — the size of one file.
+* :doc:`/guide/absence` — checking that something is absent.
+
 Return Values
 -------------
 

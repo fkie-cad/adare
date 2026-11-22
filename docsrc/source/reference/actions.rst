@@ -472,14 +472,10 @@ Use custom tags in test parameters for precise matching:
 
    tests:
      - name: exact_match
-       function: csv.line_matches
+       function: csv.contains_line
        parameter:
-         pattern: [!s "exact text"]  # Exact string match
-
-     - name: regex_match
-       function: csv.line_matches
-       parameter:
-         pattern: [!re "^[a-z]+$"]   # Regex pattern
+         dst: /home/user/data/export.csv
+         entry: [!s "exact text", !re "^[a-z]+$"]  # Exact string, then regex
 
      - name: path_match
        function: file_exists
@@ -489,12 +485,16 @@ Use custom tags in test parameters for precise matching:
      - name: wildcard_match
        function: json.value_matches
        parameter:
-         value: !reALL                # Match any value
+         dst: /home/user/data/settings.json
+         key_path: session.id
+         expected_value: !reALL       # Match any value
 
      - name: timestamp_match
-       function: file_modified_time_matches
+       function: json.value_matches
        parameter:
-         timestamp: !timestamp
+         dst: /home/user/data/settings.json
+         key_path: lastDeleted
+         expected_value: !timestamp
            timestamp: "{{deletion_time}}"
            tolerance: 5
            timezone: "UTC"

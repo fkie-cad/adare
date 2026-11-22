@@ -26,7 +26,7 @@ from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.testset.content import read_bytes_capped
-from adarelib.testset.structured import compare_count, compare_value, count_parameter_errors
+from adarelib.testset.structured import WILDCARD_MODES, compare_count, compare_value, count_parameter_errors
 
 # configure logging
 import logging
@@ -362,11 +362,13 @@ def png_text_matches(
     keyword: str,
     expected_value: str | int | float | bool | None = None,
     regex_match: bool = False,
+    wildcard_mode: str = 'any',
 ):
     """Pass when the PNG ``dst`` has a text chunk with ``keyword`` (whose text matches ``expected_value``).
 
     Use for: metadata an application embeds in saved images (software, source, comment).
-    With several chunks for ``keyword``, one match is enough. For "absent" use
+    With several chunks for ``keyword``, one match is enough (``wildcard_mode: all``: every
+    chunk must match). For "absent" use
     image.png_text_count with ``expected_count: 0``.
 
     Args:
@@ -381,6 +383,9 @@ def png_text_matches(
             or ``{{placeholder}}`` is matched by type.
         regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
             An invalid regex is an error.
+        wildcard_mode: With several chunks for ``keyword``, ``any`` (default): one must
+            match; ``all``: every one must match. Ignored without ``expected_value``. Other
+            values are an error.
 
     Example:
         function: image.png_text_matches
@@ -389,6 +394,8 @@ def png_text_matches(
           keyword: Comment
           expected_value: exported by app
     """
+    if wildcard_mode not in WILDCARD_MODES:
+        return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
     texts, error = _load_png_text(ctx.resolve_globfilepath(dst), dst)
     if error is not None:
         return error
@@ -409,11 +416,12 @@ def png_text_matches(
         _, ok, message = results[0]
         return TestResult.success([message]) if ok else TestResult.failed([message])
     matching = [t for t, ok, _ in results if ok]
-    head = f'keyword "{keyword}": {len(matching)}/{len(results)} text chunks match'
-    if matching:
+    head = f'keyword "{keyword}": {len(matching)}/{len(results)} text chunks match (mode: {wildcard_mode})'
+    passed = bool(matching) if wildcard_mode == 'any' else len(matching) == len(results)
+    if passed:
         return TestResult.success([head, f'matching {matching[0].chunk} text: {matching[0].text}'])
-    shown = ', '.join(f'{t.chunk}: {t.text}' for t in found[:5])
-    return TestResult.failed([head, f'expected: "{expected_value}"', f'texts: {shown}'])
+    shown = ', '.join([f'{t.chunk}: {t.text}' for t, ok, _ in results if not ok][:5])
+    return TestResult.failed([head, f'expected: "{expected_value}"', f'non-matching texts: {shown}'])
 
 
 @testfunction(
@@ -496,12 +504,13 @@ def exif_value_matches(
     tag: str | int,
     expected_value: str | int | float | bool,
     regex_match: bool = False,
+    wildcard_mode: str = 'any',
 ):
     """Pass when EXIF tag ``tag`` of the image ``dst`` equals (or matches) ``expected_value``.
 
     Use for: camera, time and location metadata written into photos (JPEG, PNG eXIf, TIFF,
-    WebP). A tag present in several IFDs passes if one occurrence matches; a missing tag
-    fails. For "absent" use image.exif_value_count with ``expected_count: 0``.
+    WebP). A tag present in several IFDs passes if one occurrence matches (``wildcard_mode:
+    all``: every occurrence must match); a missing tag fails. For "absent" use image.exif_value_count with ``expected_count: 0``.
 
     Args:
         dst: Guest path to the image; a glob must match exactly one path. A missing file, a
@@ -520,6 +529,8 @@ def exif_value_matches(
             ``{{placeholder}}`` is matched by type.
         regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
             An invalid regex is an error.
+        wildcard_mode: With the tag in several IFDs, ``any`` (default): one occurrence must
+            match; ``all``: every one must match. Other values are an error.
 
     Example:
         function: image.exif_value_matches
@@ -528,6 +539,8 @@ def exif_value_matches(
           tag: DateTimeOriginal
           expected_value: "2024:05:01 12:00:00"
     """
+    if wildcard_mode not in WILDCARD_MODES:
+        return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
     found, error = _exif_values(ctx.resolve_globfilepath(dst), dst, tag)
     if error is not None:
         return error
@@ -543,11 +556,12 @@ def exif_value_matches(
         loc, _, ok, message = results[0]
         details = [f'EXIF tag {tag} ({loc}): {message}']
         return TestResult.success(details) if ok else TestResult.failed(details)
-    head = f'EXIF tag {tag}: {len(matching)}/{len(results)} occurrences match'
-    if matching:
+    head = f'EXIF tag {tag}: {len(matching)}/{len(results)} occurrences match (mode: {wildcard_mode})'
+    passed = bool(matching) if wildcard_mode == 'any' else len(matching) == len(results)
+    if passed:
         return TestResult.success([head, f'{matching[0][0]}: {matching[0][1]}'])
-    shown = ', '.join(f'{loc}: {value}' for loc, value, _, _ in results)
-    return TestResult.failed([head, f'expected: "{expected_value}"', f'values: {shown}'])
+    shown = ', '.join([f'{loc}: {value}' for loc, value, ok, _ in results if not ok][:5])
+    return TestResult.failed([head, f'expected: "{expected_value}"', f'non-matching values: {shown}'])
 
 
 @testfunction(

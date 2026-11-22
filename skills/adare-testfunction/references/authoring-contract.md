@@ -106,6 +106,23 @@ test whose subject is existence (`standard.file_exists`, `file_does_not_exist`,
 
 Prefer a count function (`expected_count`, `0` = absent) over a separate "absent" test.
 
+## Parameter names (use the shared ones)
+
+The bundled collections use one name per concept, so playbook authors can guess them:
+
+- `dst`: the file (globs, `archive!member`); `content`: a string to find in it.
+- `expected_value`: the value to compare (required unless the function also counts);
+  `regex_match: bool`: treat it as a Python regex searched with `re.search` (unanchored).
+- `expected_count: int` + `comparison_type` (`equals`, `greater`, `less`, `greater_equal`,
+  `less_equal`) for every count; no default for `expected_count`.
+- `wildcard_mode` (`any`/`all`) when a path selects several values; `case_sensitive: bool`.
+- `encoding: str | None = None` (auto: BOM / UTF-16 / UTF-8) for text formats.
+
+An invalid `!re` or an unknown placeholder in `expected_value` is an ERROR, never a
+failure. If a parameter or function is renamed, add the old name to
+`adarelib/adarelib/testset/renames.py` so old playbooks get "X was renamed to Y" instead
+of a bare type error.
+
 Docstring examples use neutral made-up paths (`/home/user/data/app.db`), never a real
 application's paths or table names; `test_neutral_docstrings.py` checks this.
 

@@ -25,20 +25,7 @@ DOCS_DIR = PROJECT_ROOT.parent / "docsrc" / "source" / "reference" / "testfuncti
 
 # Testfunctions that predate this check and still lack a reference page.
 # Remove an entry when its page is written; the test below fails on stale entries.
-UNDOCUMENTED = {
-    "csv.compare_rows",
-    "csv.compare_files",
-    "excel.sheet_exists",
-    "excel.cell_value_matches",
-    "excel.contains_row",
-    "excel.validate_columns",
-    "excel.compare_rows",
-    "excel.compare_sheets",
-    "excel.compare_files",
-    "jsonl.line_matches",
-    "jsonl.line_count",
-    "jsonl.value_in_any_line",
-}
+UNDOCUMENTED: set[str] = set()
 
 # Collections documented in a guide page instead of one reference page per function;
 # the guide must mention every testname.

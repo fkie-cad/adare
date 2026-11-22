@@ -8,6 +8,7 @@ from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
 from adarelib.testset.compare import compare_row_sequences, compare_row_sets, extract_columns, row_matches_pattern
+from adarelib.testset.structured import compare_count, count_parameter_errors
 from adarelib.testset.workbook import (
     UNREADABLE_WORKBOOK_ERRORS,
     SheetNotFoundError,
@@ -339,6 +340,71 @@ def contains_row(
         return TestResult.execution_error(e, f"Cannot read Excel file {dst_resolved}")
     except UNREADABLE_WORKBOOK_ERRORS as e:
         return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
+
+
+@testfunction(
+    name='row_count',
+    description='tests the number of rows in an Excel sheet that match the given entry layout',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def row_count(
+    ctx: TestContext,
+    dst: str,
+    entry: list,
+    expected_count: int,
+    comparison_type: str = 'equals',
+    sheet: str | int = 0,
+    header_row: int | None = None,
+):
+    """Pass when the number of rows of a sheet matching ``entry`` satisfies ``comparison_type``.
+
+    Use for: asserting how often a record occurs (exactly one row for an item); absence of a
+    row: ``expected_count: 0`` (or ``expect_to_fail: true`` on excel.contains_row).
+
+    Args:
+        dst: Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error.
+        entry: Expected row as a list, matched exactly like excel.contains_row: one item per
+            column of the sheet's used width (a row with another width never matches), exact
+            strings or ``!re``/``!timestamp`` tags. A non-list is an error.
+        expected_count: Non-negative integer to compare against; anything else is an error.
+        comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
+            ``less_equal``; other values are an error.
+        sheet: Sheet name (str) or 0-based index (int); an unknown sheet fails, like excel.contains_row.
+        header_row: Number of top rows to skip before counting; ``None`` skips none. A
+            negative number or a non-integer is an error.
+
+    Example:
+        function: excel.row_count
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          entry: [Laptop, !re '[0-9]+', Office]
+          expected_count: 1
+    """
+    problems = count_parameter_errors(expected_count, comparison_type)
+    if not isinstance(entry, list):
+        problems.append(f'entry must be a list (one item per column), got {entry!r}')
+    if header_row is not None and (isinstance(header_row, bool) or not isinstance(header_row, int) or header_row < 0):
+        problems.append(f'header_row must be a non-negative integer or None, got {header_row!r}')
+    if problems:
+        return TestResult.error(problems)
+    dst_resolved, status = ctx.resolve_globfilepath(dst)
+    if not dst_resolved:
+        return _unresolved_path_error('file', dst, status)
+    log.debug(f'dst file {dst_resolved} will be used for test row_count')
+    try:
+        rows = read_sheet(dst_resolved, sheet=sheet, header_row=header_row)
+    except FileNotFoundError:
+        return TestResult.error([f'file with path {dst} does not exist'])
+    except SheetNotFoundError as e:
+        return TestResult.failed([str(e)])
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read Excel file {dst_resolved}")
+    except UNREADABLE_WORKBOOK_ERRORS as e:
+        return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
+    matching = sum(1 for row in rows if row_matches_pattern(ctx, row, entry)[0])
+    ok, message = compare_count(matching, expected_count, comparison_type)
+    details = [f'{matching} of {len(rows)} row(s) match {entry}', message]
+    return TestResult.success(details) if ok else TestResult.failed(details)
 
 
 # ============================================================================
@@ -715,7 +781,7 @@ def compare_files(
         reference: Guest path to the reference workbook.
         sheet_mode: ``by_name`` (default; pair equal names), ``by_index`` (pair by position)
             or ``specific`` (only ``specific_sheets`` present in both; extra sheets ignored).
-            Other values fail.
+            Other values are an error.
         specific_sheets: Sheet names for ``specific`` mode; names absent from ``actual`` count as
             missing, names absent only from ``reference`` are skipped. Empty passes vacuously.
         columns: 0-based column indices to compare; ``None`` compares all.

@@ -40,15 +40,9 @@ Before writing a playbook, decide what you want to verify.
 Choosing testfunctions
 ----------------------
 
-Browse the testsets to find functions that match your artifact type:
-
-- **standard** -- file existence, content matching, hash comparison, file size
-- **json** -- key existence, value assertions in JSON files
-- **csv** -- column checks, row matching in CSV/TSV files
-- **xml** -- XPath queries, element assertions
-- **sqlite** -- SQL queries against SQLite databases (application data, logs)
-- **linux** -- syslog entries, package state, service status
-- **windows** -- registry keys/values, event log entries, Prefetch files
+Pick one testfunction per finding. :doc:`choosing-testfunctions` maps goals to functions
+(and names the look-alike *not* to use); ``adare test search "<goal>"`` searches the
+catalog from the command line.
 
 Defining pass/fail criteria
 ---------------------------
@@ -149,12 +143,12 @@ You can also set per-test timeouts for long-running validations:
 
    tests:
      - name: large_db_check
-       function: sqlite.query_result_contains
+       function: sqlite.query_result
        timeout: 300
        parameter:
          dst: "/path/to/large.db"
-         query: "SELECT count(*) FROM events"
-         expected: "1000"
+         query: "SELECT count(*) AS n FROM events"
+         expected_result: [{n: 1000}]
 
 
 Running the Workflow

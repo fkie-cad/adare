@@ -10,6 +10,8 @@ Reference a test from a playbook `tests:` block by its dotnotation. Required par
 
 compares two CSV files with full diff reporting
 
+**Use for:** diffing a produced CSV against a reference CSV available on the same machine. For inline expectations use csv.compare_rows. Needs the in-guest agent: agentless host mode only pulls a ``dst`` parameter, and this function has none.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -35,6 +37,8 @@ tests:
 
 compares all rows in CSV against embedded reference data
 
+**Use for:** asserting a whole (small) CSV export. To compare against a second CSV file use csv.compare_files.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -59,6 +63,8 @@ tests:
 
 tests if row in a csv file exists that matches the given entry layout
 
+**Use for:** checking a tool's CSV output (e.g. a timeline) contains a specific record.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -78,6 +84,8 @@ tests:
 ### `csv.row_count`
 
 tests the number of rows (records) in a CSV file that match the given entry layout
+
+**Use for:** asserting how often a record occurs (exactly one row for a file); absence of a row: ``expected_count: 0`` (or ``expect_to_fail: true`` on csv.contains_line). Counts CSV records, so a quoted field with a line break is one row; for physical lines use text.line_count, for JSON Lines records jsonl.line_count.
 
 *FILE_CONTENT*, os: any
 
@@ -105,6 +113,8 @@ tests:
 
 validates specific cell value with placeholder support
 
+**Use for:** asserting one value a user typed or a formula result saved in a workbook. Cells are read via pandas and stringified: empty -> ``''``; numbers via ``str()`` (an int may read as ``5.0`` if pandas upcasts the column/row to float); dates as ``2024-01-31 00:00:00`` or ``2024-01-31T00:00:00`` depending on the row's other cells -- use ``!re`` for dates and numbers when unsure.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -128,13 +138,15 @@ tests:
 
 compares entire Excel files with multi-sheet awareness
 
+**Use for:** whole-workbook comparison. Needs the in-guest agent (agentless host mode only pulls a ``dst`` parameter).
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
 |---|---|---|---|
 | actual | `str` | `''` | Guest path to the workbook under test; glob must match exactly one path. |
 | reference | `str` | `''` | Guest path to the reference workbook. |
-| sheet_mode | `str` | `'by_name'` | ``by_name`` (default; pair equal names), ``by_index`` (pair by position) or ``specific`` (only ``specific_sheets`` present in both; extra sheets ignored). Other values fail. |
+| sheet_mode | `str` | `'by_name'` | ``by_name`` (default; pair equal names), ``by_index`` (pair by position) or ``specific`` (only ``specific_sheets`` present in both; extra sheets ignored). Other values are an error. |
 | specific_sheets | `list[str] \| None` | `None` | Sheet names for ``specific`` mode; names absent from ``actual`` count as missing, names absent only from ``reference`` are skipped. Empty passes vacuously. |
 | columns | `list[int] \| None` | `None` | 0-based column indices to compare; ``None`` compares all. |
 | ignore_order | `bool` | `False` | ``True`` matches rows as a multiset instead of position by position. |
@@ -156,6 +168,8 @@ tests:
 ### `excel.compare_rows`
 
 compares sheet rows against reference data (embedded or external file)
+
+**Use for:** asserting sheet contents. Give exactly one of ``reference_rows``/``reference_file`` (both or neither fails). Cells are stringified as in excel.cell_value_matches.
 
 *FILE_CONTENT*, os: any
 
@@ -185,6 +199,8 @@ tests:
 
 compares two sheets from same or different files
 
+**Use for:** comparing two sheets of the same or different workbooks. Needs the in-guest agent (agentless host mode only pulls a ``dst`` parameter).
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -212,6 +228,8 @@ tests:
 
 finds row matching pattern in Excel sheet
 
+**Use for:** checking a record exists anywhere in a sheet. Cells are stringified as in excel.cell_value_matches (beware float/date formatting).
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -229,9 +247,38 @@ tests:
     dst: <str>
 ```
 
+### `excel.row_count`
+
+tests the number of rows in an Excel sheet that match the given entry layout
+
+**Use for:** asserting how often a record occurs (exactly one row for an item); absence of a row: ``expected_count: 0`` (or ``expect_to_fail: true`` on excel.contains_row).
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error. |
+| **entry** | `list` |  | Expected row as a list, matched exactly like excel.contains_row: one item per column of the sheet's used width (a row with another width never matches), exact strings or ``!re``/``!timestamp`` tags. A non-list is an error. |
+| **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+| sheet | `str \| int` | `0` | Sheet name (str) or 0-based index (int); an unknown sheet fails, like excel.contains_row. |
+| header_row | `int \| None` | `None` | Number of top rows to skip before counting; ``None`` skips none. A negative number or a non-integer is an error. |
+
+```yaml
+tests:
+- name: check_row_count
+  function: excel.row_count
+  parameter:
+    dst: <str>
+    entry: <list>
+    expected_count: <int>
+```
+
 ### `excel.sheet_exists`
 
 tests if a sheet exists in an Excel file
+
+**Use for:** checking a GUI action added/renamed a worksheet.
 
 *FILE_CONTENT*, os: any
 
@@ -253,6 +300,8 @@ tests:
 ### `excel.validate_columns`
 
 validates column headers in Excel sheet
+
+**Use for:** verifying a sheet's column layout/schema.
 
 *FILE_CONTENT*, os: any
 
@@ -280,6 +329,8 @@ tests:
 
 tests if an image has the expected width and/or height in pixels
 
+**Use for:** checking an exported, resized or cropped image, or a generated thumbnail.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -299,6 +350,8 @@ tests:
 ### `image.exif_value_count`
 
 tests the number of occurrences of an EXIF tag (optionally with a matching value)
+
+**Use for:** absence: ``expected_count: 0`` asserts the tag was not written (or stripped, e.g. location data removed on export).
 
 *FILE_CONTENT*, os: any
 
@@ -325,6 +378,8 @@ tests:
 
 tests if an EXIF tag (IFD0, Exif or GPS IFD) equals or matches an expected value
 
+**Use for:** camera, time and location metadata written into photos (JPEG, PNG eXIf, TIFF, WebP). A tag present in several IFDs passes if one occurrence matches (``wildcard_mode: all``: every occurrence must match); a missing tag fails. For "absent" use image.exif_value_count with ``expected_count: 0``.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -333,6 +388,7 @@ tests if an EXIF tag (IFD0, Exif or GPS IFD) equals or matches an expected value
 | **tag** | `str \| int` |  | Tag name as in Pillow's tables (``Make``, ``DateTimeOriginal``, ``GPSLatitude``) or a number (``0x9003``, ``36867``). Main-table names are looked up in IFD0 and the Exif IFD, GPS names in the GPS IFD, numbers in all three. An unknown name is an error. |
 | **expected_value** | `str \| int \| float \| bool` |  | Compared with the value's text form: text as stored (trailing NULs removed); integers in decimal; rationals and floats as decimals (``72``, ``2.8``, ``0.004``; ``nan`` for x/0); sequences joined with ``", "`` (GPS ``51, 30, 12.5``); bytes as text when printable UTF-8, else lowercase hex; the user comment without its 8-byte charset prefix; the UTF-16 title/comment tags (0x9C9B-0x9C9F) decoded. A YAML number is formatted the same way (write a sequence as text, ``51, 30, 12.5``); a ``!re``/``!timestamp`` tag or ``{{placeholder}}`` is matched by type. |
 | regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). An invalid regex is an error. |
+| wildcard_mode | `str` | `'any'` | With the tag in several IFDs, ``any`` (default): one occurrence must match; ``all``: every one must match. Other values are an error. |
 
 ```yaml
 tests:
@@ -347,6 +403,8 @@ tests:
 ### `image.png_text_count`
 
 tests the number of PNG text chunks with a keyword (optionally with a matching text)
+
+**Use for:** duplicate keywords and absence: ``expected_count: 0`` asserts no such chunk (or none with that text).
 
 *FILE_CONTENT*, os: any
 
@@ -373,6 +431,8 @@ tests:
 
 tests if a PNG text chunk (tEXt/zTXt/iTXt) with a keyword exists or matches an expected value
 
+**Use for:** metadata an application embeds in saved images (software, source, comment). With several chunks for ``keyword``, one match is enough (``wildcard_mode: all``: every chunk must match). For "absent" use image.png_text_count with ``expected_count: 0``.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -381,6 +441,7 @@ tests if a PNG text chunk (tEXt/zTXt/iTXt) with a keyword exists or matches an e
 | **keyword** | `str` |  | Chunk keyword, compared exactly (case-sensitive). All chunks up to IEND are read, also those after the image data. tEXt is Latin-1, zTXt zlib + Latin-1, iTXt UTF-8 (compressed or not; language tag and translated keyword are ignored). |
 | expected_value | `str \| int \| float \| bool \| None` | `None` | ``None`` (default): the keyword exists. Otherwise compared with the text; a YAML number/boolean is compared as its text, a ``!re``/``!timestamp`` tag or ``{{placeholder}}`` is matched by type. |
 | regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). An invalid regex is an error. |
+| wildcard_mode | `str` | `'any'` | With several chunks for ``keyword``, ``any`` (default): one must match; ``all``: every one must match. Ignored without ``expected_value``. Other values are an error. |
 
 ```yaml
 tests:
@@ -396,6 +457,8 @@ tests:
 ### `ini.contains_key`
 
 tests if an INI file contains a key in a section
+
+**Use for:** checking a setting was written, whatever its value. For "absent" use ini.value_count with ``expected_count: 0``.
 
 *FILE_CONTENT*, os: any
 
@@ -421,6 +484,8 @@ tests:
 
 tests if an INI file contains a section
 
+**Use for:** checking a settings file gained a section. For "absent" use ``expect_to_fail`` (or ini.value_count with ``expected_count: 0`` for a key).
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -442,6 +507,8 @@ tests:
 ### `ini.value_count`
 
 tests the number of occurrences of an INI key (optionally with a matching value)
+
+**Use for:** duplicate keys (lists written as repeated keys) and absence: ``expected_count: 0`` asserts the key (or the key with that value) is not in the section.
 
 *FILE_CONTENT*, os: any
 
@@ -472,6 +539,8 @@ tests:
 
 tests if an INI value equals or matches an expected value (regex and placeholders supported)
 
+**Use for:** asserting a setting's value. With duplicate keys or sections, one matching occurrence is enough (``wildcard_mode: all``: every occurrence must match). A missing key fails.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -483,6 +552,7 @@ tests if an INI value equals or matches an expected value (regex and placeholder
 | regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). An invalid regex is an error. |
 | case_sensitive | `bool` | `True` | ``False`` compares section and key names case-insensitively; values are always compared as given. |
 | encoding | `str` | `None` | Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8). |
+| wildcard_mode | `str` | `'any'` | With several occurrences, ``any`` (default): one must match; ``all``: every one must match. Other values are an error. |
 
 ```yaml
 tests:
@@ -500,6 +570,8 @@ tests:
 ### `json.array_contains`
 
 tests if JSON array at specified path contains expected element
+
+**Use for:** checking that a list in a JSON file includes an entry. To count entries use json.value_count (``array_path[*]`` as key path).
 
 *FILE_CONTENT*, os: any
 
@@ -524,6 +596,8 @@ tests:
 
 tests if JSON file contains specified key path (supports dot notation like "user.profile.name")
 
+**Use for:** checking a settings/config file gained a key. To also check the value use json.value_matches. Absence of a key: ``expect_to_fail: true`` here, or json.value_count with ``expected_count: 0``.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -544,6 +618,8 @@ tests:
 ### `json.value_count`
 
 tests the number of JSON values at a key path (optionally only those matching a value)
+
+**Use for:** counting entries (e.g. exactly 3 bookmarks with a given tag) and asserting absence: ``expected_count: 0`` without ``expected_value`` passes when the key path selects nothing, with ``expected_value`` when no value matches. To check what one value is use json.value_matches.
 
 *FILE_CONTENT*, os: any
 
@@ -570,6 +646,8 @@ tests:
 ### `json.value_matches`
 
 tests if JSON value at key path matches expected value using placeholders (supports wildcards [*] and * with any/all modes)
+
+**Use for:** asserting a setting/field value. If the path yields several values (a wildcard, or a JSON array value, whose elements are then compared one by one) ``wildcard_mode`` decides; a one-element array is unwrapped. Whole arrays cannot be compared. To assert that no value matches use json.value_count with ``expected_count: 0``.
 
 *FILE_CONTENT*, os: any
 
@@ -598,6 +676,8 @@ tests:
 
 counts lines in JSONL file matching conditions and validates against expected count (if None, requires at least 1 match)
 
+**Use for:** asserting how many records/events were written (e.g. exactly 3 deletions); absence: ``expected_count: 0``. For CSV records use csv.row_count, for lines of a plain text file text.line_count.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -622,6 +702,8 @@ tests:
 
 tests if lines in JSONL file match specified conditions (supports any/all modes)
 
+**Use for:** event logs / NDJSON exports (e.g. "a line with type=login and user=alice exists"). To count matches use jsonl.line_count.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -644,6 +726,8 @@ tests:
 ### `jsonl.value_in_any_line`
 
 tests if specified key path with expected value exists in any line of JSONL file
+
+**Use for:** a single-field check across a log; for multi-field conditions use jsonl.line_matches.
 
 *FILE_CONTENT*, os: any
 
@@ -671,6 +755,8 @@ tests:
 
 tests if one of the last lines of a text log contains a string or matches a regex
 
+**Use for:** checking an action left a trace in a plain-text log (syslog, auth.log, app logs; not the binary journal). To count entries, or to search the whole file, use text.line_count.
+
 *FILE_CONTENT*, os: linux
 
 | parameter | type | default | description |
@@ -693,6 +779,8 @@ tests:
 
 tests if a process is running with expected number of instances (Linux only)
 
+**Use for:** checking an application/daemon is (still) running after an action. Linux only. No matching process always fails, even with ``min_instances: 0``.
+
 *QGA_PROBE*, os: linux
 
 | parameter | type | default | description |
@@ -711,6 +799,8 @@ tests:
 ### `linux.system_service_status`
 
 tests if a systemd service has expected status (Linux only)
+
+**Use for:** checking a systemd unit was started/stopped by an action. Linux guests only (other OSes, a missing ``systemctl`` or a 10 s timeout are execution errors).
 
 *QGA_PROBE*, os: linux
 
@@ -731,6 +821,8 @@ tests:
 ### `linux.user_exists`
 
 tests if a user account exists with optional UID and home directory checks (Linux only)
+
+**Use for:** verifying an account was created by an installer or admin action. Linux only.
 
 *QGA_PROBE*, os: linux
 
@@ -754,6 +846,8 @@ tests:
 
 tests if a property list (XML or binary plist) contains the specified key path
 
+**Use for:** checking that a preferences/settings plist gained a key. To also check the value use plist.value_matches; to check that a key is absent use plist.value_count with ``expected_count: 0`` (or ``expect_to_fail: true`` here: a missing file stays an error).
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -773,6 +867,8 @@ tests:
 ### `plist.value_count`
 
 tests how many property list values exist at a key path, optionally only those matching a value (0 = absent)
+
+**Use for:** counting entries (``recent[*]``) and asserting absence: ``expected_count: 0`` passes when the key path selects nothing (or nothing matches ``expected_value``), while a missing or invalid file is still an error. A path that selects one array counts its elements when ``expected_value`` is given; without it every selected value counts once.
 
 *FILE_CONTENT*, os: any
 
@@ -798,6 +894,8 @@ tests:
 ### `plist.value_matches`
 
 tests if the property list value at a key path matches the expected value (dates as ISO strings, data as hex)
+
+**Use for:** asserting a preference value. If the path yields several values (a wildcard, or an array value, whose elements are then compared one by one) ``wildcard_mode`` decides. Values are normalised before comparing: ``<date>`` becomes an ISO 8601 string without zone (plist dates are UTC, ``2024-01-15T10:30:00``), ``<data>`` a lowercase hex string (``0a1b``), ``<integer>``/``<real>``/``<true/>`` stay numbers and booleans.
 
 *FILE_CONTENT*, os: any
 
@@ -825,6 +923,8 @@ tests:
 
 executes SQL query against SQLite database and validates result
 
+**Use for:** asserting that a row was written, changed or removed. The original file is never opened: ``dst`` and any ``-wal``/``-journal`` sidecar are copied to a temp dir and the copy is queried, so uncheckpointed changes are seen and the evidence is not modified. Details report ``queried snapshot: <file> sha256=...`` per copied file and, once the query ran, the rows read (``query result: [...]``, also on success). With neither expectation set, it passes whenever the query runs. To only count rows use sqlite.row_count. Timestamps stored as numbers (Unix seconds, microseconds since 1601) are compared with ``!timestamp`` and its ``epoch``/``unit`` options.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -844,11 +944,38 @@ tests:
     query: <str>
 ```
 
+### `sqlite.row_count`
+
+tests the number of rows an SQL query returns on an SQLite database
+
+**Use for:** asserting how many records an action left behind (exactly one history entry for a URL); asserting a record is gone: ``expected_count: 0``. Queried like sqlite.query_result: ``dst`` and any ``-wal``/``-journal`` sidecar are copied to a temp dir and the copy is queried, so uncheckpointed changes are seen and the evidence is not modified. Details report the count, the rows read (``query result: [...]``) and ``queried snapshot: <file> sha256=...`` per copied file. To check the row contents use sqlite.query_result with ``expected_result``.
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the database; a glob must match exactly one file (otherwise an error). A missing file is an error. |
+| **query** | `str` |  | SQL to execute, e.g. ``SELECT id FROM items WHERE name = 'example'``; every returned row counts (``SELECT COUNT(*)`` returns one row). A SQL error (syntax, unknown table, unreadable database) is an error. |
+| **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+
+```yaml
+tests:
+- name: check_row_count
+  function: sqlite.row_count
+  parameter:
+    dst: <str>
+    query: <str>
+    expected_count: <int>
+```
+
 ## standard
 
 ### `standard.dir_content`
 
 tests if a directory has the expected files/folders
+
+**Use for:** checking a folder contains expected files/subfolders. Extra entries are allowed (only listed in the failure details); the listing is not recursive.
 
 *FILE_BASED*, os: any
 
@@ -869,6 +996,8 @@ tests:
 
 tests if directory(ies) with path destination(dst) do NOT exist (supports glob patterns with match_mode)
 
+**Use for:** verifying a folder was removed or never created. Opposite: standard.dir_exists. A regular file at ``dst`` does not count as a directory, so it passes.
+
 *FILE_BASED*, os: any
 
 | parameter | type | default | description |
@@ -888,6 +1017,8 @@ tests:
 
 tests if directory(ies) with path destination(dst) exist (supports glob patterns with match_mode)
 
+**Use for:** verifying an install/extract step created a folder. Opposite: standard.dir_does_not_exist.
+
 *FILE_BASED*, os: any
 
 | parameter | type | default | description |
@@ -906,6 +1037,8 @@ tests:
 ### `standard.file_content_contains`
 
 tests if file content contains specified string or byte pattern
+
+**Use for:** checking a value/marker was written into a file. For patterns use standard.file_content_matches_regex; to count occurrences, search several encodings at once or assert a value is gone from a binary file use text.occurrence_count.
 
 *FILE_BASED*, os: any
 
@@ -930,6 +1063,8 @@ tests:
 
 tests if file content equals the given content
 
+**Use for:** exact output checks, e.g. a tool's exit code or a saved text document. That a file is empty: standard.file_size with ``expected_size: 0``.
+
 *FILE_BASED*, os: any
 
 | parameter | type | default | description |
@@ -951,6 +1086,8 @@ tests:
 ### `standard.file_content_matches_regex`
 
 tests if file content matches a given regex expression
+
+**Use for:** loose content checks (a value appears, a line has a given shape). For exact content use standard.file_content_equals; for a plain substring standard.file_content_contains.
 
 *FILE_BASED*, os: any
 
@@ -974,6 +1111,8 @@ tests:
 
 tests the number of files (or directories) matching a path or glob
 
+**Use for:** how many files an application wrote (exactly 3 logs, at least one export) and absence of a whole group of files: ``expected_count: 0``. One file: standard.file_exists.
+
 *FILE_BASED*, os: any
 
 | parameter | type | default | description |
@@ -996,6 +1135,8 @@ tests:
 
 tests if file(s) with path destination(dst) do NOT exist (supports glob patterns with match_mode)
 
+**Use for:** verifying a file was deleted or never written. Opposite: standard.file_exists. A directory at ``dst`` does not count as a file, so it passes.
+
 *FILE_BASED*, os: any
 
 | parameter | type | default | description |
@@ -1015,6 +1156,8 @@ tests:
 
 tests if file(s) with path destination(dst) exist (supports glob patterns with match_mode)
 
+**Use for:** verifying a GUI action created/saved a file. Opposite: standard.file_does_not_exist. How many files match a glob: standard.file_count; an empty file: standard.file_size.
+
 *FILE_BASED*, os: any
 
 | parameter | type | default | description |
@@ -1033,6 +1176,8 @@ tests:
 ### `standard.file_hash_matches`
 
 tests if file hash matches expected value
+
+**Use for:** verifying a file is byte-identical to a known artifact.
 
 *FILE_BASED*, os: any
 
@@ -1054,6 +1199,8 @@ tests:
 ### `standard.file_permissions`
 
 tests file permissions, owner, and group
+
+**Use for:** Unix mode/ownership checks after chmod/chown or a file save. Only meaningful on Linux guests: Windows reports synthetic mode bits and no owner/group (owner checks fail).
 
 *QGA_PROBE*, os: any
 
@@ -1077,6 +1224,8 @@ tests:
 
 tests the size of a file in bytes
 
+**Use for:** checking a file is empty (``expected_size: 0``), non-empty (``greater`` 0) or grew/shrank past a threshold. Existence alone: standard.file_exists.
+
 *FILE_BASED*, os: any
 
 | parameter | type | default | description |
@@ -1097,6 +1246,8 @@ tests:
 ### `standard.file_timestamps`
 
 tests file timestamps with various comparison types and formats
+
+**Use for:** MACB timestamp assertions (modified recently, accessed after an action, ...).
 
 *QGA_PROBE*, os: any
 
@@ -1126,16 +1277,19 @@ tests:
 
 tests the number of text lines that contain a string or match a regex
 
+**Use for:** counting log or history entries (exactly 2 lines with a file name); asserting a line is gone: ``expected_count: 0``. For binary files use text.occurrence_count.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the text file; a glob must match exactly one path. A missing file or content not valid in the encoding is an error; an empty file has 0 lines. Lines end at ``\n``, ``\r\n`` or ``\r``. |
-| **content** | `str` |  | Substring a line must contain (case-sensitive); an empty string counts every line. With ``regex_match`` a regex searched in each line (``re.search``; ``(?i)`` for case-insensitive); an invalid regex is an error. A ``!re`` or ``!timestamp`` placeholder is an error: write the pattern with ``regex_match``. |
+| **content** | `str` |  | Substring a line must contain (see ``case_sensitive``); an empty string counts every line. With ``regex_match`` a regex searched in each line (``re.search``); an invalid regex is an error. A ``!re`` or ``!timestamp`` placeholder is an error: write the pattern with ``regex_match``. |
 | **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
 | encoding | `str \| None` | `None` | Text encoding; ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8. A BOM always wins. Unknown names are an error. |
 | regex_match | `bool` | `False` | Treat ``content`` as a regex (see ``content``). |
+| case_sensitive | `bool` | `True` | ``True`` (default) matches case exactly. ``False`` compares the substring after casefolding line and ``content`` (``Report`` = ``REPORT``, sharp s = ``ss``), or compiles the regex with ``re.IGNORECASE``. A non-boolean is an error. |
 
 ```yaml
 tests:
@@ -1150,6 +1304,8 @@ tests:
 ### `text.occurrence_count`
 
 tests how often a string or byte sequence occurs in a (text or binary) file
+
+**Use for:** finding a value in any file, binary ones included (a database, a cache, a memory dump), in one or several encodings at once; asserting a value was wiped: ``expected_count: 0``. For line-based text use text.line_count.
 
 *FILE_CONTENT*, os: any
 
@@ -1179,6 +1335,8 @@ tests:
 
 tests if a TOML file contains the specified key path (tables, arrays of tables)
 
+**Use for:** checking that a settings/config file gained a key. To also check the value use toml.value_matches; to check that a key is absent use toml.value_count with ``expected_count: 0`` (or ``expect_to_fail: true`` here: a missing file stays an error).
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -1198,6 +1356,8 @@ tests:
 ### `toml.value_count`
 
 tests how many TOML values exist at a key path, optionally only those matching a value (0 = absent)
+
+**Use for:** counting entries (``items[*]`` for ``[[items]]``) and asserting absence: ``expected_count: 0`` passes when the key path selects nothing (or nothing matches ``expected_value``), while a missing or invalid file is still an error. A path that selects one array counts its elements when ``expected_value`` is given; without it every selected value counts once.
 
 *FILE_CONTENT*, os: any
 
@@ -1223,6 +1383,8 @@ tests:
 ### `toml.value_matches`
 
 tests if the TOML value at a key path matches the expected value (dates/times as ISO strings)
+
+**Use for:** asserting a setting/field value. If the path yields several values (a wildcard, or an array value, whose elements are then compared one by one) ``wildcard_mode`` decides. Values keep their TOML types (integers, floats, booleans, strings); dates and times become ISO 8601 strings: ``1979-05-27``, ``07:32:00``, ``1979-05-27T07:32:00`` (local) or ``1979-05-27T07:32:00-08:00`` (``Z`` becomes ``+00:00``).
 
 *FILE_CONTENT*, os: any
 
@@ -1250,6 +1412,8 @@ tests:
 
 Check if text or image appears exactly N times on screen
 
+**Use for:** counting visible items (e.g. 3 files on the desktop). Icon/image matches are capped at 10 by the CV call, so counts above 10 cannot be observed.
+
 *HOST_NATIVE*, os: any
 
 | parameter | type | default | description |
@@ -1269,6 +1433,8 @@ tests:
 ### `visual.count_max`
 
 Check if text or image appears at most N times on screen
+
+**Use for:** "no more than N items visible"; ``max: 0`` behaves like visual.not_exists. Icon/image matches are capped at 10 by the CV call, so counts above 10 cannot be observed.
 
 *HOST_NATIVE*, os: any
 
@@ -1290,6 +1456,8 @@ tests:
 
 Check if text or image appears at least N times on screen
 
+**Use for:** "at least N items visible". Icon/image matches are capped at 10 by the CV call, so counts above 10 cannot be observed.
+
 *HOST_NATIVE*, os: any
 
 | parameter | type | default | description |
@@ -1310,6 +1478,8 @@ tests:
 
 Check if text or image is visible on screen
 
+**Use for:** confirming a GUI state (dialog shown, file icon on the desktop). Runs on the host via the CV server. At least one of ``text``/``icon``/``image`` is required (none -> error). Opposite: visual.not_exists.
+
 *HOST_NATIVE*, os: any
 
 | parameter | type | default | description |
@@ -1328,6 +1498,8 @@ tests:
 ### `visual.not_exists`
 
 Check if text or image is NOT visible on screen
+
+**Use for:** confirming a dialog closed or an item disappeared. Opposite: visual.exists. At least one of ``text``/``icon``/``image`` is required (none -> error).
 
 *HOST_NATIVE*, os: any
 
@@ -1350,6 +1522,8 @@ tests:
 
 tests if Windows registry key exists (Windows only)
 
+**Use for:** checking an install/config action created a key. Windows guests only (other OSes error). A key that exists but denies read access is an execution error, not a pass.
+
 *QGA_PROBE*, os: windows
 
 | parameter | type | default | description |
@@ -1367,6 +1541,8 @@ tests:
 ### `windows.registry_value_matches`
 
 tests if Windows registry value matches expected value (Windows only)
+
+**Use for:** asserting a setting/MRU value written by an application. Windows only. A missing key or value fails.
 
 *QGA_PROBE*, os: windows
 
@@ -1392,6 +1568,8 @@ tests:
 ### `xml.attribute_matches`
 
 tests if XML element attribute matches expected value with regex and timestamp tolerance support
+
+**Use for:** asserting attribute values (an id, a state, a timestamp ...). No matching element or a missing attribute fails.
 
 *FILE_CONTENT*, os: any
 
@@ -1420,6 +1598,8 @@ tests:
 
 tests the number of XML elements matching XPath expression
 
+**Use for:** counting entries; ``expected_count: 0`` asserts absence (opposite of xml.element_exists).
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -1444,6 +1624,8 @@ tests:
 
 tests if XML element exists at specified XPath
 
+**Use for:** checking a config/profile XML gained an entry. For "absent" use xml.element_count with ``expected_count: 0``.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -1464,6 +1646,8 @@ tests:
 ### `xml.element_text_matches`
 
 tests if XML element text content matches expected value with placeholder support for regex and timestamp tolerance
+
+**Use for:** asserting an XML setting or record value, and document properties of office files: the author of a .docx is ``dc:creator`` in ``report.docx!/docProps/core.xml`` (xpath ``./dc:creator``, namespaces ``{dc: 'http://purl.org/dc/elements/1.1/'}``). "Text" is ``element.text``: only the text before the element's first child, not stripped (missing -> ``''``). To count elements use xml.element_count.
 
 *FILE_CONTENT*, os: any
 
@@ -1491,6 +1675,8 @@ tests:
 
 tests if XML namespace declarations match expected namespaces
 
+**Use for:** checking which XML dialect/schema version a file uses. Only the root element's own namespace is detected, under prefix ``''``: ElementTree drops ``xmlns:*`` attributes, so other declared prefixes are never seen and expecting them fails.
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -1510,6 +1696,8 @@ tests:
 ### `xml.xpath_result_matches`
 
 tests if XPath expression result matches expected value (text, number, or boolean)
+
+**Use for:** typed checks on the first matched element. Prefer xml.element_text_matches for text.
 
 *FILE_CONTENT*, os: any
 
@@ -1537,6 +1725,8 @@ tests:
 
 tests if a YAML file contains the specified key path (supports several documents)
 
+**Use for:** checking that a settings/config file gained a key. To also check the value use yaml.value_matches; to check that a key is absent use yaml.value_count with ``expected_count: 0`` (or ``expect_to_fail: true`` here: a missing file stays an error).
+
 *FILE_CONTENT*, os: any
 
 | parameter | type | default | description |
@@ -1556,6 +1746,8 @@ tests:
 ### `yaml.value_count`
 
 tests how many YAML values exist at a key path, optionally only those matching a value (0 = absent)
+
+**Use for:** counting entries (``recent[*]``, documents ``[*]``) and asserting absence: ``expected_count: 0`` passes when the key path selects nothing (or nothing matches ``expected_value``), while a missing or invalid file is still an error. A path that selects one sequence counts its elements when ``expected_value`` is given; without it every selected value counts once.
 
 *FILE_CONTENT*, os: any
 
@@ -1581,6 +1773,8 @@ tests:
 ### `yaml.value_matches`
 
 tests if the YAML value at a key path matches the expected value (supports wildcards with any/all modes)
+
+**Use for:** asserting a setting/field value. If the path yields several values (a wildcard, or a sequence value, whose elements are then compared one by one) ``wildcard_mode`` decides. Values keep their YAML 1.1 types (``5`` is an int, ``true``/``yes``/``on`` and ``false``/``no``/``off`` are booleans); dates and timestamps become ISO 8601 strings (``2024-01-15``, ``2024-01-15T10:30:00``, ``+00:00`` for a ``Z`` zone), ``!!binary`` a lowercase hex string.
 
 *FILE_CONTENT*, os: any
 

@@ -33,13 +33,16 @@ Parameters
      - **Required.** Non-negative number to compare the count with. ``0`` asserts absence.
    * - ``expected_value``
      - string/int/float/bool
-     - **Optional.** Only count values equal to this (type-sensitive, as in ``value_matches``; ``!re`` / ``!timestamp`` tags work). Default: count every value.
+     - **Optional.** Only count values equal to this (type-sensitive, as in ``value_matches``; ``!re`` / ``!timestamp`` tags work; an invalid regex or unknown placeholder is an ERROR). Default: count every value.
    * - ``regex_match``
      - boolean
-     - **Optional.** Treat a string ``expected_value`` as a regex searched in ``str(value)``. Default: ``false``.
+     - **Optional.** Treat a string ``expected_value`` as a Python regex searched (``re.search``) in ``str(value)``. Default: ``false``.
    * - ``comparison_type``
      - string
      - **Optional.** ``equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Default: ``equals``.
+   * - ``encoding``
+     - string
+     - **Optional.** ``null`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. An unknown name is an ERROR.
 
 Usage Example
 -------------
@@ -61,6 +64,23 @@ Usage Example
          dst: /home/user/data/store.jsonlz4!
          key_path: "[*].tag"
          expected_count: 3
+
+Common Use Cases
+----------------
+
+**A key or value is absent**
+  ``expected_count: 0``: the key path selects nothing, or no value matches ``expected_value``.
+
+**How many entries a list holds**
+  Exactly three bookmarks, at least one entry with a URL.
+
+See Also
+--------
+
+* :doc:`value_matches` — the value at a key path.
+* :doc:`contains_key` — only that the key exists.
+* :doc:`/reference/testfunctions/jsonl/line_count` — records in a JSON Lines file.
+* :doc:`/guide/absence` — checking that something is absent.
 
 Return Values
 -------------

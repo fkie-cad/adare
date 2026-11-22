@@ -45,6 +45,21 @@ Usage Example
          width: 256
          height: 256
 
+Common Use Cases
+----------------
+
+**A screenshot or export was written**
+  The saved image has the size of the screen or the chosen export size.
+
+**A thumbnail was created**
+  Cached thumbnails have a fixed size.
+
+See Also
+--------
+
+* :doc:`exif_value_matches` — EXIF metadata of the image.
+* :doc:`/reference/testfunctions/standard/file_size` — the file size in bytes.
+
 Return Values
 -------------
 

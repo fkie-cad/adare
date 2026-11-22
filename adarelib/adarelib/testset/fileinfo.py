@@ -17,19 +17,19 @@ def parse_timestamp(timestamp, time_format=None):
 
     timestamp = str(timestamp)
 
-    # Try parsing as number first
-    try:
-        return float(timestamp)
-    except (ValueError, TypeError):
-        pass
-
-    # Parse with custom format
+    # A custom format wins: "20240115" with %Y%m%d is a date, not 20 million epoch seconds
     if time_format:
         try:
             dt = datetime.strptime(timestamp, time_format)
             return dt.timestamp()
         except ValueError:
             pass
+
+    # Then a number (Unix seconds)
+    try:
+        return float(timestamp)
+    except (ValueError, TypeError):
+        pass
 
     # Try common formats
     common_formats = [
@@ -74,36 +74,33 @@ def file_timestamp(filepath, timestamp_type):
         raise ValueError(f"Unsupported timestamp type: {timestamp_type}")
 
 
-def parse_permissions(perm_str):
-    """Parse permission string to octal"""
-    if perm_str.isdigit():
-        # Already octal
-        return int(perm_str, 8)
+_SYMBOLIC_BITS = (
+    (stat.S_IRUSR, stat.S_IWUSR, stat.S_IXUSR),
+    (stat.S_IRGRP, stat.S_IWGRP, stat.S_IXGRP),
+    (stat.S_IROTH, stat.S_IWOTH, stat.S_IXOTH),
+)
 
-    # Parse symbolic notation like 'rwxr-xr-x'
+
+def parse_permissions(perm_str):
+    """Permission bits of an octal string (``644``) or symbolic ``rwxr-xr-x``.
+
+    :raises ValueError: anything else (a non-octal digit, a letter other than ``r``/``w``/``x``
+        in its place or ``-``, another length)
+    """
+    if perm_str.isdigit():
+        try:
+            return int(perm_str, 8)
+        except ValueError:
+            raise ValueError(f"Invalid octal permissions: {perm_str}") from None
+
     if len(perm_str) == 9:
         perms = 0
-        # Owner permissions
-        if perm_str[0] == 'r':
-            perms |= stat.S_IRUSR
-        if perm_str[1] == 'w':
-            perms |= stat.S_IWUSR
-        if perm_str[2] == 'x':
-            perms |= stat.S_IXUSR
-        # Group permissions
-        if perm_str[3] == 'r':
-            perms |= stat.S_IRGRP
-        if perm_str[4] == 'w':
-            perms |= stat.S_IWGRP
-        if perm_str[5] == 'x':
-            perms |= stat.S_IXGRP
-        # Other permissions
-        if perm_str[6] == 'r':
-            perms |= stat.S_IROTH
-        if perm_str[7] == 'w':
-            perms |= stat.S_IWOTH
-        if perm_str[8] == 'x':
-            perms |= stat.S_IXOTH
+        for i, char in enumerate(perm_str):
+            letter = 'rwx'[i % 3]
+            if char == letter:
+                perms |= _SYMBOLIC_BITS[i // 3][i % 3]
+            elif char != '-':
+                raise ValueError(f"Invalid permission format: {perm_str} ({char!r} at position {i + 1})")
         return perms
 
     raise ValueError(f"Invalid permission format: {perm_str}")

@@ -1,4 +1,4 @@
 Function Name,S,Description,Parameters
 :doc:`contains_key <../plist/contains_key>`,:status-tested:`●`,Tests if a property list (XML or binary plist) contains the specified key path,"dst (str), key_path (str)"
-:doc:`value_matches <../plist/value_matches>`,:status-tested:`●`,"Tests if the property list value at a key path matches the expected value (dates as ISO strings, data as hex)","dst (str), key_path (str), expected_value (str/int/float/bool), regex_match* (bool), wildcard_mode* (str)"
 :doc:`value_count <../plist/value_count>`,:status-tested:`●`,"Tests how many property list values exist at a key path, optionally only those matching a value (0 = absent)","dst (str), key_path (str), expected_count (int), expected_value* (str/int/float/bool), regex_match* (bool), comparison_type* (str)"
+:doc:`value_matches <../plist/value_matches>`,:status-tested:`●`,"Tests if the property list value at a key path matches the expected value (dates as ISO strings, data as hex)","dst (str), key_path (str), expected_value (str/int/float/bool), regex_match* (bool), wildcard_mode* (str)"

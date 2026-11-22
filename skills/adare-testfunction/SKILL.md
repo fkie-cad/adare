@@ -11,7 +11,7 @@ value", "is this deleted file actually gone". Test-functions live in **collectio
 (`testfunctions/<collection>/<collection>.py`) and are referenced from a playbook's
 `tests:` block by `<collection>.<function>`.
 
-**Find before you write**: the bundled catalog (about 50 functions) covers most
+**Find before you write**: the bundled catalog (about 70 functions) covers most
 assertions. Writing a new one is the authoring loop: **scaffold → author (per the
 contract) → validate → dry-run → install → integrate**. Pure `adare` CLI + Bash + file editing —
 no VM needed until end-to-end integration. Auto-loads as a skill in **Claude Code**;
@@ -38,15 +38,52 @@ Rules:
   `file_exists` expected to fail.
 - Absence of content (a key, value, string, line, text chunk): use the count function
   with `expected_count: 0` (`json.value_count`, `ini.value_count`, `text.occurrence_count`,
-  `csv.line_count`, `xml.element_count`, ...), or `expect_to_fail: true` on the presence
+  `csv.row_count`, `sqlite.row_count`, `xml.element_count`, ...), or `expect_to_fail: true` on the presence
   test. Both are negative tests (INCONCLUSIVE without proof of the act). A missing or
   unreadable file stays ERROR either way, never a pass.
-- Compressed files: `dst: /path/store.jsonlz4!` (LZ4, also gz/bz2/xz) gives the
-  decompressed content to any file test; `a.zip!/member` reads an archive member.
+- Compressed files: `dst: /path/store.jsonlz4!` (LZ4, also gz/bz2/xz and Snappy `.sz`)
+  gives the decompressed content to any file test; `a.zip!/member` or
+  `a.tar.gz!/etc/app.json` reads an archive member (`.docx`/`.xlsx`/`.odt` are zips).
+- Times stored as numbers (Unix seconds or ms, FILETIME, microseconds since 1601, seconds
+  since 2001): `expected_value: !timestamp {after: ..., before: ..., epoch: 1601, unit: us}`
+  (`epoch` 1970/1601/2001, `unit` s/ms/us/ns/100ns; needs `tolerance` or `after`/`before`).
+- Placeholders: an invalid `!re` or an unknown placeholder is an ERROR. `text.*` and
+  `standard.file_content_contains` refuse `!re` in `content` (use `text.line_count` with
+  `regex_match`, or `standard.file_content_matches_regex`).
+- Renamed (old names are rejected with "X was renamed to Y"): `csv.line_count` →
+  `csv.row_count`; `expected_text`/`expected_result`/`expected_element` → `expected_value`
+  (`xml.element_text_matches`, `xml.xpath_result_matches`, `json.array_contains`);
+  `text.occurrence_count` `encodings` → `encoding`; `jsonl.line_matches` `match_mode` →
+  `wildcard_mode`; `excel.sheet_exists` `sheet_name` → `sheet`; `sqlite.query_result`
+  `expected_rows` → `expected_count`; `linux.log_entry_exists` `log_file`/`pattern` →
+  `dst`/`content` (+ `regex_match`, default true).
 - Formats: json, jsonl, csv, xml, excel, sqlite, ini, plist, yaml, toml, image (PNG text
   chunks, EXIF, dimensions), text (raw byte/encoding search, line counts), standard.
 - `visual.*` tests run on the host against the VM screen (text/image/icon). Use them
   for UI state, not for files.
+
+### Choosing between look-alikes
+
+Same table as `docsrc/source/guide/choosing-testfunctions.rst`, short form.
+
+| Goal | Use | Not this one |
+|---|---|---|
+| file created / deleted | `standard.file_exists` / `standard.file_does_not_exist` | `expect_to_fail` on `file_exists` |
+| how many files match a glob; none left | `standard.file_count` (`expected_count: 0`) | `file_exists` (passes on any match) |
+| file is empty / non-empty / grew | `standard.file_size` (`expected_size: 0`, `greater`) | `file_content_equals` with empty content |
+| string written into a text file | `standard.file_content_contains` | `text.occurrence_count` unless counting |
+| string occurs n times, or wiped, in any file (binary, cache, UTF-16) | `text.occurrence_count` (`encoding: [utf-8, utf-16-le]`) | `file_content_contains` (one encoding, no count) |
+| lines of a text file containing a string/regex | `text.line_count` | `text.occurrence_count` (counts occurrences) |
+| trace in the last lines of a plain-text log | `linux.log_entry_exists` | `text.line_count` when counting/whole file |
+| CSV records matching a layout | `csv.row_count` (`csv.contains_line` for one) | `text.line_count` (quoted line breaks) |
+| JSONL records meeting conditions | `jsonl.line_count` / `jsonl.line_matches` | `jsonl.value_in_any_line` (one field only) |
+| value of a setting (json/ini/plist/yaml/toml) | `<format>.value_matches` | `<format>.contains_key` (ignores the value) |
+| how many values; key/value absent | `<format>.value_count` (`expected_count: 0`) | `value_matches` + `expect_to_fail` |
+| SQL rows / row count or gone | `sqlite.query_result` / `sqlite.row_count` | `text.occurrence_count` on the `.db` (misses WAL) |
+| spreadsheet cell / row / count / sheet | `excel.cell_value_matches` / `contains_row` / `row_count` / `sheet_exists` | |
+| XML text, office metadata (`.docx` author) | `xml.element_text_matches` (`report.docx!/docProps/core.xml`, `./dc:creator`) | `xml.xpath_result_matches` (typed results) |
+| photo EXIF / PNG text chunk / stripped | `image.exif_value_matches` / `image.png_text_matches` / `*_count` with 0 | |
+| on screen | `visual.exists` / `visual.not_exists` / `visual.count_*` | file tests |
 
 Only if nothing fits, write a new collection (sections 1–7).
 

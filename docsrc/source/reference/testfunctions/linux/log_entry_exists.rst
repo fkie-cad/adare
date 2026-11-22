@@ -5,12 +5,26 @@ log_entry_exists
    :class: status-dev
 
 :Status: :status-dev:`● Development`
-:Category: Linux System
+:Category: Linux System (file content, works in host mode)
 :Function Name: ``log_entry_exists``
 
-**Tests if a log file contains entries matching a specified pattern.**
+**Tests if one of the last lines of a text log contains a string or matches a regex.**
 
-This test function searches log files for entries matching a specified pattern or regular expression. It supports limiting the search scope and is useful for validating system events and application logging.
+Reads the last ``max_lines`` lines of a plain-text log (syslog, ``auth.log``, application
+logs) and passes when at least one line matches ``content``. It is a file-content test: the
+file is read directly (no ``grep``), so it also runs in host mode against a mounted disk
+image, and a rotated, compressed log is read through the archive separator. The binary
+systemd journal is not a text log; use a ``journalctl`` export instead.
+
+To count entries, or to search the whole file instead of its tail, use
+:doc:`../text/line_count`.
+
+.. note::
+
+   Renamed parameters: ``log_file`` is now ``dst`` and ``pattern`` is now ``content``.
+   A playbook that still uses the old names is rejected with a "was renamed" message.
+   ``content`` is a regex by default (``regex_match: true``, Python ``re.search``), no
+   longer a ``grep`` pattern.
 
 Parameters
 ----------
@@ -22,155 +36,117 @@ Parameters
    * - Parameter
      - Type
      - Description
-   * - ``log_file``
+   * - ``dst``
      - string
-     - **Required.** The path to the log file to search. Supports glob patterns.
-   * - ``pattern``
+     - **Required.** Path of the log. A glob must match exactly one file;
+       ``archive!member`` reads a rotated, compressed log (``/var/log/syslog.2.gz!``).
+       A missing file is an ERROR. The encoding is detected (BOM, UTF-16, else UTF-8);
+       undecodable bytes are replaced, so binary garbage does not stop the search.
+   * - ``content``
      - string
-     - **Required.** The pattern or regex to search for in the log file.
+     - **Required.** With ``regex_match`` (default) a Python regex searched in each line
+       (``re.search``, case-sensitive; ``(?i)`` for case-insensitive); an invalid regex is
+       an ERROR. Otherwise a substring a line must contain.
+   * - ``regex_match``
+     - boolean
+     - **Optional.** ``true`` (default): ``content`` is a regex; ``false``: a plain substring.
    * - ``max_lines``
      - integer
-     - **Optional.** Maximum number of lines to search from the end of the file. Limits search scope for large log files.
+     - **Optional.** How many trailing lines to search. Default: ``1000``; must be positive.
 
 Usage Example
 -------------
 
-Basic Log Pattern Search
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Basic Log Search
+~~~~~~~~~~~~~~~~
 
 .. code-block:: yaml
 
    tests:
-     - name: test_log_entry_systemd
+     - name: session_opened_logged
        function: linux.log_entry_exists
        parameter:
-         log_file: '/var/log/syslog'
-         pattern: 'systemd'
-         max_lines: 1000
-       description: "Test log_entry_exists with systemd pattern"
+         dst: /var/log/auth.log
+         content: 'session opened for user alice'
+       description: "The login left a trace in auth.log"
 
-Pattern Not Found
-~~~~~~~~~~~~~~~~~~
+Plain Substring
+~~~~~~~~~~~~~~~
+
+Characters such as ``.``, ``(`` or ``[`` are regex syntax; switch the regex off to search
+them literally:
 
 .. code-block:: yaml
 
    tests:
-     - name: test_log_entry_not_found
+     - name: file_name_logged
+       function: linux.log_entry_exists
+       parameter:
+         dst: /home/user/.local/share/app/app.log
+         content: 'opened report (final).odt'
+         regex_match: false
+         max_lines: 500
+
+Regex and Rotated Logs
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+   tests:
+     - name: ssh_login_in_rotated_log
+       function: linux.log_entry_exists
+       parameter:
+         dst: /var/log/auth.log.2.gz!
+         content: 'sshd\[\d+\]: Accepted password for \w+'
+         max_lines: 5000
+
+     - name: app_error_case_insensitive
+       function: linux.log_entry_exists
+       parameter:
+         dst: /var/log/app/app.log
+         content: '(?i)authentication failed'
+
+Absence
+~~~~~~~
+
+``expect_to_fail: true`` asserts that no recent line matches. A missing log is still an
+ERROR, never a pass. For "no line in the whole file" use ``text.line_count`` with
+``expected_count: 0``.
+
+.. code-block:: yaml
+
+   tests:
+     - name: no_crash_logged
        function: linux.log_entry_exists
        expect_to_fail: true
        parameter:
-         log_file: '/var/log/syslog'
-         pattern: 'nonexistent-log-pattern-12345'
-         max_lines: 100
-       description: "Test log_entry_exists with non-existent pattern"
-
-Application Log Validation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: yaml
-
-   tests:
-     - name: test_application_error_logged
-       function: linux.log_entry_exists
-       parameter:
-         log_file: '/var/log/myapp/error.log'
-         pattern: 'ERROR.*authentication failed'
-         max_lines: 500
-       description: "Test that authentication errors are logged"
-
-Security Log Monitoring
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: yaml
-
-   tests:
-     - name: test_ssh_login_logged
-       function: linux.log_entry_exists
-       parameter:
-         log_file: '/var/log/auth.log'
-         pattern: 'sshd.*Accepted password'
-         max_lines: 1000
-       description: "Test that SSH logins are logged"
-
-Variable-Based Log Paths
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: yaml
-
-   variables:
-     app_log:
-       type: path
-       value: "/var/log/nginx/access.log"
-       description: "Web server access log"
-
-   tests:
-     - name: test_web_requests_logged
-       function: linux.log_entry_exists
-       parameter:
-         log_file: '{{app_log}}'
-         pattern: 'GET /api/'
-         max_lines: 2000
-       description: "Test that API requests are logged"
+         dst: /var/log/app/app.log
+         content: 'Segmentation fault'
 
 Common Use Cases
 ----------------
 
 **System Event Validation**
-  Verify that system events are properly logged to system logs
+  Verify that an action left a trace in a system log (logins, sudo, package installs)
 
-**Application Error Monitoring**
-  Check that application errors and exceptions are being logged
+**Application Logging**
+  Check that an application logged an opened file, an error or a sync
 
-**Security Audit Trail**
-  Ensure security-related events like logins and access attempts are logged
-
-**Performance Monitoring**
-  Validate that performance metrics and warnings appear in logs
-
-**Service Health Checking**
-  Confirm that services are logging startup, shutdown, and operational events
-
-Log Search Features
--------------------
-
-**Pattern Matching:**
-  - Supports literal string matching
-  - Regular expression pattern matching
-  - Case-sensitive pattern matching
-
-**Search Optimization:**
-  - ``max_lines`` parameter limits search scope for performance
-  - Searches from the end of the log file (most recent entries first)
-  - Useful for large log files to avoid long search times
-
-**File Access:**
-  - Supports standard log file paths
-  - Glob pattern support for dynamic log file names
-  - Handles log rotation and compressed logs
-
-**Platform Requirements:**
-  - Linux operating system
-  - Read access to specified log files
-  - Standard file system access
+**Rotated Logs**
+  Search a compressed, rotated log through ``archive!member``
 
 Return Values
 -------------
 
 **Success**
-  Returns success when the pattern is found in the log file within the specified search scope
+  At least one of the last ``max_lines`` lines matches ``content``.
 
 **Failure**
-  Returns failure when:
-  - Pattern is not found in the log file
-  - Log file exists but doesn't contain matching entries
-  - Search completes without finding the pattern
+  No line among the searched lines matches.
 
-**Execution Error**
-  Returns execution error when:
-  - Log file doesn't exist or cannot be accessed
-  - Permission denied reading the log file
-  - File I/O errors occur during search
-  - Invalid regular expression pattern provided
+**Error**
+  The log does not exist, a glob matches none or several files, ``dst`` is a directory,
+  ``content`` is an invalid regex, ``max_lines`` is not positive, or the file cannot be read.
 
 Example Results
 ---------------
@@ -180,17 +156,23 @@ Example Results
    # Success case
    result: success
    details:
-     - "pattern 'systemd' found in log file /var/log/syslog"
+     - "found 2 log entries matching 'session opened for user alice' in /var/log/auth.log"
+     - "first: Nov  2 10:14:03 host sshd[811]: pam_unix(sshd:session): session opened for user alice"
 
-   # Failure case - pattern not found
+   # Failure case
    result: failed
    details:
-     - "pattern 'nonexistent-log-pattern-12345' not found in log file /var/log/syslog"
+     - "no log entry matching 'Segmentation fault' in the last 1000 line(s) of /var/log/app/app.log"
 
-   # Execution error case - file not found
-   result: execution_error
-   error: "log file /var/log/missing.log does not exist"
+   # Error case - file not found
+   result: error
+   details:
+     - "log file /var/log/missing.log does not exist"
 
-   # Execution error case - permission denied
-   result: execution_error
-   error: "Permission denied accessing log file /var/log/secure"
+See Also
+--------
+
+* :doc:`../text/line_count` - count matching lines in the whole file
+* :doc:`../text/occurrence_count` - occurrences in any file, binary included
+* :doc:`../standard/file_content_matches_regex` - a regex anywhere in a file
+* :doc:`/guide/archives` - files inside archives and compressed files

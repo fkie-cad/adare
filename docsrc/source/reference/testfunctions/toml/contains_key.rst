@@ -48,6 +48,18 @@ Usage Example
          dst: /home/user/.config/app/settings.toml
          key_path: "server.port"
 
+Common Use Cases
+----------------
+
+**A setting was written**
+  The key exists after the action, whatever its value.
+
+See Also
+--------
+
+* :doc:`value_matches` — the value at the key path.
+* :doc:`value_count` — how many values (``0`` for absence).
+
 Return Values
 -------------
 

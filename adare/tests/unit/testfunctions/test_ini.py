@@ -175,6 +175,56 @@ def test_value_matches_values_stay_case_sensitive(sample):
     _assert(_run(ValueMatches, expected_value='DE_DE', **params), StatusEnum.FAILED)
 
 
+@pytest.mark.parametrize(
+    ('expected_value', 'regex_match', 'wildcard_mode', 'status'),
+    [
+        ('/home/user/Documents/a.txt', False, 'any', StatusEnum.SUCCESS),
+        ('/home/user/Documents/a.txt', False, 'all', StatusEnum.FAILED),
+        (r'^/home/user/Documents/', True, 'all', StatusEnum.SUCCESS),
+        (r'b\.txt$', True, 'all', StatusEnum.FAILED),
+        (r'c\.txt$', True, 'any', StatusEnum.FAILED),
+    ],
+)
+def test_value_matches_wildcard_mode(sample, expected_value, regex_match, wildcard_mode, status):
+    # [RecentFiles] has file = .../a.txt and file = .../b.txt
+    result = _run(
+        ValueMatches,
+        dst=sample,
+        section='RecentFiles',
+        key='file',
+        expected_value=expected_value,
+        regex_match=regex_match,
+        wildcard_mode=wildcard_mode,
+    )
+    _assert(result, status)
+    assert f'(mode: {wildcard_mode})' in result.details[0]
+    if status == StatusEnum.FAILED:
+        assert result.details[2].startswith('non-matching values: line 1')
+
+
+def test_value_matches_wildcard_all_with_re_placeholder(sample):
+    variables = {'regex_0_resolved': {'raw_value': '.*_[A-Z]{2}$', 'resolved_value': '.*_[A-Z]{2}$', 'type': 'regex'}}
+    param = ini.value_matches._parameter_class(
+        dst=sample, section='General', key='language', expected_value='{{regex_0_resolved}}', wildcard_mode='all'
+    )
+    _assert(ValueMatches(name='t', parameter=param, variable_metadata=variables).test(), StatusEnum.SUCCESS)
+
+
+def test_value_matches_single_occurrence_ignores_mode(sample):
+    params = {'dst': sample, 'section': 'General', 'key': 'port', 'wildcard_mode': 'all'}
+    _assert(_run(ValueMatches, expected_value=8080, **params), StatusEnum.SUCCESS)
+    _assert(_run(ValueMatches, expected_value=9090, **params), StatusEnum.FAILED)
+
+
+@pytest.mark.parametrize('wildcard_mode', ['some', 'ALL', None])
+def test_value_matches_invalid_wildcard_mode_is_error(sample, wildcard_mode):
+    result = _run(
+        ValueMatches, dst=sample, section='General', key='port', expected_value='8080', wildcard_mode=wildcard_mode
+    )
+    _assert(result, StatusEnum.ERROR)
+    assert 'Invalid wildcard_mode' in result.details[0]
+
+
 # --- value_count ------------------------------------------------------------------------
 
 

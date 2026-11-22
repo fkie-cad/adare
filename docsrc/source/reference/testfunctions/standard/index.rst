@@ -5,7 +5,7 @@ Standard
    :class: status-tested
 
 :Status: :status-tested:`● Tested`
-:Functions: 12
+:Functions: 13
 :Category: File System Operations
 
 The **Standard** testset provides fundamental file system testing capabilities for ADARE experiments. This testset focuses on file and directory operations, content validation, permissions, and metadata verification.
@@ -14,7 +14,7 @@ Overview
 --------
 
 The Standard testset is the core foundation for ADARE testing, providing essential functions for validating file system state and content. 
-It includes functions to check for the existence of files and directories, validate file contents using various matching strategies, verify file metadata such as timestamps and permissions, and ensure file integrity through hashing.
+It includes functions to check for the existence of files and directories, count files matching a glob, check file sizes (an empty file has size 0), validate file contents using various matching strategies, verify file metadata such as timestamps and permissions, and ensure file integrity through hashing.
 
 Test Functions
 --------------

@@ -199,7 +199,62 @@ def query_result(
     return TestResult.success([f'query returned {len(result)} rows', _result_detail(result)] + snapshot_details)
 
 
+@testfunction(
+    name='row_count',
+    description='tests the number of rows an SQL query returns on an SQLite database',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def row_count(
+    ctx: TestContext,
+    dst: str,
+    query: str,
+    expected_count: int,
+    comparison_type: str = 'equals',
+):
+    """Pass when the number of rows ``query`` returns on the SQLite database satisfies ``comparison_type``.
+
+    Use for: asserting how many records an action left behind (exactly one history entry
+    for a URL); asserting a record is gone: ``expected_count: 0``. Queried like
+    sqlite.query_result: ``dst`` and any ``-wal``/``-journal`` sidecar are copied to a temp
+    dir and the copy is queried, so uncheckpointed changes are seen and the evidence is not
+    modified. Details report the count, the rows read (``query result: [...]``) and
+    ``queried snapshot: <file> sha256=...`` per copied file. To check the row contents use
+    sqlite.query_result with ``expected_result``.
+
+    Args:
+        dst: Guest path to the database; a glob must match exactly one file (otherwise an
+            error). A missing file is an error.
+        query: SQL to execute, e.g. ``SELECT id FROM items WHERE name = 'example'``; every
+            returned row counts (``SELECT COUNT(*)`` returns one row). A SQL error (syntax,
+            unknown table, unreadable database) is an error.
+        expected_count: Non-negative integer to compare against; anything else is an error.
+        comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
+            ``less_equal``; other values are an error.
+
+    Example:
+        function: sqlite.row_count
+        parameter:
+          dst: /home/user/data/app.db
+          query: SELECT id FROM items WHERE name LIKE '%example%'
+          expected_count: 1
+    """
+    problems = count_parameter_errors(expected_count, comparison_type)
+    if not isinstance(query, str) or not query.strip():
+        problems.append(f'query must be a non-empty SQL string, got {query!r}')
+    if problems:
+        return TestResult.error(problems)
+
+    result, snapshot_details, error = _run_query(ctx, dst, query)
+    if error is not None:
+        return error
+
+    ok, message = compare_count(len(result), expected_count, comparison_type)
+    details = [f'query returned {len(result)} rows', message, _result_detail(result)] + snapshot_details
+    return TestResult.success(details) if ok else TestResult.failed(details)
+
+
 # Host mode pulls these next to dst. Set on the class rather than via a decorator
 # argument so this module still loads with older adarelib versions preinstalled in
 # guest images (testfunctions are uploaded fresh each run, adarelib is not).
 query_result._test_class.host_mode_sidecars = SIDECAR_SUFFIXES
+row_count._test_class.host_mode_sidecars = SIDECAR_SUFFIXES

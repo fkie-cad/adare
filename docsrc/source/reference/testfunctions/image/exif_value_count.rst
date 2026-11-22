@@ -56,6 +56,19 @@ Usage Example
          tag: GPSLatitude
          expected_count: 0
 
+Common Use Cases
+----------------
+
+**Photo metadata was stripped**
+  ``expected_count: 0`` on a GPS or camera tag after an export that removes metadata.
+
+See Also
+--------
+
+* :doc:`exif_value_matches` — the value of a tag.
+* :doc:`png_text_count` — PNG text chunks.
+* :doc:`/guide/absence` — checking that something is absent.
+
 Return Values
 -------------
 

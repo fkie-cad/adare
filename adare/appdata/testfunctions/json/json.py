@@ -267,7 +267,8 @@ def value_count(
 
     Use for: counting entries (e.g. exactly 3 bookmarks with a given tag) and asserting
     absence: ``expected_count: 0`` without ``expected_value`` passes when the key path selects
-    nothing, with ``expected_value`` when no value matches.
+    nothing, with ``expected_value`` when no value matches. To check what one value is use
+    json.value_matches.
 
     Args:
         dst: Guest path to the JSON file; a glob must match exactly one path. A missing file or

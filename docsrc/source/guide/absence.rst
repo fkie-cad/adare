@@ -26,15 +26,29 @@ Every count function takes ``expected_count``; ``0`` means "none":
        parameter:
          dst: /home/user/.cache/app/data.bin
          content: secret-token
-         encodings: [utf-8, utf-16-le]
+         encoding: [utf-8, utf-16-le]
          expected_count: 0
 
 Count functions: ``json.value_count``, ``plist.value_count``, ``yaml.value_count``,
 ``toml.value_count``, ``ini.value_count``, ``image.png_text_count``,
 ``image.exif_value_count``, ``text.occurrence_count``, ``text.line_count``,
-``csv.line_count``, ``jsonl.line_count``, ``xml.element_count``, and
-``sqlite.query_result`` with ``expected_rows: 0``. Without ``expected_value`` the
-structured counts count the values at the key path, so ``0`` means the key is absent.
+``csv.row_count``, ``jsonl.line_count``, ``excel.row_count``, ``xml.element_count``,
+``sqlite.row_count``, ``sqlite.query_result`` with ``expected_count: 0`` and
+``standard.file_count``. Without ``expected_value`` the structured counts count the values
+at the key path, so ``0`` means the key is absent.
+
+``standard.file_count`` counts paths, not content: a glob without a match counts 0 and is
+not an error, so ``expected_count: 0`` asserts that a whole group of files is gone (cleared
+temp files, a deleted export series), also inside an archive:
+
+.. code-block:: yaml
+
+   tests:
+     - name: temp_files_removed
+       function: standard.file_count
+       parameter:
+         dst: /home/user/.cache/app/*.tmp
+         expected_count: 0
 
 ``expect_to_fail``
 ------------------
@@ -64,8 +78,8 @@ bad parameters are **ERROR** — the test never saw the evidence. ``expect_to_fa
 ERROR as ERROR, and ``expected_count: 0`` on a missing file is ERROR, not "zero found".
 Otherwise a typo in a path, a file in an unexpected place or a failed pull in host mode
 would pass every absence check. To assert that a *file* is absent, use
-``standard.file_does_not_exist``; it is the one test for which a missing path is the
-finding.
+``standard.file_does_not_exist`` or ``standard.file_count`` with ``expected_count: 0``; they
+are the tests for which a missing path is the finding.
 
 Proof of the act
 ----------------

@@ -28,6 +28,9 @@ Parameters
    * - ``key_path``
      - string
      - **Required.** The key path to check using dot notation (e.g., "user.profile.name").
+   * - ``encoding``
+     - string
+     - **Optional.** ``null`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. An unknown name is an ERROR.
 
 Usage Example
 -------------

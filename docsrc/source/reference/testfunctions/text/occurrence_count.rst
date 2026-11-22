@@ -27,16 +27,16 @@ Parameters
      - **Required.** Path to the file. A glob must match exactly one file; ``archive.zip!/member`` reads a file inside an archive. Files over the read cap (``ADARE_ARCHIVE_MAX_BYTES``) are an error.
    * - ``content``
      - string
-     - **Required.** What to find; must not be empty. Interpreted according to ``content_type``.
+     - **Required.** What to find; must not be empty. Interpreted according to ``content_type``. A ``!re`` or ``!timestamp`` placeholder is an ERROR: for patterns use ``text.line_count`` with ``regex_match``.
    * - ``expected_count``
      - integer
      - **Required.** Non-negative number to compare the count with. ``0`` asserts absence.
    * - ``content_type``
      - string
-     - **Optional.** ``string`` (default): ``content`` encoded in each of ``encodings``. ``bytes``: ASCII characters stand for their byte and Python escapes (``\x00``, ``\n``, ``\\``) are decoded; a non-ASCII character or an unknown escape is an error (write ``\xNN``, or use ``string`` with an encoding). ``hex``: hex digits, whitespace allowed (``4d 5a 90 00``).
-   * - ``encodings``
-     - list
-     - **Optional.** Encodings for ``string`` mode. A list of names, default ``[utf-8]``, or a single name. The counts of the distinct encoded forms are summed; a match on bytes already counted for an earlier form is skipped. ``utf-16`` / ``utf-32`` search both byte orders without BOM. Forms are matched at any byte offset.
+     - **Optional.** ``string`` (default): ``content`` encoded in each of ``encoding``. ``bytes``: ASCII characters stand for their byte and Python escapes (``\x00``, ``\n``, ``\\``) are decoded; a non-ASCII character or an unknown escape is an error (write ``\xNN``, or use ``string`` with an encoding). ``hex``: hex digits, whitespace allowed (``4d 5a 90 00``).
+   * - ``encoding``
+     - string/list
+     - **Optional.** Encoding(s) for ``string`` mode: one name (``utf-16-le``) or a list, default ``[utf-8]``. Renamed from ``encodings``. The counts of the distinct encoded forms are summed; a match on bytes already counted for an earlier form is skipped. ``utf-16`` / ``utf-32`` search both byte orders without BOM. Forms are matched at any byte offset.
    * - ``case_sensitive``
      - boolean
      - **Optional.** ``false`` matches each character in any of its one-character case forms (``a`` / ``A``, ``ä`` / ``Ä``); case mappings to several characters (sharp s to ``SS``) are not matched. ``string`` mode only. Default: ``true``.
@@ -55,7 +55,7 @@ Usage Example
        parameter:
          dst: /home/user/data/cache.bin
          content: secret-token
-         encodings: [utf-8, utf-16-le]
+         encoding: [utf-8, utf-16-le]
          expected_count: 0
 
      - name: header_bytes_once
@@ -74,6 +74,22 @@ Notes
   give the same bytes.
 * A one-character pattern found in several encodings can overlap (the UTF-8 ``a`` is part of the
   UTF-16 ``a``); each encoding is counted on its own.
+
+Common Use Cases
+----------------
+
+**A value was wiped**
+  ``expected_count: 0`` on a cache, database or memory dump, in all encodings the application may use (``encoding: [utf-8, utf-16-le]``).
+
+**A value was written n times**
+  Exact counts in binary files that no structured function can parse.
+
+See Also
+--------
+
+* :doc:`/reference/testfunctions/standard/file_content_contains` — only whether the content is there.
+* :doc:`line_count` — lines of a text file that contain a string.
+* :doc:`/guide/absence` — checking that something is absent.
 
 Return Values
 -------------

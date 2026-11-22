@@ -48,6 +48,18 @@ Usage Example
          dst: /home/user/Library/Preferences/com.example.app.plist
          key_path: "['com.example.lastVersion']"
 
+Common Use Cases
+----------------
+
+**A preference was written**
+  The key exists after the action, whatever its value.
+
+See Also
+--------
+
+* :doc:`value_matches` — the value at the key path.
+* :doc:`value_count` — how many values (``0`` for absence).
+
 Return Values
 -------------
 

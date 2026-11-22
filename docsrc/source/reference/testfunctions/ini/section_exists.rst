@@ -48,6 +48,18 @@ Usage Example
          dst: /home/user/.config/app/settings.ini
          section: General
 
+Common Use Cases
+----------------
+
+**A group of settings was created**
+  A section for a new account, profile or recent file list.
+
+See Also
+--------
+
+* :doc:`contains_key` — a key in the section.
+* :doc:`value_count` — how often a key occurs.
+
 Return Values
 -------------
 

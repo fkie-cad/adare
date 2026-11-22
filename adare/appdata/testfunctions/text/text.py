@@ -283,6 +283,7 @@ def line_count(
     comparison_type: str = 'equals',
     encoding: str | None = None,
     regex_match: bool = False,
+    case_sensitive: bool = True,
 ):
     """Pass when the number of lines of text file ``dst`` containing ``content`` satisfies ``comparison_type``.
 
@@ -293,16 +294,20 @@ def line_count(
         dst: Guest path to the text file; a glob must match exactly one path. A missing file
             or content not valid in the encoding is an error; an empty file has 0 lines.
             Lines end at ``\\n``, ``\\r\\n`` or ``\\r``.
-        content: Substring a line must contain (case-sensitive); an empty string counts
-            every line. With ``regex_match`` a regex searched in each line (``re.search``;
-            ``(?i)`` for case-insensitive); an invalid regex is an error. A ``!re`` or
-            ``!timestamp`` placeholder is an error: write the pattern with ``regex_match``.
+        content: Substring a line must contain (see ``case_sensitive``); an empty string
+            counts every line. With ``regex_match`` a regex searched in each line
+            (``re.search``); an invalid regex is an error. A ``!re`` or ``!timestamp``
+            placeholder is an error: write the pattern with ``regex_match``.
         expected_count: Non-negative integer to compare against; anything else is an error.
         comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
             ``less_equal``; other values are an error.
         encoding: Text encoding; ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less
             UTF-16, else reads UTF-8. A BOM always wins. Unknown names are an error.
         regex_match: Treat ``content`` as a regex (see ``content``).
+        case_sensitive: ``True`` (default) matches case exactly. ``False`` compares the
+            substring after casefolding line and ``content`` (``Report`` = ``REPORT``,
+            sharp s = ``ss``), or compiles the regex with ``re.IGNORECASE``. A non-boolean
+            is an error.
 
     Example:
         function: text.line_count
@@ -318,12 +323,14 @@ def line_count(
         problems.append(f'content must be a string, got {content!r}')
     else:
         problems += _placeholder_problems(ctx, content, 'regex_match: true with a plain pattern')
+    if not isinstance(case_sensitive, bool):
+        problems.append(f'case_sensitive must be true or false, got {case_sensitive!r}')
     if problems:
         return TestResult.error(problems)
     try:
         if encoding is not None:
             codecs.lookup(encoding)
-        regex = re.compile(content) if regex_match else None
+        regex = re.compile(content, 0 if case_sensitive else re.IGNORECASE) if regex_match else None
     except (LookupError, TypeError) as e:
         return TestResult.error([f'invalid encoding {encoding!r}: {e}'])
     except re.error as e:
@@ -339,9 +346,15 @@ def line_count(
     if regex is not None:
         matching = sum(1 for line in lines if regex.search(line))
         what = f'match regex "{content}"'
-    else:
+    elif case_sensitive:
         matching = sum(1 for line in lines if content in line)
         what = f'contain "{content}"'
+    else:
+        folded = content.casefold()
+        matching = sum(1 for line in lines if folded in line.casefold())
+        what = f'contain "{content}"'
+    if not case_sensitive:
+        what += ' (case-insensitive)'
     ok, message = compare_count(matching, expected_count, comparison_type)
     details = [f'{matching} of {len(lines)} line(s) {what}', message]
     return TestResult.success(details) if ok else TestResult.failed(details)

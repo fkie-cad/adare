@@ -138,6 +138,7 @@ Documentation Structure
    guide/environments
    guide/experiments
    guide/test-driven-analysis
+   guide/choosing-testfunctions
    guide/negative-results
    guide/absence
    guide/archives

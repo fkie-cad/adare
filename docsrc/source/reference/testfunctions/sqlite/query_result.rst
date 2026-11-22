@@ -30,12 +30,19 @@ Parameters
    * - ``query``
      - string
      - **Required.** The SQL query to execute against the database.
-   * - ``expected_rows``
+   * - ``expected_count``
      - integer
-     - **Optional.** Expected number of result rows. If specified, validates the row count.
+     - **Optional.** Expected number of result rows, compared with ``comparison_type``. A negative number or a non-integer is an error. To only count rows use :doc:`row_count`.
    * - ``expected_result``
      - list
      - **Optional.** Expected query result as list of dictionaries. Supports placeholder matching.
+   * - ``comparison_type``
+     - string
+     - **Optional.** ``equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal`` for ``expected_count``. Default: ``equals``.
+
+Timestamps stored as numbers (Unix seconds or milliseconds, microseconds since 1601) are
+compared in ``expected_result`` with ``!timestamp`` and its ``epoch``/``unit`` options; see
+"Numeric timestamps" under ``!timestamp`` in :doc:`/reference/actions`.
 
 Usage Example
 -------------
@@ -51,7 +58,7 @@ Row Count Validation
        parameter:
          dst: '/home/adare/test_sqlite/test.db'
          query: 'SELECT COUNT(*) as count FROM users'
-         expected_rows: 1
+         expected_count: 1
        description: "Test sqlite_query_result with COUNT query"
 
 Specific Result Validation
@@ -111,7 +118,7 @@ JOIN Queries
        parameter:
          dst: '/home/adare/test_sqlite/test.db'
          query: 'SELECT u.name, p.title FROM users u JOIN posts p ON u.id = p.user_id WHERE u.role = "Admin"'
-         expected_rows: 3
+         expected_count: 3
        description: "Test sqlite_query_result with JOIN query"
 
 Aggregation Queries
@@ -142,7 +149,7 @@ Expected Failure Cases
        parameter:
          dst: '/home/adare/test_sqlite/test.db'
          query: 'SELECT * FROM users WHERE id = 999'
-         expected_rows: 0
+         expected_count: 0
        description: "Test sqlite_query_result with query returning no results"
 
      - name: test_sqlite_query_wrong_count
@@ -151,7 +158,7 @@ Expected Failure Cases
        parameter:
          dst: '/home/adare/test_sqlite/test.db'
          query: 'SELECT * FROM users'
-         expected_rows: 10
+         expected_count: 10
        description: "Test sqlite_query_result with a wrong expected count"
 
 ``expect_to_fail`` inverts only a pass or a failure. A database that cannot be evaluated (missing
@@ -184,7 +191,7 @@ Query Features
   - Aggregate functions (COUNT, SUM, AVG, etc.)
 
 **Result Validation**
-  - Row count validation with ``expected_rows`` parameter
+  - Row count validation with ``expected_count`` parameter
   - Exact result matching with ``expected_result`` parameter
   - Placeholder-based comparison for dynamic content
 

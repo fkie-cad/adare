@@ -152,3 +152,117 @@ async def test_guestfs_proxy_kinds():
             await proxy.path_kinds('/a/*')
     finally:
         proxy.cleanup()
+
+
+# --- a Windows guest: drive-letter paths through the real proxy mapping ----------------------
+
+
+def _windows_executor(stdout):
+    proxy = GuestFileProxy(_vm(stdout), 'windows')
+    proxy.pull_file = AsyncMock(side_effect=AssertionError('file_count must not pull'))
+    return GuestToHostTestExecutor(guest_file=proxy, guest_command=MagicMock(), testfunction_collection={}), proxy
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('kind', 'count'), [('file', 2), ('dir', 1), ('any', 3)])
+async def test_windows_glob_is_counted_from_the_guest_listing(kind, count):
+    executor, proxy = _windows_executor(
+        'F:C:\\Users\\u\\logs\\a.log\r\nF:C:\\Users\\u\\logs\\b.log\r\nD:C:\\Users\\u\\logs\\old.log\r\n'
+    )
+    instance = _test('C:\\Users\\u\\logs\\*.log', expected_count=count, kind=kind)
+    try:
+        result = await executor._execute_file_based_test('t', 'standard.file_count', instance)
+    finally:
+        proxy.cleanup()
+
+    assert result.status == StatusEnum.SUCCESS, result.details
+    assert instance.parameter.dst == 'C:\\Users\\u\\logs\\*.log'  # restored
+    details = ' '.join(result.details)
+    assert 'adare_count_' not in details  # guest paths, not the skeleton
+    if kind == 'file':
+        assert 'C:\\Users\\u\\logs\\a.log, C:\\Users\\u\\logs\\b.log' in details
+    # the listing ran as a glob (-Path), not as a literal path
+    assert "-Path 'C:\\Users\\u\\logs\\*.log'" in proxy.vm.run_command.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_windows_mismatch_fails_and_plain_path_is_literal():
+    executor, proxy = _windows_executor('D:C:\\Users\\u\\logs\r\n')
+    try:
+        result = await executor._execute_file_based_test(
+            't', 'standard.file_count', _test('C:\\Users\\u\\logs', expected_count=1)
+        )
+        command = proxy.vm.run_command.await_args.args[0]
+    finally:
+        proxy.cleanup()
+
+    assert result.status == StatusEnum.FAILED, result.details  # a directory is not a file
+    assert "-LiteralPath 'C:\\Users\\u\\logs'" in command
+
+
+# --- an archive dst: the archive is pulled, its members are counted locally ------------------
+
+
+def _archive_executor(tmp_path, pull_error=None):
+    import zipfile
+
+    archive = tmp_path / 'pulled' / 'backup.zip'
+    archive.parent.mkdir(parents=True)
+    with zipfile.ZipFile(archive, 'w') as zf:
+        zf.writestr('logs/a.log', 'a')
+        zf.writestr('logs/b.log', 'b')
+        zf.writestr('logs/c.txt', 'c')
+    guest_file = MagicMock()
+    guest_file._temp_root = tmp_path / 'mirror'
+    guest_file._guest_path_to_local = lambda p: tmp_path / 'mirror' / p.lstrip('/')
+    guest_file.pull_file = AsyncMock(return_value=archive, side_effect=pull_error)
+    guest_file.path_kinds = AsyncMock(side_effect=AssertionError('an archive is not listed on the guest'))
+    guest_file.resolve_guest_glob = AsyncMock(return_value=['/home/u/backup.zip'])
+    executor = GuestToHostTestExecutor(guest_file=guest_file, guest_command=MagicMock(), testfunction_collection={})
+    return executor, guest_file, str(archive)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('dst', 'count', 'status'),
+    [
+        ('/home/u/backup.zip!/logs/*.log', 2, StatusEnum.SUCCESS),
+        ('/home/u/backup.zip!/logs/*', 3, StatusEnum.SUCCESS),
+        ('/home/u/backup.zip!/logs/*.log', 3, StatusEnum.FAILED),
+        ('/home/u/backup.zip!/logs/*.gone', 0, StatusEnum.SUCCESS),
+        ('/home/u/backup-*.zip!/logs/*.log', 2, StatusEnum.SUCCESS),
+    ],
+)
+async def test_archive_members_are_counted(tmp_path, dst, count, status):
+    executor, guest_file, local_archive = _archive_executor(tmp_path)
+    instance = _test(dst, expected_count=count)
+
+    result = await executor._execute_file_based_test('t', 'standard.file_count', instance)
+
+    assert result.status == status, result.details
+    assert [c.args[0] for c in guest_file.pull_file.await_args_list] == ['/home/u/backup.zip']
+    assert instance.parameter.dst == dst  # restored
+    assert local_archive not in ' '.join(result.details)  # the guest archive is reported
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('error', [FileNotFoundError('no such file'), RuntimeError('QGA timeout')])
+async def test_archive_that_cannot_be_pulled_is_an_error_even_for_zero(tmp_path, error):
+    executor, _, _ = _archive_executor(tmp_path, pull_error=error)
+
+    result = await executor._execute_file_based_test(
+        't', 'standard.file_count', _test('/home/u/backup.zip!/logs/*.log', expected_count=0)
+    )
+
+    assert result.status == StatusEnum.ERROR, result.details
+
+
+@pytest.mark.asyncio
+async def test_archive_dir_kind_is_an_error(tmp_path):
+    executor, _, _ = _archive_executor(tmp_path)
+
+    result = await executor._execute_file_based_test(
+        't', 'standard.file_count', _test('/home/u/backup.zip!/logs', expected_count=1, kind='dir')
+    )
+
+    assert result.status == StatusEnum.ERROR, result.details

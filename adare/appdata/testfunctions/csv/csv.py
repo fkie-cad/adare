@@ -435,7 +435,7 @@ def row_count(
     Use for: asserting how often a record occurs (exactly one row for a file); absence of
     a row: ``expected_count: 0`` (or ``expect_to_fail: true`` on csv.contains_line). Counts
     CSV records, so a quoted field with a line break is one row; for physical lines use
-    text.line_count.
+    text.line_count, for JSON Lines records jsonl.line_count.
 
     Args:
         dst: Guest path to the CSV file. A glob must match exactly one path; no/ambiguous

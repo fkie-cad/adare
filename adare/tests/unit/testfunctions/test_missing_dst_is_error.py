@@ -73,6 +73,9 @@ CASES = {
     'standard.file_size': {'expected_size': 1},
     'text.occurrence_count': {'content': 'a', 'expected_count': 1},
     'text.line_count': {'content': 'a', 'expected_count': 1},
+    'sqlite.query_result': {'query': 'SELECT 1'},
+    'sqlite.row_count': {'query': 'SELECT 1', 'expected_count': 1},
+    'excel.row_count': {'entry': ['a'], 'expected_count': 1},
 }
 TWO_PATHS = {'csv.compare_files', 'excel.compare_sheets', 'excel.compare_files'}
 

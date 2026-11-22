@@ -1,3 +1,3 @@
 Function Name,S,Description,Parameters
-:doc:`occurrence_count <../text/occurrence_count>`,:status-tested:`●`,Tests how often a string or byte sequence occurs in a (text or binary) file,"dst (str), content (str), expected_count (int), content_type* (str), encodings* (list/str), case_sensitive* (bool), comparison_type* (str)"
-:doc:`line_count <../text/line_count>`,:status-tested:`●`,Tests the number of text lines that contain a string or match a regex,"dst (str), content (str), expected_count (int), comparison_type* (str), encoding* (str), regex_match* (bool)"
+:doc:`line_count <../text/line_count>`,:status-tested:`●`,Tests the number of text lines that contain a string or match a regex,"dst (str), content (str), expected_count (int), comparison_type* (str), encoding* (str), regex_match* (bool), case_sensitive* (bool)"
+:doc:`occurrence_count <../text/occurrence_count>`,:status-tested:`●`,Tests how often a string or byte sequence occurs in a (text or binary) file,"dst (str), content (str), expected_count (int), content_type* (str), encoding* (list[str]/str), case_sensitive* (bool), comparison_type* (str)"

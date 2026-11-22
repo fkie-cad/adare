@@ -5,7 +5,7 @@ SQLite
    :class: status-dev
 
 :Status: :status-dev:`● Development`
-:Functions: 1
+:Functions: 2
 :Category: Database Validation
 
 The **SQLite** testset provides SQLite database testing capabilities for ADARE experiments. This testset focuses on executing SQL queries against SQLite databases and validating query results, row counts, and data content.
@@ -32,3 +32,4 @@ Test Functions
    :hidden:
 
    query_result
+   row_count

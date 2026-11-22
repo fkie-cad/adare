@@ -56,6 +56,22 @@ Usage Example
          keyword: Comment
          expected_count: 0
 
+Common Use Cases
+----------------
+
+**Metadata was stripped**
+  ``expected_count: 0`` on a keyword after an export that removes metadata.
+
+**A keyword is written once**
+  No duplicate text chunks after a re-save.
+
+See Also
+--------
+
+* :doc:`png_text_matches` — the text of a chunk.
+* :doc:`exif_value_count` — EXIF tags.
+* :doc:`/guide/absence` — checking that something is absent.
+
 Return Values
 -------------
 

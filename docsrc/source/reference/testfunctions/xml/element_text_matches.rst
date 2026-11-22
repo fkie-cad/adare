@@ -8,8 +8,8 @@ Parameters
 
 * **dst** (str, required): Path to the XML file (supports glob patterns)
 * **xpath** (str, required): XPath expression to locate the element(s)
-* **expected_text** (str, required): Expected text content (supports placeholders)
-* **regex_match** (bool, optional): Enable regex matching (default: false)
+* **expected_value** (str, required): Exact expected text (``''`` for an empty element), or a regex with ``regex_match``. A single ``!re``/``!timestamp`` placeholder is matched by type (``case_sensitive`` is then ignored); an invalid regex or unknown placeholder is an ERROR. Renamed from ``expected_text``
+* **regex_match** (bool, optional): Search ``expected_value`` as a Python regex (``re.search``, unanchored; default: false)
 * **case_sensitive** (bool, optional): Case-sensitive comparison (default: true)
 * **wildcard_mode** (str, optional): Mode for multiple elements: "any" or "all" (default: "any")
 * **namespaces** (dict, optional): Namespace prefix to URI mapping
@@ -26,7 +26,7 @@ Basic text matching:
      parameter:
        dst: "/path/to/document.xml"
        xpath: ".//title"
-       expected_text: "My Document Title"
+       expected_value: "My Document Title"
 
 Regex matching:
 
@@ -37,7 +37,7 @@ Regex matching:
      parameter:
        dst: "/path/to/document.xml"
        xpath: ".//version"
-       expected_text: "\\d+\\.\\d+\\.\\d+"
+       expected_value: "\\d+\\.\\d+\\.\\d+"
        regex_match: true
 
 Using placeholders for regex:
@@ -49,7 +49,7 @@ Using placeholders for regex:
      parameter:
        dst: "/path/to/document.xml"
        xpath: ".//timestamp"
-       expected_text: "{{ timestamp_pattern }}"
+       expected_value: "{{ timestamp_pattern }}"
 
 Timestamp tolerance example:
 
@@ -60,7 +60,7 @@ Timestamp tolerance example:
      parameter:
        dst: "/path/to/document.xml"
        xpath: ".//created_at"
-       expected_text: "{{ creation_time }}"
+       expected_value: "{{ creation_time }}"
      # Variable metadata should define creation_time with tolerance
 
 Multiple elements with wildcard mode:
@@ -72,7 +72,7 @@ Multiple elements with wildcard mode:
      parameter:
        dst: "/path/to/statuses.xml"
        xpath: ".//status"
-       expected_text: "active"
+       expected_value: "active"
        wildcard_mode: "all"  # All elements must match
 
 Notes

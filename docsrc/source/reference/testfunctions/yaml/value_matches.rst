@@ -65,6 +65,19 @@ Usage Example
          key_path: "[1].name"
          expected_value: second
 
+Common Use Cases
+----------------
+
+**A setting has a value**
+  A setting changed in the GUI is stored in a YAML configuration.
+
+See Also
+--------
+
+* :doc:`value_count` — how many values match (``0`` for absence).
+* :doc:`contains_key` — only that the key exists.
+* :doc:`/reference/testfunctions/json/value_matches` — the same for JSON files.
+
 Return Values
 -------------
 

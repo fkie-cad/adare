@@ -65,6 +65,19 @@ Usage Example
          key_path: "window.width"
          expected_value: 1280
 
+Common Use Cases
+----------------
+
+**A preference has a value**
+  A setting changed in the GUI, a recent file path, a date of last use.
+
+See Also
+--------
+
+* :doc:`value_count` — how many values match (``0`` for absence).
+* :doc:`contains_key` — only that the key exists.
+* :doc:`/reference/testfunctions/json/value_matches` — the same for JSON files.
+
 Return Values
 -------------
 

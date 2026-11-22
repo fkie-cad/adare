@@ -101,6 +101,10 @@ def line_matches(
 
     if wildcard_mode not in ['any', 'all']:
         return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
+    if not isinstance(conditions, dict) or not conditions:
+        return TestResult.error(
+            [f'conditions must be a non-empty mapping key_path -> expected value, got {conditions!r}']
+        )
 
     try:
         # Check if file is empty (edge case handling)
@@ -235,7 +239,9 @@ def line_count(
 ):
     """Pass when the number of JSONL lines meeting all ``conditions`` is within ``expected_count``.
 
-    Use for: asserting how many records/events were written (e.g. exactly 3 deletions).
+    Use for: asserting how many records/events were written (e.g. exactly 3 deletions);
+    absence: ``expected_count: 0``. For CSV records use csv.row_count, for lines of a plain
+    text file text.line_count.
 
     Args:
         dst: Guest path to the JSONL file (one JSON document per line; blank lines are

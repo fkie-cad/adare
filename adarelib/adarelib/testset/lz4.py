@@ -178,7 +178,11 @@ def decompress_block_with_header(data: bytes, max_bytes: int, stop_at: int | Non
     out = bytearray()
     if size == 0 and len(data) == 12:
         return b''
-    decode_block(data[12:], out, size, stop_at=stop_at)
+    try:
+        decode_block(data[12:], out, size, stop_at=stop_at)
+    except Lz4SizeError as e:
+        # the limit here is the header's size (already within the cap): the block is corrupt
+        raise Lz4Error(f'LZ4 block is larger than its header announces {size} bytes') from e
     if stop_at is None and len(out) != size:
         raise Lz4Error(f'LZ4 block decoded to {len(out)} bytes, header announces {size}')
     return bytes(out)

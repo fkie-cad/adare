@@ -27,7 +27,7 @@ Parameters
      - **Required.** The file path to read and test. Supports glob patterns for dynamic path resolution.
    * - ``content``
      - string
-     - **Required.** The content to search for within the file.
+     - **Required.** The content to search for within the file (case-sensitive substring). A ``!re`` or ``!timestamp`` placeholder is an ERROR: for patterns use :doc:`file_content_matches_regex`. To count occurrences, search several encodings at once or assert that a value is gone from a binary file, use :doc:`../text/occurrence_count`.
    * - ``content_type``
      - string
      - **Optional.** Either "string" (default) or "bytes". Determines how content is interpreted. In "bytes" mode ``content`` may hold only ASCII characters and Python escapes (``\x00``, ``\n``, ``\\``); a non-ASCII character or an unknown escape is an error.

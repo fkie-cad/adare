@@ -51,6 +51,23 @@ Usage Example
          entry: [report.txt, !re '.*', Deleted]
          expected_count: 1
 
+Common Use Cases
+----------------
+
+**How often a record occurs**
+  Exactly one row for a deleted file in a timeline export.
+
+**A record is gone**
+  ``expected_count: 0``.
+
+See Also
+--------
+
+* :doc:`contains_line` — one matching row exists.
+* :doc:`/reference/testfunctions/text/line_count` — lines of a plain text file.
+* :doc:`/reference/testfunctions/jsonl/line_count` — lines of a JSON Lines file.
+* :doc:`/reference/testfunctions/excel/row_count` — rows of an Excel sheet.
+
 Return Values
 -------------
 

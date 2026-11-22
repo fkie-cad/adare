@@ -8,7 +8,7 @@ Parameters
 
 * **dst** (str, required): Path to the XML file (supports glob patterns)
 * **xpath** (str, required): XPath expression to locate elements
-* **expected_count** (int, required): Expected number of matching elements
+* **expected_count** (int, required): Expected number of matching elements (non-negative; no default, ``0`` asserts absence)
 * **comparison_type** (str, optional): Comparison mode (default: "equals")
 
   * ``equals``: Exact count match

@@ -69,6 +69,22 @@ Usage Example
          expected_count: 2
          comparison_type: greater_equal
 
+Common Use Cases
+----------------
+
+**A key or value is absent**
+  ``expected_count: 0``.
+
+**How many entries a list holds**
+  Accounts, profiles or recent items.
+
+See Also
+--------
+
+* :doc:`value_matches` — the value at a key path.
+* :doc:`contains_key` — only that the key exists.
+* :doc:`/reference/testfunctions/json/value_count` — the same for JSON files.
+
 Return Values
 -------------
 

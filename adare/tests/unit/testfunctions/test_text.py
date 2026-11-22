@@ -230,6 +230,39 @@ class TestLineCount:
         assert result.status == StatusEnum.SUCCESS, result.details
         assert result.details[0].startswith(f'{count} of 6 line(s)')
 
+    @pytest.mark.parametrize(
+        ('params', 'count'),
+        [
+            ({'content': 'deleted'}, 3),
+            ({'content': 'DELETED: REPORT'}, 2),
+            ({'content': 'Straße'}, 2),  # casefold: sharp s = ss
+            ({'content': '^deleted: .*report', 'regex_match': True}, 2),
+            ({'content': '^DELETED', 'regex_match': True}, 3),
+        ],
+    )
+    def test_case_insensitive(self, tmp_path, params, count):
+        data = LOG + 'STRASSE 1\nstraße 2\n'
+        result = _lines(_file(tmp_path, data.encode(), 'app.log'), expected_count=count, case_sensitive=False, **params)
+
+        assert result.status == StatusEnum.SUCCESS, result.details
+        assert result.details[0].startswith(f'{count} of 8 line(s)')
+        assert '(case-insensitive)' in result.details[0]
+
+    def test_case_sensitive_by_default(self, tmp_path):
+        path = _file(tmp_path, LOG.encode(), 'app.log')
+
+        assert _lines(path, content='DELETED', expected_count=1).status == StatusEnum.SUCCESS
+        assert _lines(path, content='DELETED', expected_count=3).status == StatusEnum.FAILED
+        assert _lines(path, content='^DELETED', regex_match=True, expected_count=1).status == StatusEnum.SUCCESS
+
+    def test_case_insensitive_mismatch_fails(self, tmp_path):
+        path = _file(tmp_path, LOG.encode(), 'app.log')
+
+        result = _lines(path, content='Deleted', case_sensitive=False, expected_count=2)
+
+        assert result.status == StatusEnum.FAILED, result.details
+        assert 'count 3 == 2 does not hold' in result.details[1]
+
     @pytest.mark.parametrize('encoding', ['utf-16-le', 'utf-16-be', 'utf-8-sig', 'utf-32'])
     def test_encoding_detected_from_bom_or_zero_bytes(self, tmp_path, encoding):
         data = LOG.encode(encoding)
@@ -283,6 +316,7 @@ class TestLineCount:
             {'content': '[unclosed', 'expected_count': 1, 'regex_match': True},
             {'content': 'x', 'expected_count': 1, 'encoding': 'no-such-codec'},
             {'content': 5, 'expected_count': 1},
+            {'content': 'x', 'expected_count': 1, 'case_sensitive': 'no'},
         ],
     )
     def test_bad_parameters_are_errors(self, tmp_path, params):

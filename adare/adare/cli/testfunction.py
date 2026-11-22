@@ -166,7 +166,17 @@ def _locate_collection_pyfile(lib: str, explicit_path: str | None):
 
 
 def _parse_param_value(raw: str):
-    """Best-effort scalar coercion for --param k=v values (int/float/bool/None/str)."""
+    """Best-effort coercion for --param k=v values (int/float/bool/None/str; YAML flow list/dict).
+
+    ``entry=[a, b]`` must become a list: as a string, cattrs would split it into characters.
+    """
+    if raw.strip()[:1] in ('[', '{'):
+        import yaml
+
+        try:
+            return yaml.safe_load(raw)
+        except yaml.YAMLError:
+            return raw
     lowered = raw.strip().lower()
     if lowered in ('true', 'false'):
         return lowered == 'true'
@@ -308,6 +318,10 @@ def exec_dry_run_testfunction(arguments):
             message=f'target "{target}" must be in <collection>.<function> form (e.g. mycollection.file_contains_word)',
         )
     lib, func = target.split('.', 1)
+    from adarelib.testset.renames import renamed_function
+
+    if renamed_function(target):
+        raise TestFunctionNotFoundError(log, message=f'{target} was renamed to {renamed_function(target)}')
 
     py_file = _locate_collection_pyfile(lib, getattr(arguments, 'path', None))
     if py_file is None:
@@ -349,6 +363,12 @@ def exec_dry_run_testfunction(arguments):
             raise TestFunctionNotFoundError(log, message=f'invalid --param "{pair}" (expected key=value)')
         key, value = pair.split('=', 1)
         params[key.strip()] = _parse_param_value(value)
+
+    from adarelib.testset.renames import rename_problems
+
+    renamed = rename_problems(target, params)
+    if renamed:
+        raise TestFunctionNotFoundError(log, message='; '.join(renamed))
 
     sample = getattr(arguments, 'file', None)
     if sample and 'dst' not in params:

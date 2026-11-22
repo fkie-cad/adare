@@ -68,7 +68,12 @@ class YamlTagProcessor:
             return [self._process(item, template_context, template_resolver) for item in data]
         if isinstance(data, YamlRegexString):
             placeholder_name = self.create_placeholder_name('regex')
-            self.metadata_manager.add_regex_metadata(placeholder_name, data.string, template_context)
+            pattern = data.string
+            registry = self.metadata_manager.variable_registry
+            if '{{' in pattern and hasattr(registry, 'resolve_in_string'):
+                # {{ variables }} inside the pattern: their values are matched literally (escaped)
+                pattern = registry.resolve_in_string(pattern, for_regex=True)
+            self.metadata_manager.add_regex_metadata(placeholder_name, pattern, template_context)
             log.debug(f"Converted !re '{data.string}' to placeholder '{placeholder_name}'")
             return f'{{{{ {placeholder_name} }}}}'
         if isinstance(data, YamlTimestamp):

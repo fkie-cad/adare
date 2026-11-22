@@ -76,6 +76,22 @@ Usage Example
          expected_count: 2
          comparison_type: greater_equal
 
+Common Use Cases
+----------------
+
+**A setting is absent**
+  ``expected_count: 0`` without ``expected_value``: the key is not in the section.
+
+**Duplicate keys**
+  Key files that repeat a key (recent file lists) keep every occurrence.
+
+See Also
+--------
+
+* :doc:`value_matches` — the value of the key.
+* :doc:`contains_key` — only that the key exists.
+* :doc:`/guide/absence` — checking that something is absent.
+
 Return Values
 -------------
 

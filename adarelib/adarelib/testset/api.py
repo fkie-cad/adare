@@ -3,6 +3,7 @@ import inspect
 
 # configure logging
 import logging
+import re
 import shutil
 import sys
 import tempfile
@@ -209,6 +210,19 @@ def _make_parameter_class(func_name: str, param_specs: list) -> type:
     return param_cls
 
 
+def _result_from_exception(e: Exception, testname: str) -> TestResult:
+    """The result for an exception a testfunction raised (always ERROR, except TestFailed)."""
+    if isinstance(e, TestFailed):
+        return TestResult.failed([str(e)])
+    if isinstance(e, TestError):
+        return TestResult.error([str(e)])
+    if isinstance(e, PlaceholderError):
+        return TestResult.error([f'placeholder error: {e}'])
+    if isinstance(e, re.error):  # an invalid regex parameter: a test-definition problem, no trace needed
+        return TestResult.error([str(e) if 'regex' in str(e) else f'invalid regex: {e}'])
+    return TestResult.execution_error(e, f"Error in testfunction '{testname}'")
+
+
 def _make_test_class(
     func_name: str,
     testname: str,
@@ -234,15 +248,6 @@ def _make_test_class(
             return TestResult.success(result)
         return TestResult.success([str(result)])
 
-    def _from_exception(e: Exception) -> TestResult:
-        if isinstance(e, TestFailed):
-            return TestResult.failed([str(e)])
-        if isinstance(e, TestError):
-            return TestResult.error([str(e)])
-        if isinstance(e, PlaceholderError):
-            return TestResult.error([f'placeholder error: {e}'])
-        return TestResult.execution_error(e, f"Error in testfunction '{testname}'")
-
     # Every result goes through ctx._finish (archive provenance) and ctx.close removes
     # files extracted from archives, whatever the outcome.
     if is_async:
@@ -254,7 +259,7 @@ def _make_test_class(
                 try:
                     result = _convert_result(await test_func(ctx, **kwargs))
                 except Exception as e:  # a testfunction may raise anything: report it as ERROR
-                    result = _from_exception(e)
+                    result = _result_from_exception(e, testname)
                 return ctx._finish(result)
             finally:
                 ctx.close()
@@ -267,7 +272,7 @@ def _make_test_class(
                 try:
                     result = _convert_result(test_func(ctx, **kwargs))
                 except Exception as e:  # a testfunction may raise anything: report it as ERROR
-                    result = _from_exception(e)
+                    result = _result_from_exception(e, testname)
                 return ctx._finish(result)
             finally:
                 ctx.close()

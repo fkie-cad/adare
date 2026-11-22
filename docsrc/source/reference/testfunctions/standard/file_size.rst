@@ -51,6 +51,22 @@ Usage Example
          dst: /home/user/data/cache.bin
          expected_size: 0
 
+Common Use Cases
+----------------
+
+**An empty file**
+  ``expected_size: 0`` shows that a file was truncated or created empty but still exists (a missing file is an error).
+
+**A file grew or shrank**
+  ``comparison_type: greater`` after an action that appends to a log or database.
+
+See Also
+--------
+
+* :doc:`file_count` — how many files match a glob.
+* :doc:`file_exists` — only that the file exists.
+* :doc:`/reference/testfunctions/text/occurrence_count` — whether a value is still inside the file.
+
 Return Values
 -------------
 

@@ -37,6 +37,7 @@ def file_exists(ctx, dst: str = '', match_mode: str = "any"):
     """Pass when a regular file exists at ``dst`` (for globs: at least one match is a file).
 
     Use for: verifying a GUI action created/saved a file. Opposite: standard.file_does_not_exist.
+    How many files match a glob: standard.file_count; an empty file: standard.file_size.
 
     Args:
         dst: Guest path to the file. Glob characters ``* ? [ ]`` are expanded with Python
@@ -356,7 +357,8 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
 def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = 'utf-8', strip_bom: bool = False):
     r"""Pass when the text of file ``dst`` equals ``content`` (leading/trailing whitespace ignored).
 
-    Use for: exact output checks, e.g. a tool's exit code or a saved text document.
+    Use for: exact output checks, e.g. a tool's exit code or a saved text document. That a
+    file is empty: standard.file_size with ``expected_size: 0``.
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
