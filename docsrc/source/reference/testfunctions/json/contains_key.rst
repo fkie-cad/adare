@@ -96,12 +96,12 @@ Return Values
   Returns failure when:
 
   - The key path does not exist in the JSON structure
-  - The JSON file contains invalid JSON syntax
-  - The file does not exist
 
 **Execution Error**
   Returns execution error when:
 
+  - The file does not exist
+  - The JSON file contains invalid JSON syntax
   - Permission denied accessing the file
   - Path resolution fails due to glob pattern issues
   - System I/O errors occur
@@ -120,8 +120,8 @@ Example Results
    details:
      - 'key path "user.settings.theme" does not exist'
 
-   # Failure case - invalid JSON
-   result: failed
+   # Execution error case - invalid JSON
+   result: error
    details:
      - "Invalid JSON in file /tmp/config.json: Expecting ',' delimiter: line 3 column 15 (char 42)"
 

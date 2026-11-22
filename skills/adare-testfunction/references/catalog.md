@@ -14,7 +14,7 @@ compares two CSV files with full diff reporting
 
 | parameter | type | default | description |
 |---|---|---|---|
-| actual | `str` | `''` | Guest path to the CSV under test; a glob must match exactly one path, a missing or ambiguous file fails. |
+| actual | `str` | `''` | Guest path to the CSV under test; a glob must match exactly one path, a missing or ambiguous file (or a CSV parse error) is an error. |
 | reference | `str` | `''` | Guest path to the reference CSV, resolved like ``actual``. |
 | columns | `list[int]` | `None` | 0-based column indices to compare; ``None`` compares all columns. |
 | ignore_order | `bool` | `False` | ``False`` (default) compares row N with row N; ``True`` matches rows as a multiset. |
@@ -38,7 +38,7 @@ compares all rows in CSV against embedded reference data
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the CSV file. A glob must match exactly one path; no/ambiguous match or a missing file fails. Default ``csv`` dialect; header row included. |
+| **dst** | `str` |  | Guest path to the CSV file. A glob must match exactly one path; no/ambiguous match, a missing file or a CSV parse error is an error. Default ``csv`` dialect; header row included. |
 | reference_rows | `list[list[str]]` | `None` | Expected rows, a non-empty list of lists of strings (quote numbers in YAML). ``!re``/``!timestamp`` tags are matched by type; other cells exactly. |
 | columns | `list[int]` | `None` | 0-based column indices to compare (others ignored; out-of-range indices are silently dropped). ``None`` compares all columns. |
 | ignore_order | `bool` | `False` | ``False`` (default) compares row N with row N; ``True`` matches rows as a multiset regardless of position. |
@@ -61,7 +61,7 @@ tests if row in a csv file exists that matches the given entry layout
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the CSV file. A glob must match exactly one path; no/ambiguous match or a missing file fails. Parsed with the default ``csv`` dialect (comma, double quotes) in the guest's default encoding; the header row is a normal row. |
+| **dst** | `str` |  | Guest path to the CSV file. A glob must match exactly one path; no/ambiguous match, a missing file or a CSV parse error is an error. Parsed with the default ``csv`` dialect (comma, double quotes) in the guest's default encoding; the header row is a normal row. |
 | entry | `list` | `None` | Expected row as a list, one item per column; a row must have exactly this many columns. Items are compared as exact, case-sensitive strings (``str(item)``), or by type for ``!re``/``!timestamp`` tags (``!re`` uses ``re.match``, anchored at the start). Required in practice: omitting it is an execution error unless the file is empty. |
 
 ```yaml
@@ -82,7 +82,7 @@ validates specific cell value with placeholder support
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the .xlsx; a glob must match exactly one path. Missing file fails. |
+| dst | `str` | `''` | Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error. |
 | row | `int` | `0` | 0-based row index in the raw sheet (row 0 = spreadsheet row 1); out of range fails. |
 | column | `int` | `0` | 0-based column index (A = 0); out of range fails. |
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Compared exactly with ``str(expected_value)`` (``None`` -> ``''``). A single ``!re``/``!timestamp`` tag is matched by type. |
@@ -189,7 +189,7 @@ finds row matching pattern in Excel sheet
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the .xlsx; a glob must match exactly one path. Missing file fails. |
+| dst | `str` | `''` | Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error. |
 | entry | `list[str]` | `None` | Expected row; a row must have exactly as many columns as the sheet's used width. Items compared as exact strings, or by type for ``!re``/``!timestamp`` tags. |
 | sheet | `str \| int` | `0` | Sheet name (str) or 0-based index (int); unknown sheets fail. |
 | header_row | `int \| None` | `None` | Number of top rows to skip before searching (not a row index); ``None`` skips none. |
@@ -210,7 +210,7 @@ tests if a sheet exists in an Excel file
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the .xlsx; a glob must match exactly one path. Missing or unreadable files fail (permission/OS errors are execution errors). |
+| dst | `str` | `''` | Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error. |
 | sheet_name | `str` | `''` | Exact, case-sensitive sheet name, or a regex if ``regex_match``. |
 | regex_match | `bool` | `False` | Treat ``sheet_name`` as a Python regex applied with ``re.match`` (anchored at the start only); an invalid regex fails. |
 
@@ -231,7 +231,7 @@ validates column headers in Excel sheet
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the .xlsx; a glob must match exactly one path. Missing file fails. |
+| dst | `str` | `''` | Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error. |
 | expected_columns | `list[str]` | `None` | Non-empty list of header names; whitespace-stripped, case-sensitive. Empty header cells read as ``''`` and count as extra columns. |
 | sheet | `str \| int` | `0` | Sheet name (str) or 0-based index (int). |
 | column_row | `int` | `0` | 0-based row holding the headers; out of range or empty row fails. |
@@ -257,7 +257,7 @@ tests if JSON array at specified path contains expected element
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file, invalid JSON, unresolvable path or non-array value fails. |
+| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error; an unresolvable path or non-array value fails. |
 | **array_path** | `str` |  | Dot path to the array (same syntax as json.value_matches ``key_path``); a wildcard yielding several values is treated as the array of those values. |
 | expected_element | `str \| int \| float \| bool \| dict \| list` | `None` | Element tested with Python ``in`` (type-sensitive; dicts and lists must match exactly). A ``!re``/``!timestamp`` tag passes if any element's ``str()`` matches. |
 
@@ -278,7 +278,7 @@ tests if JSON file contains specified key path (supports dot notation like "user
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON fails. Read with the guest's default encoding. |
+| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error. Read with the guest's default encoding. |
 | **key_path** | `str` |  | Dot path from the root object, e.g. ``user.profile.name``. ``*`` expands all values of an object (``config.*.enabled``), ``name[*]`` all elements of array ``name`` (``users[*].email``). No numeric indexes; keys containing ``.`` and top-level arrays cannot be addressed. |
 
 ```yaml
@@ -298,11 +298,11 @@ tests if JSON value at key path matches expected value using placeholders (suppo
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file, invalid JSON or unresolvable path fails. |
+| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error; an unresolvable key path fails. |
 | **key_path** | `str` |  | Dot path from the root object, e.g. ``user.profile.name``. ``*`` expands all values of an object (``config.*.enabled``), ``name[*]`` all elements of array ``name`` (``users[*].email``). No numeric indexes; keys containing ``.`` and top-level arrays cannot be addressed. |
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``; ``null`` needs ``None``/``null``). A ``!re``/``!timestamp`` tag compares ``str(value)`` by type. |
 | regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``. |
-| wildcard_mode | `str` | `'any'` | ``any`` (default): one value must match; ``all``: every value must match. Other values are an execution error (checked only for multiple values). |
+| wildcard_mode | `str` | `'any'` | ``any`` (default): one value must match; ``all``: every value must match. Other values are an error. |
 
 ```yaml
 tests:
@@ -323,11 +323,11 @@ counts lines in JSONL file matching conditions and validates against expected co
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing or 0-byte file fails. |
+| dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file has 0 lines (passes ``expected_count: 0``). |
 | conditions | `dict[str, str \| int \| float \| bool \| None] \| None` | `None` | Mapping ``key_path -> expected value`` (all must hold; for multi-value paths one matching element suffices). ``None``/empty counts every valid JSON line. |
 | expected_count | `int \| dict[str, int] \| None` | `None` | ``int`` for an exact count, ``{min: N, max: M}`` for a range (either bound optional: min defaults to 0, max to unbounded), or ``None`` for "at least 1". |
 | regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
-| skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` fails on the first malformed line. |
+| skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
 
 ```yaml
 tests:
@@ -345,11 +345,11 @@ tests if lines in JSONL file match specified conditions (supports any/all modes)
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing or 0-byte file fails. |
+| dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails. |
 | conditions | `dict[str, str \| int \| float \| bool \| None]` | `None` | Required mapping ``key_path -> expected value``; a line matches when every condition holds. If a path yields several values (wildcard or JSON array), one matching element suffices. Missing keys fail the line. |
 | match_mode | `str` | `'any'` | ``any`` (default) or ``all`` (every valid line must match; no valid lines fails). Other values are an execution error. |
 | regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
-| skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` fails on the first malformed line. |
+| skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
 
 ```yaml
 tests:
@@ -367,11 +367,11 @@ tests if specified key path with expected value exists in any line of JSONL file
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing or 0-byte file fails. |
+| dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails. |
 | key_path | `str` | `''` | Dot path inside each line's object, e.g. ``event.type``; ``*`` expands object values, ``name[*]`` array elements. No numeric indexes. For multi-value paths one matching element suffices. |
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Value to find; see ``regex_match`` for how it is compared. |
 | regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
-| skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` fails on the first malformed line. |
+| skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
 
 ```yaml
 tests:
@@ -413,7 +413,7 @@ tests if a process is running with expected number of instances (Linux only)
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **process_name** | `str` |  | Extended regex matched against each process's FULL command line (``pgrep -f``), so ``firefox`` also matches ``/usr/lib/firefox/firefox -contentproc``. |
+| **process_name** | `str` |  | Extended regex matched against each process's FULL command line (``pgrep -f``), so ``someapp`` also matches ``/usr/lib/someapp/someapp --worker``. |
 | min_instances | `int` | `1` | Minimum number of matching PIDs (default 1). |
 
 ```yaml
@@ -475,7 +475,7 @@ executes SQL query against SQLite database and validates result
 | parameter | type | default | description |
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the database; a glob must match exactly one file (otherwise an error). A missing file is an error. |
-| **query** | `str` |  | SQL to execute, e.g. ``SELECT url FROM urls WHERE url LIKE '%example%'``. A SQL error (syntax, unknown table, unreadable database) is an error. |
+| **query** | `str` |  | SQL to execute, e.g. ``SELECT name FROM items WHERE name LIKE '%example%'``. A SQL error (syntax, unknown table, unreadable database) is an error. |
 | expected_rows | `int` | `None` | Exact number of rows the query must return; ``None`` skips the check. Use ``0`` to assert a row is gone. |
 | expected_result | `list` | `None` | Exact expected rows as a list of ``{column: value}`` mappings, in query order; ``None`` skips the check. Placeholders compare the stringified result. |
 
@@ -555,7 +555,7 @@ tests if file content contains specified string or byte pattern
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file fails. |
+| dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file is an error. |
 | content | `str` | `''` | Text to find (case-sensitive). In ``bytes`` mode Python escape sequences are decoded first (``\x00``, ``\n``) to latin-1 bytes. An empty value always passes. |
 | content_type | `str` | `'string'` | ``bytes`` searches the raw file bytes; any other value (default ``string``) searches the decoded text. |
 | encoding | `str` | `'utf-8'` | Codec for ``string`` mode; undecodable bytes are silently dropped. ``BOM`` detects UTF-8/16/32 from the byte-order mark and errors if there is none. |
@@ -578,7 +578,7 @@ tests if file content equals the given content
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file fails; a failure includes a unified diff. |
+| dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file is an error; a failure includes a unified diff. |
 | content | `str` | `''` | Expected text. Both sides are ``strip()``-ed; inner whitespace must match (line endings are normalised to ``\n`` by text-mode reading). ``!re``/``!timestamp`` tags inside the value become placeholders matched by type; the literal text around them must match exactly. |
 | encoding | `str` | `'utf-8'` | Python codec used to decode the file (strict). ``BOM`` detects UTF-8/16/32 from the byte-order mark and errors if there is none. |
 | strip_bom | `bool` | `False` | Remove a leading U+FEFF from the decoded text before comparing. |
@@ -600,7 +600,7 @@ tests if file content matches a given regex expression
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file fails. |
+| dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file is an error. |
 | regex | `str` | `''` | Python ``re`` pattern applied with ``re.search`` to the whole file. Default flags: case-sensitive, ``^``/``$`` match only file start/end; use inline flags such as ``(?im)``. An empty pattern always passes; an invalid one errors. |
 | encoding | `str` | `'utf-8'` | Python codec used to decode the file (strict: undecodable bytes error). ``BOM`` detects UTF-8/16/32 from the byte-order mark and errors if there is none. |
 | strip_bom | `bool` | `False` | Remove a leading U+FEFF from the decoded text before matching. |
@@ -660,7 +660,7 @@ tests if file hash matches expected value
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file fails. |
+| dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file is an error. |
 | expected_hash | `str` | `''` | Hex digest; compared case-insensitively but otherwise exactly (no whitespace stripping, no prefix such as ``sha256:``). |
 | hash_type | `str` | `'sha256'` | ``md5``, ``sha1``, ``sha256`` (default) or ``sha512`` (case-insensitive); anything else is an execution error. |
 
@@ -681,7 +681,7 @@ tests file permissions, owner, and group
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the file or directory. A glob must match exactly one path, otherwise the test errors. A missing path fails. |
+| dst | `str` | `''` | Guest path to the file or directory. A glob must match exactly one path, otherwise the test errors. A missing path is an error. |
 | expected_permissions | `str` | `''` | Octal digits (``'644'``, ``'0755'``) or 9-char symbolic (``rwxr-xr-x``), compared with ``st_mode & 0o777`` (no setuid/sticky). Quote it in YAML (unquoted ``0644`` is read as decimal 420). Empty/invalid values error. |
 | check_owner | `str` | `None` | Expected owner user name (not UID); ``None`` skips the check. |
 | check_group | `str` | `None` | Expected group name (not GID); ``None`` skips the check. |
@@ -703,7 +703,7 @@ tests file timestamps with various comparison types and formats
 
 | parameter | type | default | description |
 |---|---|---|---|
-| dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file fails. |
+| dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file is an error. |
 | timestamp_type | `str` | `'modified'` | ``modified`` (mtime, default), ``accessed`` (atime) or ``created``: creation time on Windows; elsewhere ``st_birthtime`` if Python exposes it, else ``st_ctime`` (inode change time on Linux). Other values error. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default, within ``tolerance_seconds``), ``before`` / ``after`` (strict, vs ``expected_time``), ``between`` (inclusive, ``start_time``.. ``end_time``) or ``within_last`` (``within_duration`` before the guest's now). |
 | expected_time | `str \| int \| float` | `None` | Reference for equals/before/after: Unix epoch seconds or a date string (see ``time_format``). Naive strings are read in the guest's local timezone (the trailing ``Z`` format too). Missing/unparseable values error. |
@@ -874,7 +874,7 @@ tests if XML element attribute matches expected value with regex and timestamp t
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file fails; malformed XML is an execution error. |
+| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | **xpath** | `str` |  | ElementTree ``ElementPath`` subset, evaluated on the root element: ``//tag`` (any depth), ``/root/child`` (first step must be the root tag), ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``. Any ``(``, ``::``, ``..`` or ``\|`` (even inside a quoted value) is an execution error, so no functions such as ``text()``. |
 | **attribute** | `str` |  | Attribute name; namespaced attributes need the ``{uri}name`` form. |
 | **expected_value** | `str` |  | Exact expected value, or a regex with ``regex_match``; a single ``!re``/``!timestamp`` tag is matched by type. |
@@ -901,7 +901,7 @@ tests the number of XML elements matching XPath expression
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file fails; malformed XML is an execution error. |
+| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | **xpath** | `str` |  | ElementTree ``ElementPath`` subset, evaluated on the root element: ``//tag`` (any depth), ``/root/child`` (first step must be the root tag), ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``. Any ``(``, ``::``, ``..`` or ``\|`` (even inside a quoted value) is an execution error, so no functions such as ``text()``. |
 | expected_count | `int` | `0` | Number to compare against (default 0). |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an execution error. |
@@ -924,7 +924,7 @@ tests if XML element exists at specified XPath
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file fails; malformed XML is an execution error. |
+| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | **xpath** | `str` |  | ElementTree ``ElementPath`` subset, evaluated on the root element: ``//tag`` (any depth), ``/root/child`` (first step must be the root tag), ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``. Any ``(``, ``::``, ``..`` or ``\|`` (even inside a quoted value) is an execution error, so no functions such as ``text()``. |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` + ``//ns:item``); ``{uri}tag`` also works without it. |
 
@@ -945,7 +945,7 @@ tests if XML element text content matches expected value with placeholder suppor
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file fails; malformed XML is an execution error. |
+| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | **xpath** | `str` |  | ElementTree ``ElementPath`` subset, evaluated on the root element: ``//tag`` (any depth), ``/root/child`` (first step must be the root tag), ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``. Any ``(``, ``::``, ``..`` or ``\|`` (even inside a quoted value) is an execution error, so no functions such as ``text()``. No match fails. |
 | expected_text | `str` | `''` | Exact expected text, or a regex with ``regex_match``. A single ``!re``/``!timestamp`` tag is matched by type (``case_sensitive`` then ignored). |
 | regex_match | `bool` | `False` | Search ``expected_text`` as a Python regex (``re.search``, unanchored). |
@@ -971,7 +971,7 @@ tests if XML namespace declarations match expected namespaces
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file fails; malformed XML is an execution error. |
+| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | expected_namespaces | `dict[str, str]` | `None` | Required map prefix -> URI, e.g. ``{'': 'http://www.w3.org/2000/svg'}``; ``None`` is an execution error. |
 | check_mode | `str` | `'contains'` | ``contains`` (default; every expected prefix present with that URI) or ``exact`` (dicts equal). Other values are an execution error. |
 
@@ -991,7 +991,7 @@ tests if XPath expression result matches expected value (text, number, or boolea
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file fails; malformed XML is an execution error. |
+| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | **xpath** | `str` |  | ElementTree ``ElementPath`` subset, evaluated on the root element: ``//tag`` (any depth), ``/root/child`` (first step must be the root tag), ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``. Any ``(``, ``::``, ``..`` or ``\|`` (even inside a quoted value) is an execution error, so no functions such as ``text()``. |
 | expected_result | `str \| int \| float \| bool` | `''` | Converted per ``result_type``: ``str()``, ``float()`` or ``bool()``. Note ``bool('false')`` is True -- use unquoted YAML ``true``/``false``. |
 | result_type | `str` | `'text'` | ``text`` (default; first element's ``.text``, ``''`` if none), ``number`` (``float`` of that text; no match -> 0.0, non-numeric -> execution error) or ``boolean`` (whether anything matched). Other values are an execution error. |

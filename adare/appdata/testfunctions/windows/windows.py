@@ -105,7 +105,7 @@ def registry_key_exists(ctx: TestContext, key_path: str):
     Example:
         function: windows.registry_key_exists
         parameter:
-          key_path: HKCU/Software/Microsoft/Office/16.0/Word
+          key_path: HKCU/Software/ExampleVendor/ExampleApp
     """
     if platform.system() != 'Windows':
         return TestResult.execution_error(None, "This test only runs on Windows")

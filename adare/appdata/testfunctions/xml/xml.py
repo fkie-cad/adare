@@ -133,7 +133,7 @@ def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sen
                     return True, f'text "{actual_text}" matches regex "{expected_text}"'
                 return False, f'text "{actual_text}" does not match regex "{expected_text}"'
             except re.error as e:
-                return False, f'Invalid regex pattern: {expected_text} - {e}'
+                raise re.error(f'invalid regex pattern {expected_text!r}: {e}') from e
         else:
             # Direct text comparison
             success = actual_text == expected_text if case_sensitive else actual_text.lower() == expected_text.lower()
@@ -294,7 +294,7 @@ def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: dict[str,
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
             ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
@@ -306,12 +306,12 @@ def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: dict[str,
     Example:
         function: xml.element_exists
         parameter:
-          dst: /home/user/.local/share/recently-used.xbel
-          xpath: "//bookmark[@href='file:///home/user/report.odt']"
+          dst: /home/user/data/list.xml
+          xpath: "//entry[@ref='item-42']"
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test element_exists')
 
@@ -326,7 +326,7 @@ def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: dict[str,
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
@@ -353,7 +353,7 @@ def element_text_matches(
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
             ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
@@ -377,7 +377,7 @@ def element_text_matches(
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test element_text_matches')
 
@@ -403,7 +403,7 @@ def element_text_matches(
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
@@ -425,12 +425,12 @@ def attribute_matches(
 ):
     """Pass when ``attribute`` of the FIRST element selected by ``xpath`` equals/matches ``expected_value``.
 
-    Use for: asserting attribute values (``visited``, ``modified``, ``href`` ...). No matching
+    Use for: asserting attribute values (an id, a state, a timestamp ...). No matching
     element or a missing attribute fails.
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
             ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
@@ -447,14 +447,14 @@ def attribute_matches(
     Example:
         function: xml.attribute_matches
         parameter:
-          dst: /home/user/.local/share/recently-used.xbel
-          xpath: "//bookmark[@href='file:///home/user/report.odt']"
-          attribute: visited
+          dst: /home/user/data/list.xml
+          xpath: "//entry[@ref='item-42']"
+          attribute: modified
           expected_value: !re '20[0-9]{2}-'
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test attribute_matches')
 
@@ -494,7 +494,7 @@ def attribute_matches(
                             f'attribute value "{actual_value}" does not match regex "{expected_value}"',
                         )
                 except re.error as e:
-                    is_match, message = False, f'Invalid regex pattern: {expected_value} - {e}'
+                    raise re.error(f'invalid regex pattern {expected_value!r}: {e}') from e
             else:
                 # Direct value comparison
                 if case_sensitive:
@@ -517,7 +517,7 @@ def attribute_matches(
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
@@ -537,12 +537,12 @@ def element_count(
 ):
     """Pass when the number of elements selected by ``xpath`` satisfies ``comparison_type`` vs ``expected_count``.
 
-    Use for: counting entries (bookmarks, recent files); ``expected_count: 0`` asserts absence
+    Use for: counting entries; ``expected_count: 0`` asserts absence
     (opposite of xml.element_exists).
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
             ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
@@ -557,14 +557,14 @@ def element_count(
     Example:
         function: xml.element_count
         parameter:
-          dst: /home/user/.local/share/recently-used.xbel
-          xpath: //bookmark
+          dst: /home/user/data/list.xml
+          xpath: //entry
           expected_count: 1
           comparison_type: greater_equal
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test element_count')
 
@@ -582,7 +582,7 @@ def element_count(
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
@@ -606,7 +606,7 @@ def xpath_result_matches(
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
             ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
@@ -630,7 +630,7 @@ def xpath_result_matches(
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test xpath_result_matches')
 
@@ -653,7 +653,7 @@ def xpath_result_matches(
     except ValueError as e:
         return TestResult.execution_error(e, "XML/XPath processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
@@ -674,7 +674,7 @@ def namespace_matches(
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         expected_namespaces: Required map prefix -> URI, e.g. ``{'': 'http://www.w3.org/2000/svg'}``;
             ``None`` is an execution error.
         check_mode: ``contains`` (default; every expected prefix present with that URI) or
@@ -688,7 +688,7 @@ def namespace_matches(
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test namespace_matches')
 
@@ -724,6 +724,6 @@ def namespace_matches(
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
