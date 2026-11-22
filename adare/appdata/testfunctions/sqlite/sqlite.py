@@ -86,8 +86,7 @@ def _snapshot(db_path: str, workdir: str) -> tuple[str, list[str], bool]:
 def query_result(ctx: TestContext, dst: str, query: str, expected_rows: int = None, expected_result: list = None):
     """Pass when ``query`` runs on the SQLite database and its result matches the expectations.
 
-    Use for: application databases (e.g. a row was written or
-    deleted). The original file is never opened: ``dst`` and any ``-wal``/``-journal``
+    Use for: asserting that a row was written, changed or removed. The original file is never opened: ``dst`` and any ``-wal``/``-journal``
     sidecar are copied to a temp dir and the copy is queried, so uncheckpointed changes are
     seen and the evidence is not modified. Details report ``queried snapshot: <file> sha256=...``
     per copied file and, once the query ran, the rows read (``query result: [...]``, also on
