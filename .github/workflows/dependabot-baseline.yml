@@ -1,0 +1,71 @@
+name: Dependabot baseline
+
+# A dependency bump moves the ratchet's mypy counts through library type changes
+# alone (e.g. new SQLAlchemy stubs), so Tests' lint job fails although no code
+# changed. For Dependabot PRs that change nothing but the lockfile, re-measure
+# the budgets, commit quality-baseline.json to the PR branch, and re-run Tests
+# and the audit on that commit (a GITHUB_TOKEN push triggers no workflows, a
+# workflow_dispatch does). Code PRs keep the strict ratchet.
+on:
+  pull_request:
+    branches: [dev, main]
+    paths: [uv.lock]
+
+permissions:
+  contents: write
+  pull-requests: read
+  actions: write
+
+concurrency:
+  group: dependabot-baseline-${{ github.head_ref }}
+  cancel-in-progress: true
+
+env:
+  UV_LOCKED: 1
+
+jobs:
+  rebaseline:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Only the lockfile changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          others=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json files -q '.files[].path' \
+            | grep -vxE 'uv\.lock|quality-baseline\.json' || true)
+          if [ -n "$others" ]; then
+            echo "::error::Not a lockfile-only PR, leaving the ratchet strict:"; echo "$others"; exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Install libvirt headers (qemu extra)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvirt-dev pkg-config
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Re-measure budgets
+        run: make lint-baseline-deps
+
+      - name: Commit baseline and re-run checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet -- quality-baseline.json; then
+            echo "Budgets unchanged."; exit 0
+          fi
+          git diff -- quality-baseline.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(lint): re-baseline quality ratchet for dependency bump' -- quality-baseline.json
+          git push origin "HEAD:$BRANCH"
+          gh workflow run tests.yml --ref "$BRANCH"
+          gh workflow run audit.yml --ref "$BRANCH"
