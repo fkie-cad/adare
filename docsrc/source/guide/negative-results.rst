@@ -60,8 +60,8 @@ stored in the action's event data and the forensic log as ``effect: changed``,
 - ``strict``: ``prove``, and an ``unchanged`` action fails its step.
 
 Mark an action that is expected to change nothing with ``effect: none`` before switching a
-playbook to ``prove`` or ``strict``. Real playbooks have many: on three MyProject playbooks
-(Firefox, LibreOffice, Chrome) 7-29 % of GUI actions rightly changed nothing, all of them
+playbook to ``prove`` or ``strict``. Real playbooks have many: on three real playbooks
+(browser and office tasks) 7-29 % of GUI actions rightly changed nothing, all of them
 idempotent steps such as a wake key, a focus click on a focused window, ``ctrl+a`` on text
 that is already selected, ``ctrl+l`` into a focused address bar, or expanding a node that is
 already open. That is why ``warn`` is the default.

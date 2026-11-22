@@ -11,7 +11,7 @@ which frame is not logged, so every query of an experiment is tried on every
 sampled frame of it - a superset of what the runs did.
 
     uv run --no-sync python adare-cv-server/scripts/ocr_compare.py \\
-        ~/Documents/Projects/project/adare \\
+        ~/path/to/project \\
         --experiments 100 --frames 3 --out ocr_compare.json
 
 Detections are cached per (frame sha256, profile) under --cache-dir, so a rerun or

@@ -17,7 +17,7 @@ and, under ``settings.effect_check: prove`` or ``strict``, also when one
 
 or when one of its explicit ``controls:`` (other tests, e.g. "the file existed before")
 did not pass before it. Under the default ``warn`` the last two are only recorded: on real
-playbooks (MyProject Firefox, LibreOffice, Chrome) 7-29 % of GUI actions are steps that rightly
+playbooks (browser and office tasks) 7-29 % of GUI actions are steps that rightly
 change nothing (wake key, focus click, ctrl+a on selected text) and 88 % use ``when:`` for
 defensive steps, so counting them by default would make nearly every negative test
 INCONCLUSIVE. The implicit action checks never affect a positive test; explicit

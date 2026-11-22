@@ -101,7 +101,7 @@ def test_unproven_action_makes_negative_test_inconclusive(data, reason):
 @pytest.mark.parametrize('mode', ['warn', 'off'])
 @pytest.mark.parametrize('data', [{'skipped': True}, {'effect': 'unchanged'}])
 def test_warn_only_records_unchanged_and_when_skipped(mode, data):
-    # Real MyProject playbooks: wake key, focus clicks, ctrl+a on selected text change nothing,
+    # Real playbooks: wake key, focus clicks, ctrl+a on selected text change nothing,
     # and most use when: for defensive steps; under warn they must not flip negative tests
     ledger = EffectLedger(mode=mode)
     ledger.record_action(KeyboardAction(key='shift'), _ok(**data))
