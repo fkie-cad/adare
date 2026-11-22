@@ -441,6 +441,12 @@ Use ``expect_to_fail`` when testing negative conditions:
        parameter:
          key: "HKEY_CURRENT_USER\\Software\\NonExistentApp"
 
+``expect_to_fail`` inverts only a pass or a failure. A test that cannot be evaluated (the
+file is missing, a glob matches no file or several, the content cannot be parsed) ends
+with an error, and an error stays an error. To assert that a file is gone, use
+``standard.file_does_not_exist`` (or ``file_exists`` with ``expect_to_fail``), not a
+content test with ``expect_to_fail``.
+
 **Continue on Test Failure**
 
 Configure behavior when tests fail:

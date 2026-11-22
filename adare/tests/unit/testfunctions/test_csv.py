@@ -184,14 +184,14 @@ class TestContainsLine:
         assert "no rows found" in result.details[1]
 
     def test_contains_line_file_not_found(self, tmp_path):
-        """Test failure when CSV file doesn't exist."""
+        """Test error when CSV file doesn't exist."""
         test = ContainsLine(
             name="test_contains",
             parameter=ContainsLineParameter(dst=str(tmp_path / "nonexistent.csv"), entry=["Alice", "30"]),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_contains_line_with_placeholder_simple(self, create_csv_file, variable_metadata_simple):
@@ -626,7 +626,7 @@ class TestCompareRows:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "must be a list" in result.details[0]
 
     def test_compare_rows_validation_error_empty(self, create_csv_file):
@@ -636,7 +636,7 @@ class TestCompareRows:
         test = CompareRows(name="test_compare", parameter=CompareRowsParameter(dst=str(csv_file), reference_rows=[]))
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "cannot be empty" in result.details[0]
 
     def test_compare_rows_validation_error_row_not_list(self, create_csv_file):
@@ -649,18 +649,18 @@ class TestCompareRows:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "must be a list" in result.details[0]
 
     def test_compare_rows_file_not_found(self, tmp_path):
-        """Test failure when CSV file doesn't exist."""
+        """Test error when CSV file doesn't exist."""
         test = CompareRows(
             name="test_compare",
             parameter=CompareRowsParameter(dst=str(tmp_path / "nonexistent.csv"), reference_rows=[["Name"], ["Alice"]]),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_compare_rows_empty_csv(self, create_csv_file):
@@ -1054,7 +1054,7 @@ class TestCompareFiles:
         assert_test_success(result)
 
     def test_compare_files_actual_not_found(self, create_csv_file, tmp_path):
-        """Test failure when actual file doesn't exist."""
+        """Test error when actual file doesn't exist."""
         reference_file = create_csv_file("reference.csv", [["Name"], ["Alice"]])
 
         test = CompareFiles(
@@ -1063,12 +1063,12 @@ class TestCompareFiles:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "actual file" in result.details[0]
         assert "does not exist" in result.details[0]
 
     def test_compare_files_reference_not_found(self, create_csv_file, tmp_path):
-        """Test failure when reference file doesn't exist."""
+        """Test error when reference file doesn't exist."""
         actual_file = create_csv_file("actual.csv", [["Name"], ["Alice"]])
 
         test = CompareFiles(
@@ -1077,7 +1077,7 @@ class TestCompareFiles:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "reference file" in result.details[0]
         assert "does not exist" in result.details[0]
 

@@ -83,6 +83,11 @@ def file_exists(ctx, dst: str, match_mode: str = "any"):
   directory.
 - Assert with `ctx.fail_if(cond, msg)` (test failed) / `ctx.error_if(cond, msg)`
   (precondition/setup error); return a str/list (success) or a `TestResult`.
+- **Failed means the evidence was read and the condition does not hold.** A missing
+  `dst`, a glob matching no file or several, unparseable content or invalid parameters is an *error*, never
+  a failure: `expect_to_fail` inverts only success/failed, so a failure there would let a
+  wrong path pass a negative test. Only existence tests (`file_exists`,
+  `file_does_not_exist`) may fail on a missing path.
 - **A test whose pass means "something is absent"** (cleared, deleted, never written)
   should declare `@testfunction(..., negative=True)`. The host then reports an
   unproven pass (an earlier GUI action skipped or without visible effect) as

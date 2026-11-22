@@ -76,9 +76,26 @@ Return one of:
   `.error([...])`, `.execution_error(exc, msg)`) for full control.
 
 Unhandled exceptions are caught by the harness and turned into an execution error, so
-prefer catching *specific* exceptions (e.g. `json.JSONDecodeError`, `OSError`) and
-returning a precise `TestResult.failed`/`.execution_error` — matches the project's
-"no generic `except Exception`" rule and gives better forensic messages.
+prefer catching *specific* exceptions (e.g. `FileNotFoundError`, `json.JSONDecodeError`,
+`OSError`) and returning a precise result — matches the project's "no generic
+`except Exception`" rule and gives better forensic messages.
+
+## Failed or error?
+
+- **failed**: the test read the evidence and the condition does not hold.
+- **error**: the test could not read the evidence: `dst` missing, a glob matching no file
+  or several, unreadable (permissions, I/O) or unparseable content (invalid JSON/CSV/XML,
+  corrupt workbook/database), or invalid parameters (wrong type, empty list, both/neither
+  of two options, unknown mode, invalid regex). Return `TestResult.error([...])` /
+  `.execution_error(exc, msg)`, never `.failed`.
+
+`expect_to_fail` inverts only success/failed; errors stay errors. A missing file reported
+as *failed* makes a wrong path, a typo or a failed pull pass every negative test. Only a
+test whose subject is existence (`standard.file_exists`, `file_does_not_exist`,
+`dir_exists`) may pass or fail on a missing path.
+
+Docstring examples use neutral made-up paths (`/home/user/data/app.db`), never a real
+application's paths or table names; `test_neutral_docstrings.py` checks this.
 
 ## Minimal skeleton
 

@@ -434,15 +434,15 @@ class TestFileContentMatchesRegex:
         assert_test_error(result)
         assert "Invalid regex pattern" in result.details[0]
 
-    def test_file_content_matches_regex_failure_file_not_found(self, tmp_path):
-        """Test failure when file doesn't exist."""
+    def test_file_content_matches_regex_error_file_not_found(self, tmp_path):
+        """Test error when file doesn't exist."""
         test = FileContentMatchesRegex(
             name="test_regex",
             parameter=FileContentMatchesRegexParameter(dst=str(tmp_path / "nonexistent.txt"), regex=r".*"),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_file_content_matches_regex_with_encoding(self, tmp_path):
@@ -508,15 +508,15 @@ class TestFileContentEquals:
         assert_test_failed(result)
         assert "Diff:" in result.details[1]
 
-    def test_file_content_equals_failure_file_not_found(self, tmp_path):
-        """Test failure when file doesn't exist."""
+    def test_file_content_equals_error_file_not_found(self, tmp_path):
+        """Test error when file doesn't exist."""
         test = FileContentEquals(
             name="test_equals",
             parameter=FileContentEqualsParameter(dst=str(tmp_path / "nonexistent.txt"), content="content"),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_file_content_equals_with_encoding(self, tmp_path):
@@ -613,8 +613,8 @@ class TestFileHashMatches:
         assert_test_failed(result)
         assert "hash mismatch" in result.details[0]
 
-    def test_file_hash_matches_failure_file_not_found(self, tmp_path):
-        """Test failure when file doesn't exist."""
+    def test_file_hash_matches_error_file_not_found(self, tmp_path):
+        """Test error when file doesn't exist."""
         test = FileHashMatches(
             name="test_hash",
             parameter=FileHashMatchesParameter(
@@ -625,7 +625,7 @@ class TestFileHashMatches:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_file_hash_matches_error_invalid_hash_type(self, tmp_path):
@@ -838,8 +838,8 @@ class TestFileTimestamps:
         # Should succeed or fail based on timing, but not error
         assert result.status in [StatusEnum.SUCCESS, StatusEnum.FAILED]
 
-    def test_file_timestamps_failure_file_not_found(self, tmp_path):
-        """Test failure when file doesn't exist."""
+    def test_file_timestamps_error_file_not_found(self, tmp_path):
+        """Test error when file doesn't exist."""
         test = FileTimestamps(
             name="test_timestamps",
             parameter=FileTimestampsParameter(
@@ -851,7 +851,7 @@ class TestFileTimestamps:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     @pytest.mark.parametrize("timestamp_type", ["modified", "accessed"])
@@ -980,15 +980,15 @@ class TestFilePermissions:
         assert_test_success(result)
         assert "group matches" in result.details[1]
 
-    def test_file_permissions_failure_file_not_found(self, tmp_path):
-        """Test failure when file doesn't exist."""
+    def test_file_permissions_error_file_not_found(self, tmp_path):
+        """Test error when file doesn't exist."""
         test = FilePermissions(
             name="test_permissions",
             parameter=FilePermissionsParameter(dst=str(tmp_path / "nonexistent.txt"), expected_permissions="644"),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
 
@@ -1087,15 +1087,15 @@ class TestFileContentContains:
 
         assert_test_success(result)
 
-    def test_file_content_contains_failure_file_not_found(self, tmp_path):
-        """Test failure when file doesn't exist."""
+    def test_file_content_contains_error_file_not_found(self, tmp_path):
+        """Test error when file doesn't exist."""
         test = FileContentContains(
             name="test_contains",
             parameter=FileContentContainsParameter(dst=str(tmp_path / "nonexistent.txt"), content="test"),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_file_content_contains_empty_file(self, tmp_path):

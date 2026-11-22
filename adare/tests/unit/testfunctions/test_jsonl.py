@@ -253,7 +253,7 @@ class TestLineMatches:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Malformed JSON" in result.details[0]
 
     def test_line_matches_empty_file(self, create_jsonl_file):
@@ -279,7 +279,7 @@ class TestLineMatches:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_line_matches_with_placeholder(self, create_jsonl_file, variable_metadata_simple):
@@ -498,7 +498,7 @@ class TestLineCount:
         assert_test_success(result)
 
     def test_line_count_empty_file(self, create_jsonl_file):
-        """Test with empty file."""
+        """A 0-byte file has 0 lines, so expected_count 0 passes."""
         jsonl_file = create_jsonl_file("empty.jsonl", [])
 
         test = LineCount(
@@ -507,8 +507,8 @@ class TestLineCount:
         )
         result = test.test()
 
-        assert_test_failed(result)
-        assert "empty" in result.details[0]
+        assert_test_success(result)
+        assert "Found 0 matching lines" in result.details[0]
 
 
 # ============================================================================
@@ -687,7 +687,7 @@ class TestValueInAnyLine:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Malformed JSON" in result.details[0]
 
     def test_value_in_any_line_empty_file(self, create_jsonl_file):
@@ -713,7 +713,7 @@ class TestValueInAnyLine:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_value_in_any_line_numeric_values(self, create_jsonl_file):

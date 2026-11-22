@@ -198,11 +198,12 @@ Return Values
   - Column count mismatch between entry and CSV rows
   - Regex patterns don't match actual values
   - Timestamp values fall outside tolerance range
-  - CSV parsing errors occur
 
 **Execution Error**
   Returns execution error when:
 
+  - The file does not exist, or a glob matches no file or more than one
+  - CSV parsing errors occur
   - Permission denied accessing the file
   - Invalid regex patterns provided
   - System I/O errors occur

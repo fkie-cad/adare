@@ -180,11 +180,12 @@ Return Values
   - The value doesn't match the expected value
   - Wildcard mode requirements are not met (e.g., "all" mode with some non-matches)
   - Regex pattern doesn't match
-  - Invalid JSON syntax
 
 **Execution Error**
   Returns execution error when:
 
+  - The file does not exist, or a glob matches no file or more than one
+  - Invalid JSON syntax
   - Invalid regex pattern provided
   - Permission denied accessing the file
   - System I/O errors occur

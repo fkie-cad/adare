@@ -482,7 +482,7 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
-            errors. A missing file fails.
+            errors. A missing file is an error.
         regex: Python ``re`` pattern applied with ``re.search`` to the whole file. Default
             flags: case-sensitive, ``^``/``$`` match only file start/end; use inline flags
             such as ``(?im)``. An empty pattern always passes; an invalid one errors.
@@ -521,7 +521,7 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
             data = _strip_bom_from_text(data, encoding)
 
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
+        return TestResult.error([f'file with path {dst} does not exist'])
     except (PermissionError, OSError, UnicodeDecodeError) as e:
         return TestResult.execution_error(e, f"Cannot read file {dst}")
 
@@ -548,7 +548,7 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
-            errors. A missing file fails; a failure includes a unified diff.
+            errors. A missing file is an error; a failure includes a unified diff.
         content: Expected text. Both sides are ``strip()``-ed; inner whitespace must match
             (line endings are normalised to ``\n`` by text-mode reading). ``!re``/``!timestamp``
             tags inside the value become placeholders matched by type; the literal text
@@ -588,7 +588,7 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
             data = _strip_bom_from_text(data, encoding)
 
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
+        return TestResult.error([f'file with path {dst} does not exist'])
     except (PermissionError, OSError, UnicodeDecodeError) as e:
         return TestResult.execution_error(e, f"Cannot read file {dst}")
 
@@ -635,7 +635,7 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
-            errors. A missing file fails.
+            errors. A missing file is an error.
         expected_hash: Hex digest; compared case-insensitively but otherwise exactly (no
             whitespace stripping, no prefix such as ``sha256:``).
         hash_type: ``md5``, ``sha1``, ``sha256`` (default) or ``sha512`` (case-insensitive);
@@ -665,7 +665,7 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
         return TestResult.failed([f'{hash_type.upper()} hash mismatch. Expected: {expected_hash}, Got: {actual_hash}'])
 
     except FileNotFoundError:
-        return TestResult.failed([f'file {dst} does not exist'])
+        return TestResult.error([f'file {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read file {dst}")
     except ValueError as e:
@@ -695,7 +695,7 @@ def file_timestamps(
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
-            errors. A missing file fails.
+            errors. A missing file is an error.
         timestamp_type: ``modified`` (mtime, default), ``accessed`` (atime) or ``created``:
             creation time on Windows; elsewhere ``st_birthtime`` if Python exposes it, else
             ``st_ctime`` (inode change time on Linux). Other values error.
@@ -784,7 +784,7 @@ def file_timestamps(
         return TestResult.error([f'Unsupported comparison type: {comparison_type}'])
 
     except FileNotFoundError:
-        return TestResult.failed([f'file {dst} does not exist'])
+        return TestResult.error([f'file {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot access file {dst}")
     except ValueError as e:
@@ -804,7 +804,7 @@ def file_permissions(
 
     Args:
         dst: Guest path to the file or directory. A glob must match exactly one path,
-            otherwise the test errors. A missing path fails.
+            otherwise the test errors. A missing path is an error.
         expected_permissions: Octal digits (``'644'``, ``'0755'``) or 9-char symbolic
             (``rwxr-xr-x``), compared with ``st_mode & 0o777`` (no setuid/sticky). Quote it in
             YAML (unquoted ``0644`` is read as decimal 420). Empty/invalid values error.
@@ -864,7 +864,7 @@ def file_permissions(
         return TestResult.failed(results)
 
     except FileNotFoundError:
-        return TestResult.failed([f'file {dst} does not exist'])
+        return TestResult.error([f'file {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot access file {dst}")
     except ValueError as e:
@@ -891,7 +891,7 @@ def file_content_contains(
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
-            errors. A missing file fails.
+            errors. A missing file is an error.
         content: Text to find (case-sensitive). In ``bytes`` mode Python escape sequences
             are decoded first (``\x00``, ``\n``) to latin-1 bytes. An empty value always passes.
         content_type: ``bytes`` searches the raw file bytes; any other value (default
@@ -951,6 +951,6 @@ def file_content_contains(
         return TestResult.failed(['string content not found in file'])
 
     except FileNotFoundError:
-        return TestResult.failed([f'file {dst} does not exist'])
+        return TestResult.error([f'file {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read file {dst}")
