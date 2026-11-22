@@ -1,0 +1,69 @@
+name: Live VM smoke
+
+# Boots a real VM: env verify (agent install + verify_vm replay), then a small
+# experiment with shell commands, loops, file tests and pulls (scripts/smoke_live.py).
+# Runs on release tags (from release.yml) and on demand:
+#   gh workflow run live-smoke.yml --ref dev [-f env=<environment>]
+#
+# NEVER add pull_request (or pull_request_target) here: the repo is public, and a
+# self-hosted runner must not run code from fork PRs.
+#
+# Runner setup (one-time, on a Linux host with KVM/libvirt and the environment image):
+#   1. Register a runner with the extra label `adare-live` (Settings > Actions >
+#      Runners; at org level, put it in a runner group that only this repo may use).
+#      Install it as a service running as the user that owns the ADARE install, so
+#      it has the libvirt-qemu ACLs on ~/.adare and ~/adare-projects, and with uv and
+#      ~/.local/bin on the service PATH (runner dir: .path / .env).
+#   2. Settings > Actions > General: "Require approval for all external contributors".
+#   3. Repo variable LIVE_RUNNER=true (enables the job in release.yml).
+#
+# `make install` updates the runner user's ADARE install in place: ~/.local/bin/adare
+# then points at the runner's checkout, and ~/.adare gets this ref's appdata and DB
+# migrations. Re-run `make install` in your own checkout afterwards if you use one.
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Environment to boot
+        type: string
+        default: ubuntu2404-x86
+  workflow_call:
+    inputs:
+      env:
+        type: string
+        default: ubuntu2404-x86
+
+permissions:
+  contents: read
+
+# One at a time; the smoke also takes every VM slot on the host while it runs.
+concurrency:
+  group: live-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Live VM smoke (${{ inputs.env }})
+    runs-on: [self-hosted, linux, adare-live]
+    timeout-minutes: 45
+    env:
+      SMOKE_ENV: ${{ inputs.env }}
+      SMOKE_PROJECT: ci-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install this ref
+        run: make install
+
+      - name: Boot and run
+        run: make smoke-live ENV="$SMOKE_ENV"
+
+      # smoke_live.py keeps the project (runs, logs, screenshots) on failure.
+      - name: Upload the smoke project
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.SMOKE_PROJECT }}
+          path: ~/adare-projects/${{ env.SMOKE_PROJECT }}
+          if-no-files-found: ignore
+          retention-days: 7

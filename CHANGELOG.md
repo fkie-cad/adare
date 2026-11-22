@@ -22,12 +22,35 @@ Agent wheels are built as `<version>+g<hash12>` of their sources, so a run
 reinstalls `adarevm`/`adarelib` in the guest whenever their code changed; the
 version above is still what marks a contract change.
 
-Add entries under **Unreleased** as you go; on release, rename it to the version
-and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
+Add entries under **Unreleased** as you go. To release a package:
+
+1. Bump `<package>/pyproject.toml` and rename **Unreleased** to
+   `## [<package> <version>] - <date>` (start a new empty **Unreleased** above it).
+2. Merge to `main`, then on that commit run `make release-check TAG=<package>-v<version>`.
+3. Tag it `<package>-v<version>` (e.g. `adarelib-v0.2.0`) and push the tag.
+
+The tag starts `release.yml`: it checks the tag again (version, changelog section,
+commit on `main`), runs the full Tests workflow and, once the self-hosted runner is
+set up, the live-VM smoke (`live-smoke.yml`), then builds the package's sdist and
+wheel and creates a GitHub Release with them and this section as the notes. Nothing
+is published to PyPI. A failed check leaves no release; fix it, delete the tag
+(`git push --delete origin <tag>`) and tag again.
 
 ## [Unreleased]
 
 ### Added
+- CI: release tags `<package>-v<version>` get checked (version, CHANGELOG section, commit
+  on `main`), tested and turned into a GitHub Release with the package's sdist + wheel
+  (`release.yml`, `make release-check`, `make build`; no PyPI).
+- CI: a live-VM smoke test (`live-smoke.yml`, `make smoke-live`) on a self-hosted runner,
+  on release tags and on demand only (never on pull requests): `adare env verify`, then
+  the `test_loop_simple` example, failing on any non-passing result in the JSON summary.
+  Inactive until the runner is registered and the repo variable `LIVE_RUNNER` is `true`.
+- CI hygiene on every push/PR (`make ci-hygiene` in the lint job): actionlint, gitleaks,
+  no new tracked file over 2 MB, no conflict markers or private keys, and the ruff/mypy
+  pins in both `pyproject.toml` files and `.pre-commit-config.yaml` must match.
+- CI: `pip-audit` also audits the guest test pins (`requirements-guest-test.txt`), and
+  Dependabot also bumps the pre-commit hook revs.
 - File testfunctions can read a file **inside an archive** (adare, adarelib; additive):
   `dst: /home/u/backup.tar.gz!/etc/app/config.json`, `dst: /var/log/syslog.2.gz!` for the
   decompressed content, nested archives (`outer.zip!/inner.tar.gz!/data.json`), globs on
