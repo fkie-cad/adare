@@ -11,6 +11,7 @@
 # Python 3.10 syntax (guest code).
 
 import io
+import os
 import re
 import struct
 import warnings
@@ -91,6 +92,19 @@ def _read_file(resolved: tuple[str, str], dst: str, label: str) -> tuple[bytes |
         return None, path, TestResult.error([f'{label} file {path} is a directory'])
     except OSError as e:
         return None, path, TestResult.execution_error(e, f'Cannot read {label} file {path}')
+
+
+def _image_path(resolved: tuple[str, str], dst: str) -> tuple[str, TestResult | None]:
+    """The image file ``ctx.resolve_globfilepath(dst)`` gave, checked; Pillow opens it lazily
+    (headers only), so dimensions and EXIF need no read cap."""
+    path, status = resolved
+    if not path:
+        return '', TestResult.error([f'image file {dst} not found ({status})'])
+    if os.path.isdir(path):
+        return path, TestResult.error([f'image file {path} is a directory'])
+    if not os.path.exists(path):
+        return path, TestResult.error([f'image file {path} does not exist'])
+    return path, None
 
 
 # =============================================================================
@@ -293,12 +307,12 @@ def _expected_exif(expected: Any) -> Any:
 
 def _load_exif(resolved: tuple[str, str], dst: str) -> tuple[dict[int, dict[int, Any]] | None, TestResult | None]:
     """IFD0, Exif IFD and GPS IFD of ``dst`` as ``{ifd: {tag_id: value}}``."""
-    raw, path, error = _read_file(resolved, dst, 'image')
+    path, error = _image_path(resolved, dst)
     if error is not None:
         return None, error
     try:
         # Pillow drops corrupt EXIF with a warning (or silently), which would read as "no tag"
-        with warnings.catch_warnings(record=True) as caught, Image.open(io.BytesIO(raw)) as img:
+        with warnings.catch_warnings(record=True) as caught, Image.open(path) as img:
             warnings.simplefilter('always')
             exif = img.getexif()
             ifds = {0: dict(exif), EXIF_IFD: dict(exif.get_ifd(EXIF_IFD)), GPS_IFD: dict(exif.get_ifd(GPS_IFD))}
@@ -642,11 +656,11 @@ def dimensions_match(ctx, dst: str, width: int = None, height: int = None):
     problems = _dimension_errors(width, height)
     if problems:
         return TestResult.error(problems)
-    raw, path, error = _read_file(resolved, dst, 'image')
+    path, error = _image_path(resolved, dst)
     if error is not None:
         return error
     try:
-        with Image.open(io.BytesIO(raw)) as img:
+        with Image.open(path) as img:
             actual_width, actual_height = img.size
     except PILLOW_ERRORS as e:
         return TestResult.execution_error(e, f'Cannot read image {path}')

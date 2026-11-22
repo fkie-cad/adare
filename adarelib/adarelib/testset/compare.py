@@ -201,7 +201,7 @@ def row_matches_pattern(test_instance, row, entry_pattern):
     """
     column_count_match = len(row) == len(entry_pattern)
     if not column_count_match:
-        log.info(
+        log.debug(
             f"Row column count mismatch: got {len(row)} columns {row}, expected {len(entry_pattern)} columns {entry_pattern}"
         )
         return False, [f"column_count({len(row)} != {len(entry_pattern)})"], False
@@ -225,7 +225,7 @@ def row_matches_pattern(test_instance, row, entry_pattern):
 
     # Log failures only if there were any
     if failed_columns:
-        log.info(f"Row {row} failed pattern match: {', '.join(failed_columns)}")
+        log.debug(f"Row {row} failed pattern match: {', '.join(failed_columns)}")
 
     return is_match, failed_columns, column_count_match
 
