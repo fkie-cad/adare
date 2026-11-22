@@ -15,6 +15,9 @@ import pytest
 pytestmark = pytest.mark.unit
 
 COLLECTIONS = Path(__file__).resolve().parents[3] / 'appdata' / 'testfunctions'
+REPO = Path(__file__).resolve().parents[4]
+# Pages built from or alongside the docstrings, read by agents the same way.
+DOC_PAGES = [REPO / 'docsrc' / 'source' / 'reference' / 'testfunctions', REPO / 'skills' / 'adare-testfunction']
 
 # Application or trace names that once appeared in examples. Extend it when you find one.
 APP_HINTS = re.compile(
@@ -37,6 +40,19 @@ def _docstrings():
 def test_docstrings_name_no_application():
     hits = [
         f'{name}: {line.strip()}' for name, doc in _docstrings() for line in doc.splitlines() if APP_HINTS.search(line)
+    ]
+
+    assert not hits, 'use neutral made-up examples (e.g. /home/user/data/app.db):\n' + '\n'.join(hits)
+
+
+def test_reference_pages_name_no_application():
+    pages = [p for root in DOC_PAGES for p in sorted(root.rglob('*')) if p.suffix in ('.rst', '.md')]
+    assert pages, f'no reference pages under {DOC_PAGES}'
+    hits = [
+        f'{page.relative_to(REPO)}:{number}: {line.strip()}'
+        for page in pages
+        for number, line in enumerate(page.read_text(encoding='utf-8').splitlines(), 1)
+        if APP_HINTS.search(line)
     ]
 
     assert not hits, 'use neutral made-up examples (e.g. /home/user/data/app.db):\n' + '\n'.join(hits)
