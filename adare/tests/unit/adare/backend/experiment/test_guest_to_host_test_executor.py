@@ -448,12 +448,14 @@ class TestSidecarPulling:
         assert pulled == ['/home/user/places.sqlite', '/home/user/places.sqlite-journal']
 
     @pytest.mark.asyncio
-    async def test_tests_without_sidecars_keep_cached_pull(self, tmp_path):
+    async def test_every_test_pulls_fresh(self, tmp_path):
+        """One proxy serves the whole run: a cached pull would hand an after-test the
+        file as an earlier test saw it."""
         executor, guest_file = self._make_executor(tmp_path, set())
 
         await executor._execute_file_based_test('t', 'json.contains_key', FileContentTest())
 
-        guest_file.pull_file.assert_awaited_once_with('/tmp/testfile', force=False)
+        guest_file.pull_file.assert_awaited_once_with('/tmp/testfile', force=True)
         guest_file.file_exists.assert_not_awaited()
 
 

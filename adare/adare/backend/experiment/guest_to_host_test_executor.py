@@ -171,7 +171,8 @@ class GuestToHostTestExecutor:
         Strategy:
         1. Read the original guest path from parameter.dst
         2. Handle glob patterns by resolving on guest first
-        3. Pull the file(s) from guest to local temp dir
+        3. Pull the file(s) from guest to local temp dir, always fresh: a test reads the
+           file as it is now, not a copy an earlier test pulled (before/after tests)
         4. Rewrite parameter.dst to local path
         5. Run test() locally
         """
@@ -202,7 +203,7 @@ class GuestToHostTestExecutor:
             # Pull each matching file
             for guest_path in matching_paths:
                 try:
-                    await self.guest_file.pull_file(guest_path, force=bool(sidecars))
+                    await self.guest_file.pull_file(guest_path, force=True)
                 except FileNotFoundError as e:
                     # Gone between glob and pull: it is absent, like an unmatched path.
                     log.warning(f"GuestToHostTestExecutor: {guest_path} vanished before pull: {e}")
@@ -220,7 +221,7 @@ class GuestToHostTestExecutor:
         else:
             # Simple path — pull directly
             try:
-                local_path = await self.guest_file.pull_file(original_dst, force=bool(sidecars))
+                local_path = await self.guest_file.pull_file(original_dst, force=True)
                 local_dst = str(local_path)
             except FileNotFoundError as e:
                 # The guest answered "no such file": a real absence.
@@ -268,7 +269,7 @@ class GuestToHostTestExecutor:
             guest_archive = archive
 
         try:
-            local_archive = str(await self.guest_file.pull_file(guest_archive))
+            local_archive = str(await self.guest_file.pull_file(guest_archive, force=True))
         except FileNotFoundError as e:
             return TestResult.error([f'archive {guest_archive} does not exist on guest: {e}'])
         except RuntimeError as e:
