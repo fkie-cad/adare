@@ -17,7 +17,8 @@ updates:
       - dependency-name: pandas
       - dependency-name: pyyaml
     groups:
-      # Bumping these shifts quality-baseline.json counts: re-run `make lint-baseline`.
+      # Bumps shift quality-baseline.json counts; dependabot-baseline.yml re-measures
+      # them on the PR (`make lint-baseline-deps`).
       lint-tools:
         patterns: [ruff, mypy]
       minor-and-patch:
