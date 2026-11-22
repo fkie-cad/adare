@@ -173,7 +173,7 @@ class OCRProfiles:
     """Pinned OCR profiles: engine, model files (sha256) and parameters.
 
     OCR decides where the client clicks, so any change here changes experiment
-    results. Changing a value means a new profile name, a regenerated golden test
+    results. Changing a value means a new profile name, an updated golden test
     (``tests/test_ocr_engines.py``) and an A/B over real experiments.
     """
 

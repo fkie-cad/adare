@@ -42,6 +42,9 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
   `ctx.resolve_globfilepath`. Guide: *Files inside archives*.
 
 ### Changed
+- cv-server: the OCR golden test no longer ships real desktop screenshots; it pins the
+  profile, the model hashes and the text read from rendered UI-string frames.
+- Neutral names in comments, tests and docs (example project label `MyProject`).
 - The file-content testfunctions now end with an **error**, not a failure, when they cannot
   read their file: the path does not exist, a glob matches no file or more than one, or the
   content cannot be parsed (invalid JSON, a malformed JSONL line with `skip_malformed: false`,
@@ -149,7 +152,7 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 - cv-server: `--ocr-engine {rapidocr,paddle}` / `--ocr-lang {latin,en}` (env
   `ADARE_OCR_ENGINE` / `ADARE_OCR_LANG`), `ADARE_OCR_THREADS` (onnxruntime threads,
   default 4), `ADARE_OCR_MODEL_DIR`.
-- cv-server: golden OCR test on real experiment screenshots and rendered German UI text
+- cv-server: golden OCR test on real screenshots and rendered German UI text
   (`make test-cv`), and `adare-cv-server/scripts/ocr_compare.py`, an offline A/B of two
   OCR profiles over a project's recorded runs and text queries.
 - Automatic test-run retention: every test-mode run (`adare experiment run` /
