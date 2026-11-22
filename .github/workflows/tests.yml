@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [dev, main]
   workflow_dispatch:
+  # release.yml runs this whole suite on a release tag before it builds anything.
+  workflow_call:
 
 permissions:
   contents: read
@@ -26,7 +28,8 @@ env:
 
 jobs:
   # Formatting and the quality ratchet: ruff/mypy budgets, zero mypy errors in
-  # adare.core, 1000-line file limit (see quality-baseline.json).
+  # adare.core, 1000-line file limit (see quality-baseline.json). Then repo hygiene:
+  # actionlint, gitleaks, large files, conflict markers, lint-tool pins in sync.
   lint:
     name: Lint & types
     runs-on: ubuntu-latest
@@ -43,6 +46,18 @@ jobs:
 
       - name: Format, strict types, quality ratchet
         run: make lint
+
+      # gitleaks is built with `go run` at the pre-commit rev; keep the build.
+      - name: Cache the gitleaks build
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: gitleaks-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Workflows, secrets, large files, pins
+        run: make ci-hygiene
 
   # Whole client unit suite on both host OSes (it includes the testfunction tests,
   # i.e. host test mode). Linux also enforces the coverage floor.

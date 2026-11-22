@@ -181,9 +181,11 @@ tests:
 - The root `tests/conftest.py` sets `ADARE_HOME` to a temp dir before adare is imported, so tests never touch `~/.adare`; code must resolve state paths via `config/configdirectory.py` (never `Path.home() / '.adare'`), and directories are created by `ensure_directories()` at CLI/webapi startup, not at import
 - Guest code runs on the guests' Python 3.10, in `.venv-guest` (outside the 3.13 workspace, pinned by `requirements-guest-test.txt`; re-pin with `make lock-guest`): `make test-agent` and `make test-testfunctions-guest` (CI job `guest`, Linux + Windows). Testfunction tests must not use `tests/conftest.py` or import `adare` (load modules via `adarelib.helper.module`). `adarevm/tests/test_contract.py` keeps the dispatch table equal to `adarelib`'s `Tool` enum
 - Also `make test-testfunctions` (host Python, no libvirt needed), `make test-cv`, `make test-cov` (unit suite + coverage floor `COV_MIN`: raise it as coverage grows, never lower it), `make test-install` (real `make install` + `make update`)
-- CI (`.github/workflows/tests.yml`) runs on every push/PR to dev and main: lint, unit (Linux with coverage floor, macOS), guest, CV server, docs (`make docs` fails on Sphinx warnings), install on Linux/macOS/Windows; keep it green
+- CI (`.github/workflows/tests.yml`) runs on every push/PR to dev and main: lint (+ `make ci-hygiene`: actionlint, gitleaks, large files, conflict markers, ruff/mypy pins in sync), unit (Linux with coverage floor, macOS), guest, CV server, docs (`make docs` fails on Sphinx warnings), install on Linux/macOS/Windows; keep it green
+- Releases: tag `<package>-v<version>` on main → `release.yml` (`make release-check`, Tests, `make build`, GitHub Release; no PyPI). Steps in CHANGELOG.md's versioning policy; scripts tested in `adare/tests/unit/scripts/`
+- Live-VM smoke (`live-smoke.yml`, `make smoke-live ENV=...`) runs only on release tags and `workflow_dispatch`, on the self-hosted `adare-live` runner. Never add a `pull_request` trigger to it (public repo)
 - Every built-in testfunction needs tests in `tests/unit/testfunctions/test_<collection>.py` and a reference page (enforced by `test_testfunction_coverage.py`)
-- Experiments / interactive mode against real VMs remain manual
+- Experiments / interactive mode against real VMs are otherwise manual
 
 ## Code Quality
 - `make lint` is CI's `lint` job: `ruff format --check` and `scripts/quality_ratchet.py`

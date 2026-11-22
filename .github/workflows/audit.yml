@@ -7,9 +7,9 @@ on:
     - cron: '0 6 * * 1'
   push:
     branches: [dev, main]
-    paths: [uv.lock]
+    paths: [uv.lock, requirements-guest-test.txt]
   pull_request:
-    paths: [uv.lock]
+    paths: [uv.lock, requirements-guest-test.txt]
   workflow_dispatch:
 
 permissions:
@@ -34,3 +34,9 @@ jobs:
 
       - name: Audit
         run: uvx pip-audit --disable-pip --no-deps -r requirements-audit.txt
+
+      # The guest test venv's pins (`make lock-guest`), installed on Python 3.10.
+      # Testfunction requirements.txt files are unpinned (>=), so they are not audited.
+      - name: Audit the guest test pins
+        if: ${{ !cancelled() }}
+        run: uvx pip-audit --disable-pip --no-deps -r requirements-guest-test.txt
