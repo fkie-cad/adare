@@ -218,6 +218,9 @@ class BasicTest:
             regex_pattern = metadata.get('resolved_value', metadata.get('raw_value'))
             if regex_pattern is None:
                 raise PlaceholderError(f"regex placeholder '{placeholder_name}' has no pattern")
+            unresolved = re.search(r'\{\{\s*([^}]+?)\s*\}\}', regex_pattern)
+            if unresolved:
+                raise PlaceholderError(f"unknown variable '{unresolved.group(1)}' in !re pattern {regex_pattern!r}")
             try:
                 compiled_regex = re.compile(regex_pattern)
             except re.error as e:
@@ -334,14 +337,18 @@ class BasicTest:
 
         lower_raw, upper_raw = (str(bound) for bound in metadata['interval'])
         if '{{' in lower_raw or '{{' in upper_raw:
-            return False, (
-                f"Interval bounds not resolved ({lower_raw}, {upper_raw}): "
+            # nothing was compared: a test-definition problem, an ERROR (never an absence pass)
+            raise PlaceholderError(
+                f"interval bounds not resolved ({lower_raw}, {upper_raw}): "
                 "save both timestamps with save_timestamp before running the test"
             )
         try:
-            actual = self._parse_timestamp_with_format(actual_value, metadata)
             lower = _parse_bound(lower_raw)
             upper = _parse_bound(upper_raw)
+        except (ValueError, OverflowError, OSError) as e:
+            raise PlaceholderError(f"cannot parse interval bounds ({lower_raw}, {upper_raw}): {e}") from e
+        try:
+            actual = self._parse_timestamp_with_format(actual_value, metadata)
         except (ValueError, OverflowError, OSError) as e:
             return False, f"Interval comparison failed: could not parse timestamps ({e})"
         return check_interval(actual, lower, upper, float(metadata.get('precision') or 0))

@@ -7,6 +7,7 @@ A ``!timestamp`` without tolerance or interval is just a value and is resolved.
 """
 
 import logging
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -68,17 +69,32 @@ class YamlTagProcessor:
             return [self._process(item, template_context, template_resolver) for item in data]
         if isinstance(data, YamlRegexString):
             placeholder_name = self.create_placeholder_name('regex')
-            pattern = data.string
-            registry = self.metadata_manager.variable_registry
-            if '{{' in pattern and hasattr(registry, 'resolve_in_string'):
-                # {{ variables }} inside the pattern: their values are matched literally (escaped)
-                pattern = registry.resolve_in_string(pattern, for_regex=True)
+            pattern = self._resolve_regex_variables(data.string, template_context)
             self.metadata_manager.add_regex_metadata(placeholder_name, pattern, template_context)
             log.debug(f"Converted !re '{data.string}' to placeholder '{placeholder_name}'")
             return f'{{{{ {placeholder_name} }}}}'
         if isinstance(data, YamlTimestamp):
             return self._convert_timestamp(data, template_context, template_resolver)
         return data
+
+    def _resolve_regex_variables(self, pattern: str, template_context: dict[str, Any] | None) -> str:
+        """``{{ variables }}`` in a ``!re`` pattern replaced by their values, always regex-escaped
+        (a value is text to find, even one that looks like a regex). An unknown variable stays
+        as written; the comparison reports it as an ERROR."""
+        if '{{' not in pattern:
+            return pattern
+        registry = self.metadata_manager.variable_registry
+
+        def value_of(match: re.Match) -> str:
+            name = match.group(1).strip()
+            variable = registry.get(name) if hasattr(registry, 'get') else None
+            if variable is not None:
+                return re.escape(str(variable.get_string_value()))
+            if template_context and name in template_context:
+                return re.escape(str(template_context[name]))
+            return str(match.group(0))
+
+        return str(re.sub(r'\{\{([^}]+)\}\}', value_of, pattern))
 
     def _convert_timestamp(self, tag, template_context: dict[str, Any] | None, template_resolver) -> Any:
         value = tag.string

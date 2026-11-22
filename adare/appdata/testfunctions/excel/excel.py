@@ -901,7 +901,8 @@ def compare_files(
                     sheet_comparison_failures.append({'sheet': act_sheet, 'details': result.details})
 
             except UNREADABLE_WORKBOOK_ERRORS as e:
-                sheet_comparison_failures.append({'sheet': act_sheet, 'details': [f"Error comparing sheet: {e}"]})
+                # a sheet that cannot be read was not compared: ERROR, never a mismatch
+                return TestResult.execution_error(e, f"Cannot read sheet '{act_sheet}' for comparison")
 
         # Build final result
         if not has_sheet_structure_failures and not sheet_comparison_failures:

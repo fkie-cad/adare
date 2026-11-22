@@ -68,7 +68,9 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   pattern is a Python regex (`re.search`; POSIX classes such as `[[:digit:]]` are not
   supported, use `\d`), `dst` takes globs and `archive!member` (rotated `.gz` logs), the
   encoding is detected, and it is a file-content test, so host mode pulls the log like any
-  other file. A missing log is an ERROR (it failed). It no longer needs a Linux guest.
+  other file. A missing log is an ERROR (it failed). It no longer needs a Linux guest. A POSIX
+  class (`[[:space:]]`, valid only for grep) or a `!re`/`!timestamp` tag in `content` is an ERROR
+  instead of a pattern that silently never matches.
 - A `{{ placeholder }}` without metadata is an ERROR (`unknown placeholder`); it used to be
   compared against an empty string.
 
@@ -258,7 +260,11 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   encoding. CSV files are opened with `newline=''`, so quoted line breaks stay in one row.
 - Errors of the `standard.*` file tests show the `dst` as written, not an empty resolved path.
 - A `{{ variable }}` inside a `!re` pattern was never resolved, so the regex never matched
-  (adare); it is now replaced by the variable's value, regex-escaped.
+  (adare); it is now replaced by the variable's value, always regex-escaped (also a value that
+  looks like a regex, such as `report (1).txt`). An unknown variable in the pattern is an ERROR.
+- An `after`/`before` interval whose bounds were never saved or cannot be parsed is an ERROR
+  (it FAILED, so `expect_to_fail` passed). `excel.compare_files` with a sheet that cannot be
+  read is an ERROR (it was listed as a sheet mismatch).
 - A string variable of digits and dots (`build: "2.4"`, `"42"`) was typed as a timestamp and
   rendered as an ISO date (adarelib); it stays a string.
 - `standard.file_permissions`: a symbolic value with a letter other than `r`/`w`/`x`/`-` in
@@ -268,7 +274,8 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
 - An LZ4 block whose header announces fewer bytes than it holds is reported as corrupt, not
   as over the size cap (adarelib).
 - `adare test dry-run --param entry=[a, b]` passed the list as a string, which became a list of
-  characters; `[...]`/`{...}` values are read as YAML flow lists/maps now. Dry-run reports a
+  characters; `[...]`/`{...}` values of list/dict parameters are read as YAML flow lists/maps now
+  (a pattern such as `regex=[Ee]rror` stays a string). Dry-run reports a
   renamed function or parameter instead of "not found" / ignoring it. An invalid regex
   parameter is reported as ERROR without a stack trace.
 

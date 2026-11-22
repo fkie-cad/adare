@@ -29,6 +29,27 @@ def _resolver(variables: dict | None = None, with_filters: bool = False) -> Vari
 
 
 class TestYamlTags:
+    @pytest.mark.parametrize(
+        'value, pattern',
+        [('2.4', r'^2\.4\.\d+$'), ('report (1).txt', r'^report\ \(1\)\.txt\.\d+$'), ('a+b', r'^a\+b\.\d+$')],
+    )
+    def test_variable_in_regex_tag_is_matched_literally(self, value, pattern):
+        # even a value that looks like a regex (and is typed REGEX) is text to find
+        resolver = _resolver({'name': Variable.auto_infer(value)})
+        resolver.process_data({'parameter': {'v': YamlRegexString(r'^{{ name }}\.\d+$')}}, {})
+        assert resolver.get_placeholder_metadata()['regex_0_resolved']['resolved_value'] == pattern
+
+    def test_unknown_variable_in_regex_tag_stays_and_is_an_error_when_compared(self):
+        from adarelib.testset.basictest import BasicTest, PlaceholderError
+
+        resolver = _resolver()
+        resolver.process_data({'parameter': {'v': YamlRegexString('^{{ nmae }}$')}}, {})
+        metadata = resolver.get_placeholder_metadata()
+        assert metadata['regex_0_resolved']['resolved_value'] == '^{{ nmae }}$'
+        test = BasicTest(name='t', parameter=None, description='', variable_metadata=metadata)
+        with pytest.raises(PlaceholderError, match="unknown variable 'nmae'"):
+            test.compare_with_placeholder('regex_0_resolved', 'x')
+
     def test_regex_tag_in_entry_list(self):
         resolver = _resolver()
         out = resolver.process_data({'parameter': {'entry': ['a', YamlRegexString('.*')]}}, {'x': 1})

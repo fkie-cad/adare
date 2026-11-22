@@ -214,8 +214,9 @@ def log_entry_exists(ctx: TestContext, dst: str, content: str, regex_match: bool
             error. The encoding is detected (BOM, UTF-16, else UTF-8); undecodable bytes are
             replaced, so binary garbage does not stop the search.
         content: With ``regex_match`` (default) a Python regex searched in each line
-            (``re.search``, case-sensitive; ``(?i)`` for case-insensitive); an invalid regex is
-            an error. Otherwise a substring a line must contain.
+            (``re.search``, case-sensitive; ``(?i)`` for case-insensitive); an invalid regex, a
+            POSIX class (``[[:space:]]``) or a ``!re``/``!timestamp`` tag is an error. Otherwise
+            a substring a line must contain.
         regex_match: ``True`` (default): ``content`` is a regex; ``False``: a plain substring.
         max_lines: How many trailing lines to search (default 1000); must be positive.
 
@@ -228,7 +229,16 @@ def log_entry_exists(ctx: TestContext, dst: str, content: str, regex_match: bool
     if isinstance(max_lines, bool) or not isinstance(max_lines, int) or max_lines < 1:
         return TestResult.error([f'max_lines must be a positive integer, got {max_lines!r}'])
     if ctx.has_placeholders(content):
-        content = ctx.resolve_variables(content)
+        return TestResult.error(
+            [
+                f'content {content!r} holds a !re or !timestamp placeholder, which is not supported here; '
+                'write the pattern as plain content with regex_match: true'
+            ]
+        )
+    if regex_match and '[[:' in content:
+        # grep -E syntax from before the rewrite: Python reads it as a plain character set and
+        # would silently never match
+        return TestResult.error([f'content {content!r} uses a POSIX class ([[:...:]]); write \\s, \\d or [a-z]'])
     try:
         regex = re.compile(content) if regex_match else None
     except re.error as e:

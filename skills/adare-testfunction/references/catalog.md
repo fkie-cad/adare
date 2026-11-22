@@ -762,7 +762,7 @@ tests if one of the last lines of a text log contains a string or matches a rege
 | parameter | type | default | description |
 |---|---|---|---|
 | **dst** | `str` |  | Guest path of the log; a glob must match exactly one path, ``archive!member`` reads a rotated, compressed log (``/var/log/syslog.2.gz!``). A missing file is an error. The encoding is detected (BOM, UTF-16, else UTF-8); undecodable bytes are replaced, so binary garbage does not stop the search. |
-| **content** | `str` |  | With ``regex_match`` (default) a Python regex searched in each line (``re.search``, case-sensitive; ``(?i)`` for case-insensitive); an invalid regex is an error. Otherwise a substring a line must contain. |
+| **content** | `str` |  | With ``regex_match`` (default) a Python regex searched in each line (``re.search``, case-sensitive; ``(?i)`` for case-insensitive); an invalid regex, a POSIX class (``[[:space:]]``) or a ``!re``/``!timestamp`` tag is an error. Otherwise a substring a line must contain. |
 | regex_match | `bool` | `True` | ``True`` (default): ``content`` is a regex; ``False``: a plain substring. |
 | max_lines | `int` | `1000` | How many trailing lines to search (default 1000); must be positive. |
 

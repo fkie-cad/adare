@@ -531,10 +531,20 @@ class TestLogEntryExists:
         assert_test_success(self._run(dst=str(utf16), content="event: login"))
         assert_test_success(self._run(dst=str(broken), content="event: login"))
 
-    def test_placeholder_in_content_is_resolved(self, tmp_path, variable_metadata_simple):
+    def test_placeholder_in_content_is_an_error(self, tmp_path, variable_metadata_simple):
+        # a !re/!timestamp placeholder would be searched as text: ERROR, like text.* does
         log = tmp_path / "app.log"
         log.write_text("user value2 logged in\n")
 
-        result = self._run(variable_metadata=variable_metadata_simple, dst=str(log), content="user {{VAR2}}")
+        for content in ("user {{VAR2}}", "{{ NOPE }}"):
+            result = self._run(variable_metadata=variable_metadata_simple, dst=str(log), content=content)
+            assert result.status == StatusEnum.ERROR, result.details
 
-        assert_test_success(result)
+    def test_posix_class_is_an_error(self, tmp_path):
+        log = tmp_path / "auth.log"
+        log.write_text("user alice\n")
+
+        result = self._run(dst=str(log), content="user[[:space:]]alice")
+
+        assert result.status == StatusEnum.ERROR, result.details
+        assert "POSIX class" in result.details[0]

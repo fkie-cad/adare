@@ -166,17 +166,10 @@ def _locate_collection_pyfile(lib: str, explicit_path: str | None):
 
 
 def _parse_param_value(raw: str):
-    """Best-effort coercion for --param k=v values (int/float/bool/None/str; YAML flow list/dict).
+    """Best-effort scalar coercion for --param k=v values (int/float/bool/None/str).
 
-    ``entry=[a, b]`` must become a list: as a string, cattrs would split it into characters.
+    Lists and dicts are read by :func:`_parse_collection_params` once the parameter types are known.
     """
-    if raw.strip()[:1] in ('[', '{'):
-        import yaml
-
-        try:
-            return yaml.safe_load(raw)
-        except yaml.YAMLError:
-            return raw
     lowered = raw.strip().lower()
     if lowered in ('true', 'false'):
         return lowered == 'true'
@@ -191,6 +184,34 @@ def _parse_param_value(raw: str):
     except ValueError:
         pass
     return raw
+
+
+def _parse_collection_params(params: dict, testclass) -> dict:
+    """``[a, b]`` / ``{k: v}`` values of list/dict parameters read as YAML flow collections.
+
+    Only for those parameters: as a string, cattrs would split ``entry=[a, b]`` into characters,
+    while ``regex=[0-9]`` must stay the pattern it is.
+    """
+    import contextlib
+    import typing
+
+    import attrs
+    import yaml
+
+    parameter_class = typing.get_type_hints(testclass).get('parameter')
+    if parameter_class is None or not attrs.has(parameter_class):
+        return params
+    hints = typing.get_type_hints(parameter_class)
+    parsed = dict(params)
+    for name, value in params.items():
+        hint = hints.get(name)
+        kinds = {typing.get_origin(t) or t for t in (typing.get_args(hint) or (hint,))} | {
+            typing.get_origin(hint) or hint
+        }
+        if isinstance(value, str) and value.strip()[:1] in ('[', '{') and kinds & {list, dict}:
+            with contextlib.suppress(yaml.YAMLError):  # not valid YAML: keep the string
+                parsed[name] = yaml.safe_load(value)
+    return parsed
 
 
 def exec_validate_testfunction(arguments):
@@ -376,7 +397,7 @@ def exec_dry_run_testfunction(arguments):
 
     test_dict = {
         'name': f'dryrun_{func}',
-        'parameter': params,
+        'parameter': _parse_collection_params(params, testclass),
         'description': '',
         'variable_metadata': None,
     }
