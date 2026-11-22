@@ -210,6 +210,50 @@ Use ``ctx.fail_if()`` and ``ctx.error_if()`` for failure/error conditions — th
 
 Uncaught exceptions are automatically converted to ``TestResult.execution_error()``.
 
+Failed or error?
+~~~~~~~~~~~~~~~~
+
+Pick the status by one question: *did the test look at the evidence?*
+
+- **FAILED**: the test read the evidence and the condition does not hold (value differs,
+  row or key absent, count wrong, an existing 0-byte file where content is expected).
+- **ERROR**: the test could not read the evidence, so it has no answer: ``dst`` does not
+  exist, a glob matches no file or more than one, the file cannot be opened (permissions,
+  I/O), or its content cannot be parsed (invalid JSON/CSV/XML, corrupt workbook or database).
+  Invalid parameters are errors too: a wrong type, an empty list, both or neither of two
+  options, an unknown mode, an invalid regex, more placeholders than the test supports.
+
+``expect_to_fail`` inverts only SUCCESS and FAILED; an ERROR stays an ERROR. A test that
+reports a missing file as FAILED therefore lets a wrong path, a typo or a failed host-mode
+pull *pass* every negative test written with it. Report it as an error:
+
+.. code-block:: python
+
+   dst_path, status = ctx.resolve_globfilepath(dst)
+   ctx.error_if(not dst_path, f'file {dst} not found ({status})')
+   try:
+       with open(dst_path) as f:
+           data = json.load(f)
+   except FileNotFoundError:
+       return TestResult.error([f'file {dst_path} does not exist'])
+   except json.JSONDecodeError as e:
+       return TestResult.error([f'invalid JSON in {dst_path}: {e}'])
+   except OSError as e:
+       return TestResult.execution_error(e, f'cannot read {dst_path}')
+   ctx.fail_if('key' not in data, 'key "key" does not exist')
+
+The one exception is a test whose subject *is* existence (``standard.file_exists``,
+``standard.file_does_not_exist``, ``dir_exists``): there a missing path is the finding, so
+it passes or fails. Playbook authors who want "the file is gone" use those, not a content
+test with ``expect_to_fail``. A related case: a missing sheet in the workbook under test is
+a finding (FAILED), but a missing sheet in a *reference* workbook is an error, because
+nothing was compared.
+
+Keep docstring examples neutral and made up (``/home/user/data/app.db``,
+``/home/user/data/list.xml``), never a real application's paths or table names: agents read
+the docstrings to pick tests, and an example must not tell them where an application keeps
+its traces (enforced by ``tests/unit/testfunctions/test_neutral_docstrings.py``).
+
 Parameters
 ----------
 

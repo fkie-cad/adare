@@ -88,13 +88,13 @@ def process_running(ctx: TestContext, process_name: str, min_instances: int = 1)
 
     Args:
         process_name: Extended regex matched against each process's FULL command line
-            (``pgrep -f``), so ``firefox`` also matches ``/usr/lib/firefox/firefox -contentproc``.
+            (``pgrep -f``), so ``someapp`` also matches ``/usr/lib/someapp/someapp --worker``.
         min_instances: Minimum number of matching PIDs (default 1).
 
     Example:
         function: linux.process_running
         parameter:
-          process_name: soffice.bin
+          process_name: someapp
     """
     if platform.system() != 'Linux':
         return TestResult.execution_error(None, "This test only runs on Linux")

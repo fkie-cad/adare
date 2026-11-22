@@ -114,14 +114,14 @@ class TestSheetExists:
         assert "no sheet matches regex" in result.details[0]
 
     def test_sheet_exists_invalid_file(self, tmp_path):
-        """Test failure when file doesn't exist."""
+        """Test error when file doesn't exist."""
         test = SheetExists(
             name="test_sheet_exists",
             parameter=SheetExistsParameter(dst=str(tmp_path / "nonexistent.xlsx"), sheet_name="Sheet1"),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_sheet_exists_empty_file(self, tmp_path):
@@ -418,13 +418,13 @@ class TestContainsRow:
         assert_test_failed(result)
 
     def test_contains_row_file_not_found(self, tmp_path):
-        """Test failure when file doesn't exist."""
+        """Test error when file doesn't exist."""
         test = ContainsRow(
             name="test_contains", parameter=ContainsRowParameter(dst=str(tmp_path / "nonexistent.xlsx"), entry=["A"])
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_contains_row_invalid_sheet(self, create_excel_file):
@@ -596,13 +596,13 @@ class TestCompareRows:
         assert_test_success(result)
 
     def test_compare_rows_empty_reference(self, create_excel_file):
-        """Test failure with empty reference."""
+        """Empty reference_rows is a parameter error."""
         excel_file = create_excel_file("test.xlsx", {"Sheet1": [["A"], ["1"]]})
 
         test = CompareRows(name="test_compare", parameter=CompareRowsParameter(dst=str(excel_file), reference_rows=[]))
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "cannot be empty" in result.details[0]
 
     def test_compare_rows_empty_actual(self, create_excel_file):
@@ -718,14 +718,14 @@ class TestCompareRows:
         assert_test_failed(result)
 
     def test_compare_rows_file_not_found(self, tmp_path):
-        """Test failure when file doesn't exist."""
+        """Test error when file doesn't exist."""
         test = CompareRows(
             name="test_compare",
             parameter=CompareRowsParameter(dst=str(tmp_path / "nonexistent.xlsx"), reference_rows=[["A"], ["1"]]),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
 
@@ -803,7 +803,7 @@ class TestCompareRowsEnhancements:
         assert_test_success(result)
 
     def test_compare_rows_reference_file_not_found(self, create_excel_file, tmp_path):
-        """Test failure when reference file doesn't exist."""
+        """Test error when reference file doesn't exist."""
         actual_file = create_excel_file("actual.xlsx", {"Sheet1": [["A"], ["1"]]})
 
         test = CompareRows(
@@ -812,12 +812,12 @@ class TestCompareRowsEnhancements:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "reference_file" in result.details[0]
         assert "does not exist" in result.details[0]
 
     def test_compare_rows_reference_file_invalid_sheet(self, create_excel_file):
-        """Test failure when reference file sheet doesn't exist."""
+        """A missing reference sheet leaves nothing to compare: ERROR."""
         actual_file = create_excel_file("actual.xlsx", {"Sheet1": [["A"], ["1"]]})
         reference_file = create_excel_file("reference.xlsx", {"Sheet1": [["A"], ["1"]]})
 
@@ -829,8 +829,8 @@ class TestCompareRowsEnhancements:
         )
         result = test.test()
 
-        assert_test_failed(result)
-        assert "Error reading reference file" in result.details[0]
+        assert_test_error(result)
+        assert "not found" in result.details[0]
 
     def test_compare_rows_both_reference_sources_error(self, create_excel_file):
         """Test error when both reference_rows and reference_file provided."""
@@ -845,7 +845,7 @@ class TestCompareRowsEnhancements:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Cannot provide both" in result.details[0]
 
     def test_compare_rows_no_reference_source_error(self, create_excel_file):
@@ -855,7 +855,7 @@ class TestCompareRowsEnhancements:
         test = CompareRows(name="test_compare", parameter=CompareRowsParameter(dst=str(actual_file)))
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Must provide either" in result.details[0]
 
     def test_compare_rows_reference_file_with_placeholders(self, create_excel_file, variable_metadata_simple):
@@ -1035,14 +1035,14 @@ class TestValidateColumns:
         assert "is empty" in result.details[0]
 
     def test_validate_columns_file_not_found(self, tmp_path):
-        """Test failure when file doesn't exist."""
+        """Test error when file doesn't exist."""
         test = ValidateColumns(
             name="test_validate",
             parameter=ValidateColumnsParameter(dst=str(tmp_path / "nonexistent.xlsx"), expected_columns=["ID", "Name"]),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_validate_columns_column_row_out_of_bounds(self, create_excel_file):

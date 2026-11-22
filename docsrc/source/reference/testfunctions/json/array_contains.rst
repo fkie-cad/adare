@@ -144,12 +144,12 @@ Return Values
   - The array path does not exist
   - The path exists but is not an array
   - The array does not contain the expected element
-  - Invalid JSON syntax in the file
-  - File does not exist
 
 **Execution Error**
   Returns execution error when:
 
+  - The file does not exist, or a glob matches no file or more than one
+  - Invalid JSON syntax in the file
   - Permission denied accessing the file
   - Placeholder comparison encounters errors
   - System I/O errors occur

@@ -31,7 +31,7 @@ def _compare_values(test_instance, actual_value, expected_value, regex_match=Fal
                     return True, f'value "{actual_value}" matches regex "{expected_value.string}"'
                 return False, f'value "{actual_value}" does not match regex "{expected_value.string}"'
             except re.error as e:
-                return False, f'Invalid regex pattern: {expected_value.string} - {e}'
+                raise re.error(f'invalid regex pattern {expected_value.string!r}: {e}') from e
     except ImportError:
         pass
 
@@ -51,7 +51,7 @@ def _compare_values(test_instance, actual_value, expected_value, regex_match=Fal
                     return True, f'value "{actual_value}" matches regex "{expected_value}"'
                 return False, f'value "{actual_value}" does not match regex "{expected_value}"'
             except re.error as e:
-                return False, f'Invalid regex pattern: {expected_value} - {e}'
+                raise re.error(f'invalid regex pattern {expected_value!r}: {e}') from e
         else:
             # Direct value comparison
             if actual_value == expected_value:
@@ -82,7 +82,7 @@ def line_matches(
 
     Args:
         dst: Guest path to the JSONL file (one JSON document per line; blank lines are
-            skipped). A glob must match exactly one path; a missing or 0-byte file fails.
+            skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails.
         conditions: Required mapping ``key_path -> expected value``; a line matches when every
             condition holds. If a path yields several values (wildcard or JSON array), one
             matching element suffices. Missing keys fail the line.
@@ -92,7 +92,7 @@ def line_matches(
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
-            fails on the first malformed line.
+            makes the first malformed line an error.
 
     Example:
         function: jsonl.line_matches
@@ -105,7 +105,7 @@ def line_matches(
     dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
-        return TestResult.failed([f'JSONL file {dst_param} not found ({status})'])
+        return TestResult.error([f'JSONL file {dst_param} not found ({status})'])
 
     log.debug(f'dst file {dst} will be used for test line_matches')
 
@@ -139,8 +139,8 @@ def line_matches(
                 except json.JSONDecodeError as e:
                     malformed_lines.append((line_num, line[:100]))
                     if not skip_malformed:
-                        return TestResult.failed(
-                            [f'Malformed JSON on line {line_num}: {e}', f'Line content: {line[:200]}']
+                        return TestResult.execution_error(
+                            e, f'Malformed JSON on line {line_num} (content: {line[:200]})'
                         )
                     continue
 
@@ -224,7 +224,7 @@ def line_matches(
         return TestResult.failed(messages)
 
     except FileNotFoundError:
-        return TestResult.failed([f'JSONL file {dst} does not exist'])
+        return TestResult.error([f'JSONL file {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSONL file {dst}")
 
@@ -248,7 +248,8 @@ def line_count(
 
     Args:
         dst: Guest path to the JSONL file (one JSON document per line; blank lines are
-            skipped). A glob must match exactly one path; a missing or 0-byte file fails.
+            skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file
+            has 0 lines (passes ``expected_count: 0``).
         conditions: Mapping ``key_path -> expected value`` (all must hold; for multi-value
             paths one matching element suffices). ``None``/empty counts every valid JSON line.
         expected_count: ``int`` for an exact count, ``{min: N, max: M}`` for a range (either
@@ -257,7 +258,7 @@ def line_count(
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
-            fails on the first malformed line.
+            makes the first malformed line an error.
 
     Example:
         function: jsonl.line_count
@@ -269,7 +270,7 @@ def line_count(
     dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
-        return TestResult.failed([f'JSONL file {dst_param} not found ({status})'])
+        return TestResult.error([f'JSONL file {dst_param} not found ({status})'])
 
     log.debug(f'dst file {dst} will be used for test line_count')
 
@@ -292,9 +293,8 @@ def line_count(
         )
 
     try:
-        # Check if file is empty (edge case handling)
-        if os.path.getsize(dst) == 0:
-            return TestResult.failed(['JSONL file is empty (0 bytes)'])
+        # A 0-byte file is read like any other: it has 0 matching lines, which passes
+        # expected_count 0 (or {max: 0}) and fails everything else.
         matching_count = 0
         total_lines = 0
         malformed_count = 0
@@ -315,8 +315,8 @@ def line_count(
                 except json.JSONDecodeError as e:
                     malformed_count += 1
                     if not skip_malformed:
-                        return TestResult.failed(
-                            [f'Malformed JSON on line {line_num}: {e}', f'Line content: {line[:200]}']
+                        return TestResult.execution_error(
+                            e, f'Malformed JSON on line {line_num} (content: {line[:200]})'
                         )
                     continue
 
@@ -387,7 +387,7 @@ def line_count(
         return TestResult.failed(messages)
 
     except FileNotFoundError:
-        return TestResult.failed([f'JSONL file {dst} does not exist'])
+        return TestResult.error([f'JSONL file {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSONL file {dst}")
 
@@ -411,7 +411,7 @@ def value_in_any_line(
 
     Args:
         dst: Guest path to the JSONL file (one JSON document per line; blank lines are
-            skipped). A glob must match exactly one path; a missing or 0-byte file fails.
+            skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails.
         key_path: Dot path inside each line's object, e.g. ``event.type``; ``*`` expands
             object values, ``name[*]`` array elements. No numeric indexes.
             For multi-value paths one matching element suffices.
@@ -420,20 +420,20 @@ def value_in_any_line(
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
-            fails on the first malformed line.
+            makes the first malformed line an error.
 
     Example:
         function: jsonl.value_in_any_line
         parameter:
-          dst: /home/user/.local/share/app/history.jsonl
-          key_path: url
-          expected_value: example.com
+          dst: /home/user/data/events.jsonl
+          key_path: source
+          expected_value: example
           regex_match: true
     """
     dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
-        return TestResult.failed([f'JSONL file {dst_param} not found ({status})'])
+        return TestResult.error([f'JSONL file {dst_param} not found ({status})'])
 
     log.debug(f'dst file {dst} will be used for test value_in_any_line')
 
@@ -464,8 +464,8 @@ def value_in_any_line(
                 except json.JSONDecodeError as e:
                     malformed_count += 1
                     if not skip_malformed:
-                        return TestResult.failed(
-                            [f'Malformed JSON on line {line_num}: {e}', f'Line content: {line[:200]}']
+                        return TestResult.execution_error(
+                            e, f'Malformed JSON on line {line_num} (content: {line[:200]})'
                         )
                     continue
 
@@ -513,6 +513,6 @@ def value_in_any_line(
         return TestResult.failed(messages)
 
     except FileNotFoundError:
-        return TestResult.failed([f'JSONL file {dst} does not exist'])
+        return TestResult.error([f'JSONL file {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSONL file {dst}")

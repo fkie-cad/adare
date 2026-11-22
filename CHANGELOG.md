@@ -27,6 +27,36 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 
 ## [Unreleased]
 
+### Changed
+- The file-content testfunctions now end with an **error**, not a failure, when they cannot
+  read their file: the path does not exist, a glob matches no file or more than one, or the
+  content cannot be parsed (invalid JSON, a malformed JSONL line with `skip_malformed: false`,
+  a CSV parse error, a corrupt workbook). This covers `csv.*`, `excel.*`, `json.*`, `jsonl.*`,
+  `xml.*` and `standard.file_content_contains`, `file_content_equals`,
+  `file_content_matches_regex`, `file_hash_matches`, `file_timestamps` and `file_permissions`;
+  it is the rule `sqlite.query_result` already follows. A failure now always means the file
+  was read and the condition did not hold, so `expect_to_fail` can no longer turn a wrong path
+  or a failed pull into a pass (errors are never inverted). Playbooks that used a content test
+  with `expect_to_fail` to assert that a file is gone get an error instead; use
+  `standard.file_does_not_exist`. An existing 0-byte file still fails. The testfunction
+  authoring guide and skill now state the rule.
+- Invalid testfunction parameters are an **error**, not a failure: `csv.compare_rows` and
+  `excel.compare_rows` with `reference_rows` not a list, empty or holding a non-list;
+  `excel.compare_rows` with both or neither of `reference_rows`/`reference_file`;
+  `excel.validate_columns` with `expected_columns` not a list or empty; `excel.compare_files`
+  with an unknown `sheet_mode`; more than one placeholder in `json.array_contains` or
+  `excel.cell_value_matches`; an unknown `json.value_matches` `wildcard_mode` (now checked
+  even for a single value); an invalid regex with `regex_match` in `json.*`, `jsonl.*` and
+  `xml.*`.
+- `excel.*`: a sheet missing from the workbook under test still fails, but other read errors
+  are no longer reported as failures, and a missing sheet in a *reference* workbook
+  (`compare_rows` `reference_file`, `compare_sheets` `reference_sheet`) is an error.
+  Parse errors in CSV, JSON, JSONL and Excel files now carry the exception type and trace.
+- `jsonl.line_count` counts a 0-byte file as 0 lines, so `expected_count: 0` passes on it
+  (it used to fail).
+- Testfunction docstring examples use neutral made-up paths instead of real application
+  paths (browser profiles, office suites, registry keys); a unit test keeps it that way.
+
 ## [adare 0.1.1] - 2026-11-22
 
 ### Added
