@@ -1,5 +1,5 @@
 .DEFAULT_GOAL = help
-.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx install-skills test test-cov test-testfunctions test-testfunctions-guest test-cv test-agent test-install guest-venv lock-guest lint lint-fix lint-baseline lint-baseline-deps typecheck hooks
+.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx install-skills test test-cov test-testfunctions test-testfunctions-guest test-cv test-agent test-install guest-venv lock-guest lint lint-fix lint-baseline lint-baseline-deps typecheck hooks ci-hygiene release-check build smoke-live
 
 # uv owns the environments and the lock; make only names the tasks. CI calls these
 # same targets (with UV_LOCKED=1, i.e. --locked), so each command is written once,
@@ -35,6 +35,10 @@ help:
 	@echo "  lint-baseline-deps  Re-measure budgets after a dependency-only bump (may raise them)."
 	@echo "  typecheck       Strict mypy on adare.core (must stay at zero errors)."
 	@echo "  hooks           Install the pre-commit hooks."
+	@echo "  ci-hygiene      Lint workflows, scan for secrets, check large files/conflict markers/tool pins (CI)."
+	@echo "  release-check   Check a release tag before/after tagging: TAG=<package>-v<version> (CI: release.yml)."
+	@echo "  build           Build one package's sdist + wheel into dist/release/: PACKAGE=<name>."
+	@echo "  smoke-live      Boot a real VM and run a small experiment (needs KVM + the env): ENV=<name>."
 	@echo "---------------------------------------"
 
 # The install scripts do the work (uv sync --locked, CLIs on PATH, appdata, DB
@@ -196,3 +200,36 @@ typecheck:
 
 hooks:
 	pre-commit install
+
+# --- CI hygiene --------------------------------------------------------------
+# What pre-commit guards per commit, checked over the tracked tree (the hooks are
+# optional, and the large-file/conflict hooks do nothing outside a commit). gitleaks
+# is built with `go run` at the pre-commit rev (Go fetches its own toolchain if
+# needed); in CI's depth-1 checkout it scans the checked-out tree, locally all history.
+ACTIONLINT = uvx --from actionlint-py==1.7.12.25 actionlint
+GITLEAKS_VERSION = $(shell awk '/gitleaks\/gitleaks/ {getline; sub(/.*rev: *v?/, ""); sub(/[^0-9.].*/, ""); print}' .pre-commit-config.yaml)
+SCRIPT_PY = uv run --quiet --no-project --python 3.13
+ci-hygiene:
+	$(ACTIONLINT)
+	go run github.com/zricethezav/gitleaks/v8@v$(GITLEAKS_VERSION) git --redact --no-banner .
+	$(SCRIPT_PY) scripts/ci_hygiene.py
+
+# --- Releases ----------------------------------------------------------------
+# A release is a tag <package>-v<version> on main; release.yml runs these. Run
+# release-check before tagging too (it checks HEAD while the tag does not exist).
+release-check:
+	@test -n "$(TAG)" || { echo "usage: make release-check TAG=<package>-v<version>"; exit 2; }
+	$(SCRIPT_PY) scripts/release.py check "$(TAG)"
+
+RELEASE_DIR = dist/release
+build:
+	@test -n "$(PACKAGE)" || { echo "usage: make build PACKAGE=<adare|adarevm|adarelib|adare-cv-server>"; exit 2; }
+	rm -rf $(RELEASE_DIR)
+	uv build --package $(PACKAGE) --out-dir $(RELEASE_DIR)
+
+# --- Live VM smoke -----------------------------------------------------------
+# Boots a real VM with the installed CLI (run `make install` first). CI: live-smoke.yml
+# on the self-hosted runner; see scripts/smoke_live.py.
+ENV = ubuntu2404-x86
+smoke-live:
+	$(SCRIPT_PY) scripts/smoke_live.py --env "$(ENV)" --adare "$(INSTALLED_ADARE)"
