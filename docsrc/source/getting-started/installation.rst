@@ -211,7 +211,7 @@ Check that ADARE is on your ``PATH``:
 
    adare --version
 
-You should see output similar to ``ADARE version 0.1.0``. Then test the help
+You should see output similar to ``ADARE version 0.1.1``. Then test the help
 menu:
 
 .. code-block:: bash

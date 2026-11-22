@@ -27,6 +27,8 @@ and date, and tag the commit `<package>-v<version>` (e.g. `adarelib-v0.2.0`).
 
 ## [Unreleased]
 
+## [adare 0.1.1] - 2026-11-22
+
 ### Added
 - Negative results are now proven, not assumed (guide: *Proving negative results*):
   - Every click/keyboard/drag/scroll/goto gets an automatic **effect check**: the screen
