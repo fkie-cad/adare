@@ -1,7 +1,8 @@
 """Implicit controls for negative tests: was the act behind an absence actually done?
 
 A test for an absent artifact (``*_does_not_exist``, ``visual.not_exists``, ``count_max``
-with max 0, anything with ``expect_to_fail``, or a test function declaring
+with max 0, a count of zero (``expected_count: 0``, ``{max: 0}``), anything with
+``expect_to_fail``, or a test function declaring
 ``negative = True``) passes just as well when the GUI action that should have produced
 the absence never took effect. So a *passing* negative test becomes **INCONCLUSIVE** when
 any GUI action before it in the run
@@ -51,14 +52,38 @@ def _is_zero(value: Any) -> bool:
         return False
 
 
+def _counts_zero(parameter: dict) -> bool:
+    """True if the parameters demand a count of zero (``expected_count: 0`` and friends)."""
+    count = parameter.get('expected_count')
+    if isinstance(count, dict):  # jsonl.line_count range form
+        return _is_zero(count.get('max'))
+    comparison = parameter.get('comparison_type') or 'equals'
+    if comparison in ('equals', 'less_equal'):
+        return _is_zero(count)
+    if comparison == 'less':
+        return count is not None and _is_one(count)
+    return False
+
+
+def _is_one(value: Any) -> bool:
+    try:
+        return float(value) == 1
+    except (TypeError, ValueError):
+        return False
+
+
 def is_negative_test(test_def: dict, test_class: type | None = None) -> bool:
     """True if a passing result of this test asserts that something is absent."""
     function = str(test_def.get('function') or '')
     short = function.rsplit('.', 1)[-1]
+    parameter = test_def.get('parameter') or {}
     if short.endswith('_does_not_exist') or function in NEGATIVE_FUNCTIONS:
         return True
-    if short == 'count_max' and _is_zero((test_def.get('parameter') or {}).get('max')):
+    if short == 'count_max' and _is_zero(parameter.get('max')):
         return True
+    if isinstance(parameter, dict) and _counts_zero(parameter):
+        # a count of zero asserts absence; with expect_to_fail it asserts presence
+        return not test_def.get('expect_to_fail')
     if test_def.get('expect_to_fail'):
         return True
     return bool(getattr(test_class, 'negative', False))

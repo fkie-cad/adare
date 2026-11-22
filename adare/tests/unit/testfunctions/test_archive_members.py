@@ -108,7 +108,7 @@ def test_sqlite_query_in_zip(tmp_path):
         'sqlite.query_result',
         dst=f'{archive}!/app/records.db',
         query="SELECT url FROM entries WHERE url LIKE '%example%'",
-        expected_rows=1,
+        expected_count=1,
     )
 
     assert result.status == StatusEnum.SUCCESS, result.details

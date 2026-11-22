@@ -16,7 +16,6 @@ guessed: they need the RAM-first :class:`~adare.backend.hostside.guestfs.LiveGue
 from __future__ import annotations
 
 import logging
-import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -30,7 +29,7 @@ from adarelib.testset.basictest import BasicTest, HostModeCategory
 log = logging.getLogger(__name__)
 
 #: QGA-probe test functions a disk image can answer (the rest need live state)
-OFFLINE_PROBES = frozenset({'file_permissions', 'file_timestamps', 'user_exists', 'log_entry_exists'})
+OFFLINE_PROBES = frozenset({'file_permissions', 'file_timestamps', 'user_exists'})
 
 
 class GuestFSFileProxy:
@@ -61,10 +60,24 @@ class GuestFSFileProxy:
         return await self.pull_file(guest_path, force)
 
     async def resolve_guest_glob(self, pattern: str) -> list[str]:
-        return self.fs.glob(pattern)
+        """Paths matching ``pattern``; a failed read raises ``RuntimeError`` (never looks like no match)."""
+        try:
+            return self.fs.glob(pattern)
+        except GuestFileNotFound:
+            return []
+        except GuestFSError as e:
+            raise RuntimeError(f'cannot list {pattern} in {self.fs.origin}: {e}') from e
 
     async def file_exists(self, guest_path: str) -> bool:
         return self.fs.exists(guest_path)
+
+    async def path_kinds(self, pattern: str) -> list[tuple[str, str]]:
+        """Existing paths matching ``pattern`` with kind ``file``/``dir``/``other``."""
+        try:
+            paths = self.fs.glob(pattern)
+            return [(p, 'file' if self.fs.is_file(p) else 'dir' if self.fs.is_dir(p) else 'other') for p in paths]
+        except GuestFSError as e:
+            raise RuntimeError(f'cannot list {pattern} in {self.fs.origin}: {e}') from e
 
     def cleanup(self) -> None:
         shutil.rmtree(self._temp_root, ignore_errors=True)
@@ -101,15 +114,6 @@ class GuestFSCommandProxy:
         except GuestFSError:
             return False
         return any(line.split(':', 1)[0] == username for line in passwd.splitlines())
-
-    async def search_log_file(self, log_path: str, pattern: str, max_lines: int = 1000) -> tuple[bool, list[str]]:
-        try:
-            text = self.fs.read_text(log_path)
-        except GuestFSError:
-            return False, []
-        rx = re.compile(pattern)
-        lines = [ln for ln in text.splitlines()[-max_lines:] if rx.search(ln)]
-        return bool(lines), lines
 
     def __getattr__(self, name: str):
         async def unsupported(*args, **kwargs):

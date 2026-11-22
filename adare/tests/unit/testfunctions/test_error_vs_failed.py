@@ -13,6 +13,7 @@ ERROR can never become a pass.
 """
 
 import csv as stdlib_csv
+import sqlite3
 from pathlib import Path
 
 import pandas as pd
@@ -69,6 +70,14 @@ def files(tmp_path):
         'bad_xml': tmp_path / 'bad.xml',
         'bad_xlsx': tmp_path / 'bad.xlsx',
         'bad_csv_bytes': tmp_path / 'bad.csv',
+        'bad_plist': tmp_path / 'bad.plist',
+        'bad_yaml': tmp_path / 'bad.yaml',
+        'bad_toml': tmp_path / 'bad.toml',
+        'bad_ini': tmp_path / 'bad.ini',
+        'bad_png': tmp_path / 'bad.png',
+        'bad_image': tmp_path / 'bad.jpg',
+        'db': tmp_path / 'good.db',
+        'bad_db': tmp_path / 'bad.db',
     }
     paths['csv'].write_text('a,b\nc,d\n')
     paths['json'].write_text('{"a": 1, "arr": [1, 2], "s": "text"}')
@@ -82,6 +91,19 @@ def files(tmp_path):
     # Undecodable as UTF-8 and as cp1252 (a Windows guest's default encoding), where
     # 0x81/0x8d/0x8f/0x90/0x9d are unassigned.
     paths['bad_csv_bytes'].write_bytes(b'a,b\n\x81\x8d,\x90\x9d\n')
+    paths['bad_plist'].write_bytes(b'<?xml version="1.0"?><plist version="1.0"><dict><key>a</key>')
+    paths['bad_yaml'].write_text('a: [1, 2\nb: 3\n')
+    paths['bad_toml'].write_text('[server\nport = 1\n')
+    paths['bad_ini'].write_bytes(b'[a]\nb = \xff\xfe\xfa\x80\n')
+    # a tEXt chunk whose CRC is 0
+    paths['bad_png'].write_bytes(
+        b'\x89PNG\r\n\x1a\n' + b'\x00\x00\x00\x03tEXtk\x00v' + b'\x00\x00\x00\x00' + b'\x00\x00\x00\x00IEND\xaeB`\x82'
+    )
+    paths['bad_image'].write_bytes(b'not an image')
+    with sqlite3.connect(str(paths['db'])) as conn:
+        conn.execute('CREATE TABLE t (a TEXT)')
+        conn.executemany('INSERT INTO t VALUES (?)', [('a',), ('c',)])
+    paths['bad_db'].write_bytes(b'SQLite format 3\x00' + b'\xff' * 200)
     out = {k: str(v) for k, v in paths.items()}
     out['xlsx'] = _workbook(tmp_path / 'good.xlsx', {'S': [['a', 'b'], ['c', 'd']]})
     out['other_xlsx'] = _workbook(tmp_path / 'other.xlsx', {'S': [['a', 'b'], ['x', 'y']]})
@@ -93,18 +115,42 @@ def files(tmp_path):
 CORRUPT = [
     ('json.contains_key', 'bad_json', {'key_path': 'a'}),
     ('json.value_matches', 'bad_json', {'key_path': 'a', 'expected_value': 1}),
-    ('json.array_contains', 'bad_json', {'array_path': 'arr', 'expected_element': 1}),
+    ('json.array_contains', 'bad_json', {'array_path': 'arr', 'expected_value': 1}),
     ('jsonl.line_matches', 'bad_jsonl', {'conditions': {'a': 1}, 'skip_malformed': False}),
     ('jsonl.line_count', 'bad_jsonl', {'expected_count': 1, 'skip_malformed': False}),
     ('jsonl.value_in_any_line', 'bad_jsonl', {'key_path': 'a', 'expected_value': 1, 'skip_malformed': False}),
     ('xml.element_exists', 'bad_xml', {'xpath': './/item'}),
     ('xml.element_count', 'bad_xml', {'xpath': './/item', 'expected_count': 1}),
-    ('excel.sheet_exists', 'bad_xlsx', {'sheet_name': 'S'}),
+    ('excel.sheet_exists', 'bad_xlsx', {'sheet': 'S'}),
     ('excel.cell_value_matches', 'bad_xlsx', {'row': 0, 'column': 0, 'expected_value': 'a'}),
     ('excel.contains_row', 'bad_xlsx', {'entry': ['a', 'b']}),
     ('excel.validate_columns', 'bad_xlsx', {'expected_columns': ['a']}),
     ('excel.compare_rows', 'bad_xlsx', {'reference_rows': [['a', 'b']]}),
     ('csv.contains_line', 'bad_csv_bytes', {'entry': ['a', 'b']}),
+    ('plist.contains_key', 'bad_plist', {'key_path': 'a'}),
+    ('plist.value_matches', 'bad_plist', {'key_path': 'a', 'expected_value': 1}),
+    ('plist.value_count', 'bad_plist', {'key_path': 'a', 'expected_count': 0}),
+    ('yaml.contains_key', 'bad_yaml', {'key_path': 'a'}),
+    ('yaml.value_matches', 'bad_yaml', {'key_path': 'a', 'expected_value': 1}),
+    ('yaml.value_count', 'bad_yaml', {'key_path': 'a', 'expected_count': 0}),
+    ('toml.contains_key', 'bad_toml', {'key_path': 'a'}),
+    ('toml.value_matches', 'bad_toml', {'key_path': 'a', 'expected_value': 1}),
+    ('toml.value_count', 'bad_toml', {'key_path': 'a', 'expected_count': 0}),
+    ('ini.section_exists', 'bad_ini', {'section': 'a'}),
+    ('ini.contains_key', 'bad_ini', {'section': 'a', 'key': 'b'}),
+    ('ini.value_matches', 'bad_ini', {'section': 'a', 'key': 'b', 'expected_value': 'c'}),
+    ('ini.value_count', 'bad_ini', {'section': 'a', 'key': 'b', 'expected_count': 1}),
+    ('image.png_text_matches', 'bad_png', {'keyword': 'k'}),
+    ('image.png_text_count', 'bad_png', {'keyword': 'k', 'expected_count': 1}),
+    ('image.exif_value_matches', 'bad_image', {'tag': 'Make', 'expected_value': 'x'}),
+    ('image.exif_value_count', 'bad_image', {'tag': 'Make', 'expected_count': 1}),
+    ('image.dimensions_match', 'bad_image', {'width': 1}),
+    ('json.value_count', 'bad_json', {'key_path': 'a', 'expected_count': 1}),
+    ('csv.row_count', 'bad_csv_bytes', {'entry': ['a', 'b'], 'expected_count': 1}),
+    ('text.line_count', 'bad_csv_bytes', {'content': 'a', 'expected_count': 1}),
+    ('sqlite.query_result', 'bad_db', {'query': 'SELECT * FROM t'}),
+    ('sqlite.row_count', 'bad_db', {'query': 'SELECT * FROM t', 'expected_count': 1}),
+    ('excel.row_count', 'bad_xlsx', {'entry': ['a', 'b'], 'expected_count': 1}),
 ]
 
 
@@ -166,7 +212,7 @@ BAD_PARAMS = [
     ('json.value_matches', 'json', {'key_path': 's', 'expected_value': '[unclosed', 'regex_match': True}),
     ('jsonl.line_matches', 'jsonl', {'conditions': {'a': '[unclosed'}, 'regex_match': True}),
     ('jsonl.line_count', 'jsonl', {'expected_count': 'two'}),
-    ('xml.element_text_matches', 'xml', {'xpath': './/item', 'expected_text': '[unclosed', 'regex_match': True}),
+    ('xml.element_text_matches', 'xml', {'xpath': './/item', 'expected_value': '[unclosed', 'regex_match': True}),
     (
         'xml.attribute_matches',
         'xml',
@@ -175,6 +221,35 @@ BAD_PARAMS = [
     ('xml.element_count', 'xml', {'xpath': './/item', 'expected_count': 1, 'comparison_type': 'roughly'}),
     ('standard.file_content_matches_regex', 'txt', {'regex': '[unclosed'}),
     ('standard.file_hash_matches', 'txt', {'expected_hash': '0' * 64, 'hash_type': 'crc0'}),
+    ('json.value_count', 'json', {'key_path': 'a', 'expected_count': -1}),
+    ('json.value_count', 'json', {'key_path': 'a', 'expected_count': 1, 'comparison_type': 'roughly'}),
+    (
+        'json.value_count',
+        'json',
+        {'key_path': 's', 'expected_count': 1, 'expected_value': '[unclosed', 'regex_match': True},
+    ),
+    ('csv.row_count', 'csv', {'entry': 'a,b', 'expected_count': 1}),
+    ('csv.row_count', 'csv', {'entry': ['a', 'b'], 'expected_count': 'one'}),
+    ('standard.file_size', 'txt', {'expected_size': -1}),
+    ('standard.file_size', 'txt', {'expected_size': 1, 'comparison_type': 'roughly'}),
+    ('standard.file_count', 'txt', {'expected_count': -1}),
+    ('standard.file_count', 'txt', {'expected_count': 1, 'kind': 'symlink'}),
+    ('jsonl.line_count', 'jsonl', {'expected_count': {'min': 1}, 'comparison_type': 'greater'}),
+    ('jsonl.line_count', 'jsonl', {'expected_count': 1, 'comparison_type': 'roughly'}),
+    ('text.occurrence_count', 'txt', {'content': 'a', 'expected_count': 1, 'content_type': 'regex'}),
+    ('text.occurrence_count', 'txt', {'content': 'a', 'expected_count': 1, 'encoding': ['no-such-codec']}),
+    ('text.occurrence_count', 'txt', {'content': 'zz', 'expected_count': 1, 'content_type': 'hex'}),
+    ('text.line_count', 'txt', {'content': '[unclosed', 'expected_count': 1, 'regex_match': True}),
+    ('text.line_count', 'txt', {'content': 'a', 'expected_count': 1, 'encoding': 'no-such-codec'}),
+    ('text.line_count', 'txt', {'content': 'a', 'expected_count': 1, 'case_sensitive': 'yes'}),
+    ('sqlite.row_count', 'db', {'query': 'SELECT * FROM t', 'expected_count': -1}),
+    ('sqlite.row_count', 'db', {'query': 'SELECT * FROM t', 'expected_count': 1, 'comparison_type': 'roughly'}),
+    ('sqlite.row_count', 'db', {'query': 'SELECT * FROM missing_table', 'expected_count': 0}),
+    ('excel.row_count', 'xlsx', {'entry': 'a,b', 'expected_count': 1}),
+    ('excel.row_count', 'xlsx', {'entry': ['a', 'b'], 'expected_count': 'one'}),
+    ('ini.value_matches', 'txt', {'section': '', 'key': 'a', 'expected_value': 'b', 'wildcard_mode': 'some'}),
+    ('image.png_text_matches', 'txt', {'keyword': 'k', 'wildcard_mode': 'some'}),
+    ('image.exif_value_matches', 'txt', {'tag': 'Make', 'expected_value': 'x', 'wildcard_mode': 'some'}),
 ]
 
 
@@ -198,11 +273,11 @@ def test_json_array_contains_needs_exactly_one_placeholder(files):
         variable_metadata={**VARIABLES, 'VAR2': {'type': 'string', 'resolved_value': 'value2'}},
         dst=files['json'],
         array_path='arr',
-        expected_element='{{VAR1}}-{{VAR2}}',
+        expected_value='{{VAR1}}-{{VAR2}}',
     )
 
     _assert(result, StatusEnum.ERROR)
-    assert 'expected 1 placeholder' in result.details[0]
+    assert 'expected exactly one placeholder' in result.details[0]
 
 
 def test_excel_cell_value_needs_exactly_one_placeholder(files):
@@ -227,6 +302,7 @@ def test_excel_cell_value_needs_exactly_one_placeholder(files):
     [
         ('excel.cell_value_matches', {'row': 0, 'column': 0, 'expected_value': 'a', 'sheet': 'Nope'}),
         ('excel.contains_row', {'entry': ['a', 'b'], 'sheet': 'Nope'}),
+        ('excel.row_count', {'entry': ['a', 'b'], 'expected_count': 0, 'sheet': 'Nope'}),
         ('excel.validate_columns', {'expected_columns': ['a'], 'sheet': 'Nope'}),
         ('excel.compare_rows', {'reference_rows': [['a', 'b']], 'sheet': 7}),
     ],
@@ -288,25 +364,35 @@ def test_jsonl_empty_file_still_fails_where_a_line_is_required(tmp_path, dotted,
 MISMATCH = [
     ('csv.contains_line', 'csv', {'entry': ['x', 'y']}),
     ('csv.compare_rows', 'csv', {'reference_rows': [['a', 'b'], ['x', 'y']]}),
-    ('excel.sheet_exists', 'xlsx', {'sheet_name': 'Other'}),
+    ('excel.sheet_exists', 'xlsx', {'sheet': 'Other'}),
     ('excel.cell_value_matches', 'xlsx', {'row': 0, 'column': 0, 'expected_value': 'z'}),
     ('excel.contains_row', 'xlsx', {'entry': ['x', 'y']}),
     ('excel.validate_columns', 'xlsx', {'expected_columns': ['x', 'y']}),
     ('excel.compare_rows', 'xlsx', {'reference_rows': [['a', 'b'], ['x', 'y']]}),
     ('json.contains_key', 'json', {'key_path': 'missing'}),
     ('json.value_matches', 'json', {'key_path': 'a', 'expected_value': 2}),
-    ('json.array_contains', 'json', {'array_path': 'arr', 'expected_element': 9}),
+    ('json.array_contains', 'json', {'array_path': 'arr', 'expected_value': 9}),
     ('jsonl.line_matches', 'jsonl', {'conditions': {'a': 9}}),
     ('jsonl.line_count', 'jsonl', {'expected_count': 5}),
     ('jsonl.value_in_any_line', 'jsonl', {'key_path': 'a', 'expected_value': 9}),
     ('xml.element_exists', 'xml', {'xpath': './/missing'}),
-    ('xml.element_text_matches', 'xml', {'xpath': './/item', 'expected_text': 'z'}),
+    ('xml.element_text_matches', 'xml', {'xpath': './/item', 'expected_value': 'z'}),
     ('xml.attribute_matches', 'xml', {'xpath': './/item', 'attribute': 'id', 'expected_value': '9'}),
     ('xml.element_count', 'xml', {'xpath': './/item', 'expected_count': 5}),
     ('standard.file_content_contains', 'txt', {'content': 'absent'}),
     ('standard.file_content_equals', 'txt', {'content': 'other text'}),
     ('standard.file_content_matches_regex', 'txt', {'regex': '^absent$'}),
     ('standard.file_hash_matches', 'txt', {'expected_hash': '0' * 64}),
+    ('json.value_count', 'json', {'key_path': 'arr[*]', 'expected_count': 5}),
+    ('csv.row_count', 'csv', {'entry': ['a', 'b'], 'expected_count': 2}),
+    ('standard.file_size', 'txt', {'expected_size': 1}),
+    ('standard.file_count', 'txt', {'expected_count': 2}),
+    ('jsonl.line_count', 'jsonl', {'expected_count': 0, 'comparison_type': 'less'}),
+    ('text.occurrence_count', 'txt', {'content': 'o', 'expected_count': 1}),
+    ('text.line_count', 'txt', {'content': 'hello', 'expected_count': 0}),
+    ('text.line_count', 'txt', {'content': 'HELLO', 'expected_count': 0, 'case_sensitive': False}),
+    ('sqlite.row_count', 'db', {'query': 'SELECT * FROM t', 'expected_count': 1}),
+    ('excel.row_count', 'xlsx', {'entry': ['a', 'b'], 'expected_count': 2}),
 ]
 
 

@@ -48,7 +48,7 @@ tests:
       dst: '{{logs_file}}'
       conditions:
         level: "ERROR"
-      match_mode: "any"
+      wildcard_mode: "any"
 
   - name: test_line_matches_any_multiple_conditions
     description: 'Test line_matches with multiple conditions in any mode'
@@ -58,7 +58,7 @@ tests:
       conditions:
         level: "ERROR"
         success: false
-      match_mode: "any"
+      wildcard_mode: "any"
 
   - name: test_line_matches_any_nested_path
     description: 'Test line_matches with nested key path in any mode'
@@ -68,7 +68,7 @@ tests:
       conditions:
         user.name: "alice"
         action: "login"
-      match_mode: "any"
+      wildcard_mode: "any"
 
   - name: test_line_matches_all_pass
     description: 'Test line_matches with all mode (should pass)'
@@ -77,7 +77,7 @@ tests:
       dst: '{{events_file}}'
       conditions:
         currency: "USD"
-      match_mode: "all"
+      wildcard_mode: "all"
     expect_to_fail: true  # Not all lines have USD
 
   - name: test_line_matches_all_metadata_exists
@@ -87,7 +87,7 @@ tests:
       dst: '{{events_file}}'
       conditions:
         metadata.country: "*"
-      match_mode: "all"
+      wildcard_mode: "all"
       regex_match: true
 
   - name: test_line_matches_regex
@@ -97,7 +97,7 @@ tests:
       dst: '{{logs_file}}'
       conditions:
         user.name: "^(alice|bob)$"
-      match_mode: "any"
+      wildcard_mode: "any"
       regex_match: true
 
   - name: test_line_matches_integer_value
@@ -107,7 +107,7 @@ tests:
       dst: '{{logs_file}}'
       conditions:
         user.id: 101
-      match_mode: "any"
+      wildcard_mode: "any"
 
   - name: test_line_matches_boolean
     description: 'Test line_matches with boolean value'
@@ -116,7 +116,7 @@ tests:
       dst: '{{logs_file}}'
       conditions:
         success: false
-      match_mode: "any"
+      wildcard_mode: "any"
 
   - name: test_line_matches_not_found
     description: 'Test line_matches with non-matching conditions'
@@ -126,7 +126,7 @@ tests:
       dst: '{{logs_file}}'
       conditions:
         level: "CRITICAL"
-      match_mode: "any"
+      wildcard_mode: "any"
 
   - name: test_line_matches_with_malformed
     description: 'Test line_matches with file containing malformed lines'
@@ -135,7 +135,7 @@ tests:
       dst: '{{mixed_file}}'
       conditions:
         status: "active"
-      match_mode: "any"
+      wildcard_mode: "any"
       skip_malformed: true
 
   # ====================
@@ -326,7 +326,7 @@ tests:
       dst: '{{adare_shared_data}}/nonexistent.jsonl'
       conditions:
         any: "value"
-      match_mode: "any"
+      wildcard_mode: "any"
 
   - name: test_jsonl_malformed_strict_mode
     description: 'Test JSONL with malformed lines in strict mode (should fail)'
@@ -336,7 +336,7 @@ tests:
       dst: '{{mixed_file}}'
       conditions:
         status: "active"
-      match_mode: "any"
+      wildcard_mode: "any"
       skip_malformed: false
 
   # ====================

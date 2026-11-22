@@ -30,13 +30,16 @@ Parameters
      - **Required.** The key path using dot notation. Supports wildcards: ``[*]`` for arrays, ``*`` for all object keys.
    * - ``expected_value``
      - string/int/float/bool/null
-     - **Required.** The expected value to match against. Supports placeholders and regex patterns.
+     - **Required.** The expected value, compared with type-sensitive ``==`` (``5`` is not ``"5"``; a JSON ``null`` needs ``expected_value: null``). A ``!re``/``!timestamp`` placeholder compares the value's string form; an invalid regex or unknown placeholder is an ERROR.
    * - ``regex_match``
      - boolean
-     - **Optional.** Enable regex matching for string values. Default: ``false``.
+     - **Optional.** Treat a string ``expected_value`` as a Python regex searched (``re.search``, unanchored) in the value's string form. Default: ``false``.
    * - ``wildcard_mode``
      - string
      - **Optional.** Mode for wildcard matching: ``any`` (at least one match) or ``all`` (all must match). Default: ``any``.
+   * - ``encoding``
+     - string
+     - **Optional.** ``null`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. An unknown name is an ERROR.
 
 Usage Example
 -------------

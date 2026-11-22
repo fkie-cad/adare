@@ -16,6 +16,7 @@ import copy
 import difflib
 import hashlib
 import logging
+import math
 import re
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
@@ -31,34 +32,94 @@ _NO_DEFAULT = object()
 # to its whole group before matching, so "verify the file is gone" finds
 # ``file_does_not_exist``.
 _SYNONYM_GROUPS = (
-    {'deleted', 'delete', 'removed', 'remove', 'gone', 'absent', 'missing', 'not', 'lacks', 'wiped', 'erased'},
-    {'exists', 'exist', 'present', 'created', 'there'},
+    {'deleted', 'delete', 'removed', 'remove', 'gone', 'absent', 'absence', 'missing', 'not', 'lacks', 'wiped'}
+    | {'erased', 'stripped', 'cleared', 'purged'},
+    {'exists', 'exist', 'present', 'created', 'there', 'appears'},
     {'contains', 'contain', 'includes', 'include', 'has', 'with'},
     {'equals', 'equal', 'matches', 'match', 'same', 'identical', 'value', 'compare', 'compares'},
-    {'screen', 'visible', 'shown', 'displayed', 'icon', 'image', 'ui', 'visual', 'window'},
+    {'screen', 'visible', 'shown', 'displayed', 'icon', 'ui', 'visual', 'window'},
     {'registry', 'regkey', 'hive'},
-    {'sqlite', 'database', 'db', 'query', 'sql', 'table'},
+    {'sqlite', 'database', 'db', 'query', 'sql', 'table', 'records'},
     {'excel', 'xlsx', 'spreadsheet', 'sheet', 'cell', 'workbook'},
     {'hash', 'sha256', 'md5', 'checksum', 'integrity'},
-    {'timestamp', 'timestamps', 'mtime', 'ctime', 'atime', 'modified', 'time', 'macb'},
+    {'timestamp', 'timestamps', 'mtime', 'ctime', 'atime', 'modified', 'time', 'macb', 'epoch'},
     {'permission', 'permissions', 'mode', 'chmod', 'owner'},
     {'directory', 'dir', 'folder'},
     {'regex', 'pattern', 'regexp'},
-    {'json', 'key'},
-    {'xml', 'xpath', 'element', 'attribute'},
-    {'csv', 'row', 'rows', 'line'},
+    {'xml', 'xpath', 'element', 'attribute', 'docx', 'odt', 'pptx', 'office'},
+    {'csv', 'row', 'rows', 'record', 'line'},
     {'process', 'running', 'service', 'daemon'},
     {'user', 'account'},
     {'log', 'logs', 'journal'},
     {'keepass', 'kdbx', 'password', 'vault'},
-    {'ini', 'config', 'setting', 'settings'},
+    {'ini', 'config', 'setting', 'settings', 'preference', 'preferences'},
+    {'empty', 'size', 'bytes', 'kb', 'mb', 'large', 'big', 'small', 'grew', 'shrank'},
+    {'count', 'counts', 'counting', 'number', 'many', 'times', 'occurrences', 'occurrence', 'occurs', 'often'},
+    {'archive', 'zip', 'tar', 'compressed', 'lz4', 'jsonlz4', 'snappy', 'gzip', 'gz', 'xz', 'bzip2'},
+    {'string', 'word', 'text', 'substring', 'marker'},
+    {'exif', 'photo', 'photos', 'jpeg', 'jpg', 'camera', 'gps', 'metadata'},
+    {'binary', 'encoding', 'encodings', 'utf', 'utf8', 'utf16', 'cache', 'dump'},
 )
 _NEGATIVE_WORDS = _SYNONYM_GROUPS[0] | {'no', 'longer', 'never', 'without'}
+_COUNT_WORDS = next(group for group in _SYNONYM_GROUPS if 'count' in group)
 _NEGATIVE_NAME_MARKERS = ('not_', '_not', 'absent', 'lacks', 'missing')
+# A count with ``expected_count: 0`` asserts absence too, so negative goals favour it
+# over a plain presence test (``json.value_count`` for "json key is absent").
+_COUNT_NAME_MARKERS = ('count',)
+
+# Glue words carry no intent; as name tokens (``value_in_any_line``) they caused
+# incidental top hits.
+_STOPWORDS = frozenset(
+    {
+        'a',
+        'an',
+        'the',
+        'is',
+        'are',
+        'was',
+        'were',
+        'be',
+        'been',
+        'of',
+        'in',
+        'on',
+        'at',
+        'to',
+        'for',
+        'from',
+        'by',
+        'and',
+        'or',
+        'it',
+        'its',
+        'this',
+        'that',
+        'any',
+        'all',
+        'how',
+        'what',
+        'which',
+        's',
+        'n',
+    }
+)
 
 _RELATIVE_CUTOFF = 0.45
+_SYNONYM_FACTOR = 0.6
+_EXTRA_FIELD_FACTOR = 0.25
+_IDF_STRENGTH = 0.5
 
-_FIELD_WEIGHTS = (('name', 4.0), ('collection', 2.0), ('summary', 2.0), ('params', 1.0), ('doc', 1.0))
+# ``use_for`` is the docstring's "Use for:" paragraph: intent phrasing ("asserting a
+# value was wiped"), worth more than the rest of the prose, which mentions many
+# neighbouring functions ("for X use ...") and would otherwise add noise.
+_FIELD_WEIGHTS = (
+    ('name', 4.0),
+    ('collection', 2.0),
+    ('summary', 2.0),
+    ('use_for', 2.0),
+    ('params', 0.75),
+    ('doc', 0.5),
+)
 
 
 @dataclass(frozen=True)
@@ -450,7 +511,16 @@ def find(entries: list[CatalogEntry], dotnotation: str) -> CatalogEntry | None:
 
 
 def _tokens(text: str) -> list[str]:
-    return [t for t in re.split(r'[^a-z0-9]+', text.lower()) if t]
+    return [t for t in re.split(r'[^a-z0-9]+', text.lower()) if t and t not in _STOPWORDS]
+
+
+_USE_FOR = re.compile(r'^\s*Use for:\s*(.*?)(?:\n\s*\n|\Z)', re.MULTILINE | re.DOTALL)
+
+
+def use_for(doc: str) -> str:
+    """The docstring's ``Use for:`` paragraph, joined to one line (``''`` without one)."""
+    match = _USE_FOR.search(doc.split('\nArgs:')[0])
+    return ' '.join(match.group(1).split()) if match else ''
 
 
 def _expand(token: str) -> set[str]:
@@ -463,10 +533,17 @@ def _expand(token: str) -> set[str]:
 def _matches(query_token: str, field_tokens: set[str]) -> bool:
     if query_token in field_tokens:
         return True
-    # cheap stemming: "deletes"/"deleting" vs "delete", "files" vs "file"
-    return len(query_token) >= 4 and any(
-        t.startswith(query_token) or query_token.startswith(t) for t in field_tokens if len(t) >= 4
-    )
+    # cheap stemming: "deletes"/"deleting" vs "delete", "files" vs "file", "absent" vs
+    # "absence" -- but not "times" vs "timestamps" (at most 3 letters differ in length)
+    return len(query_token) >= 4 and any(_same_stem(query_token, t) for t in field_tokens if len(t) >= 4)
+
+
+def _same_stem(a: str, b: str) -> bool:
+    if abs(len(a) - len(b)) > 3:
+        return False
+    if a.startswith(b) or b.startswith(a):
+        return True
+    return len(a) >= 5 and len(b) >= 5 and a[:5] == b[:5]
 
 
 def _fields(entry: CatalogEntry) -> dict[str, set[str]]:
@@ -474,9 +551,29 @@ def _fields(entry: CatalogEntry) -> dict[str, set[str]]:
         'name': set(_tokens(entry.name)),
         'collection': set(_tokens(entry.collection)),
         'summary': set(_tokens(entry.summary)),
+        'use_for': set(_tokens(use_for(entry.doc))),
         'params': {t for p in entry.params for t in _tokens(f'{p.name} {p.doc}')},
         'doc': set(_tokens(entry.doc)),
     }
+
+
+def _token_score(query_token: str, fields: dict[str, set[str]]) -> float:
+    """Best field match of one query token, plus a little for every further field it hits.
+
+    Taking the best field (instead of the sum over all fields) keeps a long docstring
+    that mentions a word in passing from outranking a function named after it.
+    """
+    synonyms = _expand(query_token) - {query_token}
+    hits = []
+    for field_name, weight in _FIELD_WEIGHTS:
+        if _matches(query_token, fields[field_name]):
+            hits.append(weight)
+        elif any(t in fields[field_name] for t in synonyms):
+            hits.append(weight * _SYNONYM_FACTOR)
+    if not hits:
+        return 0.0
+    hits.sort(reverse=True)
+    return hits[0] + _EXTRA_FIELD_FACTOR * sum(hits[1:])
 
 
 def search(
@@ -501,25 +598,26 @@ def search(
         return pool[:limit] if limit else pool
 
     wants_negative = any(t in _NEGATIVE_WORDS for t in query_tokens)
+    wants_count = any(t in _COUNT_WORDS for t in query_tokens)
+    token_scores = [[_token_score(qt, fields) for qt in query_tokens] for fields in map(_fields, pool)]
+    # Rare words decide more: "wiped" (2 functions) outweighs "value" (most of them).
+    idf = [
+        1.0 + _IDF_STRENGTH * math.log(len(pool) / max(1, sum(1 for scores in token_scores if scores[i] > 0)))
+        for i in range(len(query_tokens))
+    ]
     scored = []
-    for entry in pool:
-        fields = _fields(entry)
-        score = 0.0
-        for qt in query_tokens:
-            exact = {qt}
-            synonyms = _expand(qt) - exact
-            for field_name, weight in _FIELD_WEIGHTS:
-                if any(_matches(t, fields[field_name]) for t in exact):
-                    score += weight
-                elif any(t in fields[field_name] for t in synonyms):
-                    score += weight * 0.6
+    for entry, scores in zip(pool, token_scores, strict=True):
+        score = sum(s * w for s, w in zip(scores, idf, strict=True))
         if score <= 0:
             continue
         is_negative = any(marker in entry.name for marker in _NEGATIVE_NAME_MARKERS)
+        is_count = any(marker in entry.name for marker in _COUNT_NAME_MARKERS)
         if wants_negative:
-            score += 3.0 if is_negative else -1.5
+            score += 3.0 if is_negative else 1.0 if is_count else -1.5
         elif is_negative:
             score -= 1.0
+        if is_count:
+            score += 1.0 if wants_count else -0.5
         scored.append((score, entry))
     scored.sort(key=lambda pair: (-pair[0], pair[1].dotnotation))
     # Drop the long tail of incidental matches ("file" alone matches half the catalog).

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL = help
-.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx install-skills test test-cov test-testfunctions test-testfunctions-guest test-cv test-agent test-install guest-venv lock-guest lint lint-fix lint-baseline lint-baseline-deps typecheck hooks ci-hygiene release-check build smoke-live
+.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx testfunction-tables install-skills test test-cov test-testfunctions test-testfunctions-guest test-adarelib-guest test-cv test-agent test-install guest-venv lock-guest lint lint-fix lint-baseline lint-baseline-deps typecheck hooks ci-hygiene release-check build smoke-live
 
 # uv owns the environments and the lock; make only names the tasks. CI calls these
 # same targets (with UV_LOCKED=1, i.e. --locked), so each command is written once,
@@ -21,10 +21,12 @@ help:
 	@echo "  install-skills  Symlink the workflow skills in skills/ into Claude Code's skill dirs (project + global)."
 	@echo "  docs            Build HTML documentation with Sphinx (warnings are errors)."
 	@echo "  docs-sphinx     Build HTML documentation with Sphinx (warnings are errors)."
+	@echo "  testfunction-tables  Regenerate the testfunction tables of the docs from the catalog."
 	@echo "  test            Run the client unit suite (extra pytest flags: PYTEST_ARGS=...)."
 	@echo "  test-cov        Run the unit suite with coverage; fails below the floor (COV_MIN)."
 	@echo "  test-testfunctions  Run only the testfunction tests on the host Python (no libvirt needed)."
 	@echo "  test-testfunctions-guest  Run the testfunction tests on the guests' Python 3.10."
+	@echo "  test-adarelib-guest  Run the adarelib tests on the guests' Python 3.10."
 	@echo "  test-cv         Run the CV server suite."
 	@echo "  test-agent      Run the guest agent suite on the guests' Python 3.10."
 	@echo "  test-install    Run 'make install' then 'make update', and check the installed CLI."
@@ -100,6 +102,12 @@ docs-sphinx:
 	cp paper/demo/*.mp4 $(DOCS_BUILD)/demo/
 	touch $(DOCS_BUILD)/.nojekyll
 
+# The docs' testfunction tables (docsrc/source/_static/tables/testfunctions_*.csv) are
+# generated from the catalog; a unit test fails while a committed table is stale.
+testfunction-tables:
+	$(SYNC) --package adare
+	$(RUN) python scripts/gen_testfunction_tables.py
+
 # --- Tests -------------------------------------------------------------------
 # `--package adare` keeps adare-cv-server (paddle) out; the unit suite never imports
 # it. live_vm tests are deselected by the pytest addopts.
@@ -151,6 +159,10 @@ test-agent: guest-venv
 # --confcutdir keeps tests/conftest.py (which imports the 3.13 host package) out.
 test-testfunctions-guest: guest-venv
 	cd adare && ../$(GUEST_PY) -m pytest tests/unit/testfunctions --confcutdir=tests/unit/testfunctions -q $(PYTEST_ARGS)
+
+# adarelib (archives, decoders, placeholders, timestamps) ships in the guest wheel too.
+test-adarelib-guest: guest-venv
+	cd adare && ../$(GUEST_PY) -m pytest tests/unit/adarelib --confcutdir=tests/unit/adarelib -q $(PYTEST_ARGS)
 
 # What a user does on a fresh clone, then after a pull: CI runs it on all three OSes.
 # It is a real install (the same as running those targets yourself).

@@ -2,7 +2,7 @@
 
 Used by ``adare exp playbook validate`` / ``playbook_validate`` (not by the run-time
 parser). Errors are structural mistakes that cannot work (a ``- test:`` naming an
-undefined test, duplicate test names). Catalog findings are warnings: the catalog
+undefined test, duplicate test names, a renamed testfunction or parameter). Catalog findings are warnings: the catalog
 reflects this machine's collections, which may differ from where the playbook runs.
 """
 
@@ -10,6 +10,8 @@ import difflib
 from typing import Any
 
 import yaml
+
+from adarelib.testset.renames import rename_problems
 
 
 def _test_refs(node: Any) -> list[str]:
@@ -127,11 +129,15 @@ def check_playbook_tests(playbook_yaml: str, entries: list | None = None) -> tup
             errors.append(f'`- test: {ref}` refers to no entry in `tests:`{_suggest(ref, names)}')
     errors += _check_controls(tests, names, refs)
 
+    renamed = {id(t): rename_problems(t.get('function'), t.get('parameter')) for t in tests}
+    errors += [f'test "{t.get("name", "?")}": {msg}' for t in tests for msg in renamed[id(t)]]
+
     if not tests:
         return errors, []
     if entries is None:
         from adare.backend.testfunction.catalog import load_catalog
 
         entries = load_catalog()
-    warnings = [w for t in tests for w in _check_against_catalog(t, entries)]
+    # a test with a renamed function/parameter already has a precise error
+    warnings = [w for t in tests if not renamed[id(t)] for w in _check_against_catalog(t, entries)]
     return errors, warnings

@@ -289,8 +289,8 @@ class TestContainsLine:
         )
         result = test.test()
 
-        # Should fail because multiple placeholders in one cell are not supported
-        assert_test_failed(result)
+        assert result.status == StatusEnum.ERROR, result.details  # a test-definition error
+        assert "expected exactly one placeholder" in result.details[0]
 
     def test_contains_line_numeric_values(self, create_csv_file):
         """Test with numeric values (converted to strings in CSV)."""

@@ -38,6 +38,42 @@ is published to PyPI. A failed check leaves no release; fix it, delete the tag
 
 ## [Unreleased]
 
+Versions: `adare` 0.2.0 and `adarelib` 0.3.0 (minor bumps: breaking changes below).
+Guests need no re-provisioning: agent wheels are reinstalled when their code changes.
+
+### Breaking
+- **Renamed testfunction parameters** (adare): one name per idea across collections. Old
+  names are refused with a precise message (`parameter "expected_text" was renamed to
+  "expected_value"`) by `adare exp playbook validate`, host mode / dry-run and the guest
+  agent (table in `adarelib.testset.renames`). `scripts/migrate_testfunction_renames.py
+  PATH --write` rewrites playbooks in place (comments and layout kept); the playbooks in
+  `adare/appdata/examples` and `paper/experiments` are migrated.
+
+  | Function | Old | New |
+  |---|---|---|
+  | `xml.element_text_matches` | `expected_text` (default `''`) | `expected_value` (required) |
+  | `xml.xpath_result_matches` | `expected_result` (default `''`) | `expected_value` (required) |
+  | `json.array_contains` | `expected_element` (default `None`) | `expected_value` (required) |
+  | `json.value_matches` | `expected_value` (default `None`) | `expected_value` (required; write `null` to expect null) |
+  | `jsonl.line_matches` | `match_mode` | `wildcard_mode` |
+  | `excel.sheet_exists` | `sheet_name` | `sheet` (required) |
+  | `sqlite.query_result` | `expected_rows` | `expected_count` (+ `comparison_type`) |
+  | `xml.element_count` | `expected_count` (default 0) | `expected_count` (required) |
+  | `linux.log_entry_exists` | `log_file`, `pattern` | `dst`, `content` (+ `regex_match`, default true) |
+
+- `excel.sheet_exists` and `excel.cell_value_matches` with `regex_match` **search** the
+  pattern (`re.search`) like every other collection; they used `re.match` (anchored at the
+  start). Write `^...$` to match the whole name or value.
+- `linux.log_entry_exists` reads the log itself instead of running `tail | grep -E`: the
+  pattern is a Python regex (`re.search`; POSIX classes such as `[[:digit:]]` are not
+  supported, use `\d`), `dst` takes globs and `archive!member` (rotated `.gz` logs), the
+  encoding is detected, and it is a file-content test, so host mode pulls the log like any
+  other file. A missing log is an ERROR (it failed). It no longer needs a Linux guest. A POSIX
+  class (`[[:space:]]`, valid only for grep) or a `!re`/`!timestamp` tag in `content` is an ERROR
+  instead of a pattern that silently never matches.
+- A `{{ placeholder }}` without metadata is an ERROR (`unknown placeholder`); it used to be
+  compared against an empty string.
+
 ### Added
 - CI: release tags `<package>-v<version>` get checked (version, CHANGELOG section, commit
   on `main`), tested and turned into a GitHub Release with the package's sdist + wheel
@@ -63,6 +99,59 @@ is published to PyPI. A failed check leaves no release; fix it, delete the tag
   `archive member: ... sha256=...` provenance line. This works in guest mode and in host
   mode (only the archive is pulled), with no change to any testfunction: it is built into
   `ctx.resolve_globfilepath`. Guide: *Files inside archives*.
+- **LZ4** for the archive separator (adarelib; additive): `dst: store.jsonlz4!` or `x.lz4!`
+  gives the decompressed content to every file testfunction, also nested
+  (`profile.zip!/p/store.jsonlz4!`) and `.tar.lz4`. Both the LZ4 frame format (checksums
+  verified, linked/independent and uncompressed blocks, skippable frames) and an LZ4 block
+  with an 8-byte magic and size header are read by a pure-Python decoder (no new
+  dependency), size-capped like every member. Corrupt or unsupported data gives ERROR.
+- **Snappy** for the archive separator (adarelib; additive): files in the Snappy framing
+  format (`data.json.sz!`, `backup.tar.sz!/etc/app.json`) are read with chunk checksums
+  verified and the same size cap as the other formats; pure Python, no new dependency. Only
+  the framing format has magic bytes, so raw Snappy blocks are not detected.
+- `!timestamp` reads **numeric timestamps** (adarelib; additive): `epoch: 1970 | 1601 | 2001`
+  (default 1970) and `unit: s | ms | us | ns | 100ns` (default s) convert an artifact value
+  that is an integer, a digit string or a fraction (SQLite column, JSON number) before it is
+  compared, with `tolerance` or `after`/`before`. Covers Unix s/ms/µs/ns, Windows FILETIME
+  (1601 + 100ns), microseconds since 1601 and the 2001 reference date. Exact integer
+  conversion down to the microsecond; an invalid epoch/unit is a playbook load error, a
+  non-numeric value fails the comparison. A numeric value without these options is read as
+  Unix seconds (it used to crash the comparison with an ERROR).
+- New testfunctions (adare; additive), all with ERROR for a missing/unreadable/corrupt file
+  or bad parameters and FAILED only when the file was read and does not match:
+  - `json.value_count`; `standard.file_size`; `csv.row_count` (rows matching `entry`;
+    counts CSV records, so a quoted line break stays one row).
+  - `standard.file_count`: number of files (or directories, `kind: dir|any`) matching a path
+    or glob, also archive members (`a.zip!/logs/*.log`); no match counts 0, so
+    `expected_count: 0` asserts a group of files is absent.
+  - `text.occurrence_count` (string in one or several `encoding`s such as `utf-16-le`, bytes
+    or hex, searched in the raw bytes, so it works on binary stores) and `text.line_count`
+    (lines containing `content`, or matching it with `regex_match`).
+  - `ini.section_exists`, `contains_key`, `value_matches`, `value_count` (tolerant parser:
+    duplicates kept, keys before a section, BOM/UTF-16).
+  - `image.png_text_matches`, `png_text_count` (tEXt/zTXt/iTXt, CRC checked),
+    `exif_value_matches`, `exif_value_count`, `dimensions_match` (Pillow).
+  - `plist.*`, `yaml.*`, `toml.*`: `contains_key`, `value_matches`, `value_count`
+    (XML and binary plists; multi-document YAML; `tomli` on Python 3.10). Dates compare as
+    ISO 8601 strings, binary data as hex.
+- Key paths of the json, plist, yaml and toml collections (adarelib; additive): numeric
+  indexes (`items[0]`, `items[-1]`), a top-level array (`[0].id`, `[*].id`) and quoted keys
+  with dots (`['com.example.key']`). An object key equal to a whole dot segment
+  (`files[0]`) still wins over the bracket syntax, so existing paths resolve as before. Shared bodies for key-path formats in
+  `adarelib.testset.structured`, content helpers in `adarelib.testset.content`.
+- Guide *Checking that something is absent*: `expected_count: 0` or `expect_to_fail`, and
+  why an ERROR never becomes a pass.
+- `jsonl.line_count` takes `comparison_type` (adare; additive; default `equals`) for an
+  integer `expected_count`; with the `{min, max}` form only `equals` is allowed (ERROR
+  otherwise). A negative or boolean `expected_count` is now an ERROR.
+- Guide *Files inside archives*: a section on Office Open XML (`docProps/core.xml`,
+  `docProps/app.xml`) and OpenDocument (`meta.xml`) metadata read with `xml.*` tests.
+- `sqlite.row_count` and `excel.row_count` (adare; additive): rows a query returns / rows
+  of a sheet matching `entry`, with `comparison_type`. `text.line_count` gains
+  `case_sensitive`; `ini.value_matches`, `image.png_text_matches` and
+  `image.exif_value_matches` gain `wildcard_mode: any|all`.
+- `scripts/migrate_testfunction_renames.py` rewrites playbooks to the renamed testfunction
+  parameters (see Breaking).
 
 ### Changed
 - `adare experiment run` exit codes (adare): `0` only when every run passed, `1` when any
@@ -70,6 +159,31 @@ is published to PyPI. A failed check leaves no release; fix it, delete the tag
   ended the command. Before, a single-environment run (`-e env`) exited `0` even when it
   failed, and a batch exited `0` for ERROR, INCONCLUSIVE and interrupted runs. **Scripts that
   relied on exit `0` after a failed run now stop there.**
+- `excel.*` opens a workbook once per test (it was re-opened for every sheet) through
+  `adarelib.testset.workbook`; `csv.row_count` streams rows; `image.dimensions_match` and the
+  EXIF functions open the image lazily (no read cap needed); row mismatches log at debug level.
+- CI runs the adarelib tests on the guests' Python 3.10 too (`make test-adarelib-guest`, job
+  `guest`); adarelib ships in the guest wheel.
+- `content_type: bytes` is **strict** (adare, adarelib) in `standard.file_content_contains`:
+  `content` may hold only ASCII characters and Python escapes (`\x00`, `\n`, `\\`). A
+  literal non-ASCII character (it was silently searched as its UTF-8 bytes) or an unknown
+  escape (`\q`, `\x4`; it was silently searched as the literal backslash text) is now an
+  ERROR telling you to write `\xNN` escapes or use `content_type: string` with an
+  `encoding`. These inputs fail loudly now; no input silently changes from pass to fail.
+  `text.occurrence_count` follows the same rule (shared `parse_byte_string` in
+  `adarelib.testset.content`).
+- Host test mode, dry-run and parameter validation structure union parameters whose members
+  are lists or dicts (adare): `json.array_contains` `expected_value`, the `{min, max}` form
+  of `jsonl.line_count` and `windows.registry_value_matches` `expected_value` could not be
+  loaded there before. The value is passed through as written, as the guest agent does.
+- A count of zero is a **negative test** (adare): `expected_count: 0` (comparison `equals` or
+  `less_equal`, or `less` than 1; `sqlite.query_result` included), `jsonl.line_count` with
+  `{max: 0}` now get the implicit controls of
+  `*_does_not_exist` and `expect_to_fail` tests: a pass becomes INCONCLUSIVE when an earlier
+  GUI action failed (and, under `effect_check: prove`, was skipped or showed no effect).
+  With `expect_to_fail` such a test asserts presence and is not negative.
+- Host test mode looks a testfunction up by `collection.name`, not by its short name, so
+  collections that share function names (`value_matches`, `line_count`) cannot be confused.
 - cv-server: the OCR golden test no longer ships real desktop screenshots; it pins the
   profile, the model hashes and the text read from rendered UI-string frames.
 - Neutral names in comments, tests and docs (example project label `MyProject`).
@@ -108,6 +222,71 @@ is published to PyPI. A failed check leaves no release; fix it, delete the tag
   copy. Every test now pulls its file fresh from the guest.
 - `adare test dry-run` crashed on testfunctions with a `str | int | float ...` parameter
   (e.g. `json.value_matches`). It now structures parameters like a real run.
+- Host mode, glob paths: copies an earlier test pulled into the local mirror and since deleted
+  on the guest were still matched (`file_exists` passed, `file_does_not_exist` failed on a file
+  that is gone). Copies the guest glob no longer matches, or that vanished before the pull, are
+  now removed before the test runs.
+- Host mode quotes guest paths in the commands it runs (adare): a glob or path with a space, a
+  quote, `;` or `$(...)` broke the guest command or ran as shell/PowerShell syntax. Glob
+  characters stay active, everything else is literal.
+- `!timestamp tolerance: [a, b]` crashed the playbook load; a two-number list now bounds
+  *expected minus actual* (adarelib). Other tolerance values (a boolean, a one-element list)
+  are a load error instead of being taken as 1 or crashing.
+- `YamlTimestamp.compare` (direct use from a testfunction) honours `epoch`/`unit` and a list
+  tolerance, parses the expected value with `timestamp_format_comparison` (it parsed the
+  artifact value), and reports exceptions in `exception` (adarelib).
+- A tar inside LZ4/Snappy used the size cap from the environment instead of the one passed to
+  `resolve_archive_path`; a stream over the cap is now a size-cap error, not "single-file
+  stream" (adarelib).
+- An invalid `!re` pattern or an unknown placeholder gave FAILED ("no match") instead of
+  ERROR in every collection (adarelib, adare). `compare_with_placeholder` now raises
+  `PlaceholderError`, which the `@testfunction` decorator reports as ERROR; no collection turns
+  it into a mismatch any more, so `expected_count: 0` can no longer pass on a broken pattern.
+  A literal `!re` that does not compile is a playbook load error.
+- `text.occurrence_count` / `text.line_count` / `standard.file_content_contains` searched a
+  `!re` placeholder literally (`{{ regex_0_resolved }}`); they now refuse it with an ERROR
+  that names the function to use instead. `standard.file_content_contains` with an unknown
+  `content_type` is an ERROR (it searched text).
+- Host mode, plain path: when the guest said "not found", a copy an earlier test pulled into
+  the mirror was still read. It is now removed first. A failed guest glob command (QGA or
+  GuestFS) is an ERROR; it looked like "no match", so `file_does_not_exist` could pass on a
+  transport error.
+- `jsonl.line_count` `{min, max}`: other keys, negative or non-integer bounds and min > max
+  are an ERROR (they were used as given). `xml.element_count` and `sqlite.query_result`
+  validate `expected_count` / `comparison_type` like the other count functions.
+- JSON, JSONL and CSV files were decoded with the guest's locale encoding: a UTF-8 file on a
+  Windows guest, a BOM or UTF-16 broke them. They now detect a BOM, BOM-less UTF-16 or else
+  read UTF-8; a new `encoding` parameter on `json.*`, `jsonl.*` and `csv.*` names another
+  encoding. CSV files are opened with `newline=''`, so quoted line breaks stay in one row.
+- Errors of the `standard.*` file tests show the `dst` as written, not an empty resolved path.
+- A `{{ variable }}` inside a `!re` pattern was never resolved, so the regex never matched
+  (adare); it is now replaced by the variable's value, always regex-escaped (also a value that
+  looks like a regex, such as `report (1).txt`). An unknown variable in the pattern is an ERROR.
+- An `after`/`before` interval whose bounds were never saved or cannot be parsed is an ERROR
+  (it FAILED, so `expect_to_fail` passed). `excel.compare_files` with a sheet that cannot be
+  read is an ERROR (it was listed as a sheet mismatch).
+- A string variable of digits and dots (`build: "2.4"`, `"42"`) was typed as a timestamp and
+  rendered as an ISO date (adarelib); it stays a string.
+- `standard.file_permissions`: a symbolic value with a letter other than `r`/`w`/`x`/`-` in
+  its place (`rwsr-xr-x`, `zzzzzzzzz`) or a non-octal digit is an ERROR; unknown letters were
+  read as `-`, so the test FAILED. `standard.file_timestamps`: `time_format` is tried before
+  the Unix-seconds reading, as documented (`20240115` with `%Y%m%d` was read as 1970).
+- An LZ4 block whose header announces fewer bytes than it holds is reported as corrupt, not
+  as over the size cap (adarelib).
+- `!re`/`!timestamp` tests in a playbook **without `variables:`** lost their placeholder
+  metadata (no registry to store it in), so every such test was an ERROR (adare); the
+  metadata is now kept without a registry.
+- Host mode: a glob whose base directory exists but cannot be listed is an ERROR, on Linux
+  (`ls … || true` read it as "no match") and Windows (access denied was silenced), so a
+  `file_does_not_exist` or `expected_count: 0` test cannot pass on it.
+- Docs: playbook examples use real actions and testfunctions (the test-driven analysis and
+  diff-analysis guides, the `dir_exists` pages and the filter examples in the action
+  reference showed invented ones); a unit test now parses every complete playbook in the docs.
+- `adare test dry-run --param entry=[a, b]` passed the list as a string, which became a list of
+  characters; `[...]`/`{...}` values of list/dict parameters are read as YAML flow lists/maps now
+  (a pattern such as `regex=[Ee]rror` stays a string). Dry-run reports a
+  renamed function or parameter instead of "not found" / ignoring it. An invalid regex
+  parameter is reported as ERROR without a stack trace.
 
 ## [adare 0.1.1] - 2026-11-22
 

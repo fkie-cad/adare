@@ -27,10 +27,10 @@ Parameters
      - **Required.** The file path to read and test. Supports glob patterns for dynamic path resolution.
    * - ``content``
      - string
-     - **Required.** The content to search for within the file.
+     - **Required.** The content to search for within the file (case-sensitive substring). A ``!re`` or ``!timestamp`` placeholder is an ERROR: for patterns use :doc:`file_content_matches_regex`. To count occurrences, search several encodings at once or assert that a value is gone from a binary file, use :doc:`../text/occurrence_count`.
    * - ``content_type``
      - string
-     - **Optional.** Either "string" (default) or "bytes". Determines how content is interpreted.
+     - **Optional.** Either "string" (default) or "bytes". Determines how content is interpreted. In "bytes" mode ``content`` may hold only ASCII characters and Python escapes (``\x00``, ``\n``, ``\\``); a non-ASCII character or an unknown escape is an error.
    * - ``encoding``
      - string
      - **Optional.** Text encoding to use when reading the file for string content (default: "utf-8"). Ignored for byte content. Common values: "utf-8", "utf-16", "latin-1", "ascii". Use "BOM" to auto-detect encoding from file's Byte Order Mark.
@@ -167,6 +167,10 @@ Content Type Details
 **Byte Content**
   - File is read in binary mode
   - Content parameter is parsed for escape sequences (\\x41, \\n, \\t, etc.)
+  - Only ASCII characters and escapes are allowed: a literal non-ASCII character (``ä``), an
+    unknown escape (``\\q``), a ``\\u`` escape or an octal escape above ``\\377`` is an
+    error, never a guessed encoding. Write ``\\xNN`` escapes for each byte, or search text in
+    "string" mode with an ``encoding``
   - Search is performed on raw byte data
   - Suitable for binary files, executables, or specific byte pattern detection
 
@@ -197,6 +201,12 @@ Return Values
 
   - The specified content is not found in the file
   - File is empty and content is expected
+
+**Error**
+  Returns error when:
+
+  - ``content_type: bytes`` and ``content`` holds a non-ASCII character or an invalid escape
+  - The file does not exist, or a glob matches no file or more than one
 
 **Execution Error**
   Returns execution error when:

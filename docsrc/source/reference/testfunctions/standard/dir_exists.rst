@@ -47,9 +47,10 @@ After Directory Creation
 .. code-block:: yaml
 
    actions:
-     - right_click:
+     - click:
          target:
            text: "Desktop"
+         type: right
      - click:
          target:
            text: "New Folder"

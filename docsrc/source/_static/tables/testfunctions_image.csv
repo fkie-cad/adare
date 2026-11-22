@@ -1,0 +1,6 @@
+Function Name,S,Description,Parameters
+:doc:`dimensions_match <../image/dimensions_match>`,:status-tested:`●`,Tests if an image has the expected width and/or height in pixels,"dst (str), width* (int), height* (int)"
+:doc:`exif_value_count <../image/exif_value_count>`,:status-tested:`●`,Tests the number of occurrences of an EXIF tag (optionally with a matching value),"dst (str), tag (str/int), expected_count (int), expected_value* (str/int/float/bool), regex_match* (bool), comparison_type* (str)"
+:doc:`exif_value_matches <../image/exif_value_matches>`,:status-tested:`●`,"Tests if an EXIF tag (IFD0, Exif or GPS IFD) equals or matches an expected value","dst (str), tag (str/int), expected_value (str/int/float/bool), regex_match* (bool), wildcard_mode* (str)"
+:doc:`png_text_count <../image/png_text_count>`,:status-tested:`●`,Tests the number of PNG text chunks with a keyword (optionally with a matching text),"dst (str), keyword (str), expected_count (int), expected_value* (str/int/float/bool), regex_match* (bool), comparison_type* (str)"
+:doc:`png_text_matches <../image/png_text_matches>`,:status-tested:`●`,Tests if a PNG text chunk (tEXt/zTXt/iTXt) with a keyword exists or matches an expected value,"dst (str), keyword (str), expected_value* (str/int/float/bool), regex_match* (bool), wildcard_mode* (str)"

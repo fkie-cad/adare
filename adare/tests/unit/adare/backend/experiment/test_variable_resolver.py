@@ -29,6 +29,50 @@ def _resolver(variables: dict | None = None, with_filters: bool = False) -> Vari
 
 
 class TestYamlTags:
+    def test_tags_keep_their_metadata_without_a_registry(self):
+        # a playbook without `variables:` has no registry; its !re/!timestamp tests still need metadata
+        from adarelib.testset.basictest import BasicTest
+
+        resolver = VariableResolver(variable_registry=None)
+        out = resolver.process_data(
+            {
+                'parameter': {
+                    'v': YamlRegexString(r'^a\d+$'),
+                    't': YamlTimestamp(timestamp='2026-01-01T00:00:00', tolerance=5),
+                }
+            },
+            {},
+        )
+        metadata = resolver.get_placeholder_metadata()
+        regex_name = out['parameter']['v'].strip('{} ')
+        assert metadata[regex_name]['type'] == 'regex'
+        test = BasicTest(name='t', parameter=None, description='', variable_metadata=metadata)
+        assert test.compare_with_placeholder(regex_name, 'a12')[0]
+        timestamp_name = out['parameter']['t'].strip('{} ')
+        assert metadata[timestamp_name]['type'] == 'timestamp'
+        assert test.compare_with_placeholder(timestamp_name, '2026-01-01T00:00:03')[0]
+
+    @pytest.mark.parametrize(
+        'value, pattern',
+        [('2.4', r'^2\.4\.\d+$'), ('report (1).txt', r'^report\ \(1\)\.txt\.\d+$'), ('a+b', r'^a\+b\.\d+$')],
+    )
+    def test_variable_in_regex_tag_is_matched_literally(self, value, pattern):
+        # even a value that looks like a regex (and is typed REGEX) is text to find
+        resolver = _resolver({'name': Variable.auto_infer(value)})
+        resolver.process_data({'parameter': {'v': YamlRegexString(r'^{{ name }}\.\d+$')}}, {})
+        assert resolver.get_placeholder_metadata()['regex_0_resolved']['resolved_value'] == pattern
+
+    def test_unknown_variable_in_regex_tag_stays_and_is_an_error_when_compared(self):
+        from adarelib.testset.basictest import BasicTest, PlaceholderError
+
+        resolver = _resolver()
+        resolver.process_data({'parameter': {'v': YamlRegexString('^{{ nmae }}$')}}, {})
+        metadata = resolver.get_placeholder_metadata()
+        assert metadata['regex_0_resolved']['resolved_value'] == '^{{ nmae }}$'
+        test = BasicTest(name='t', parameter=None, description='', variable_metadata=metadata)
+        with pytest.raises(PlaceholderError, match="unknown variable 'nmae'"):
+            test.compare_with_placeholder('regex_0_resolved', 'x')
+
     def test_regex_tag_in_entry_list(self):
         resolver = _resolver()
         out = resolver.process_data({'parameter': {'entry': ['a', YamlRegexString('.*')]}}, {'x': 1})

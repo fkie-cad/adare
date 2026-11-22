@@ -40,7 +40,7 @@ time.
 | Category | Meaning |
 | --- | --- |
 | `FILE_BASED` | Pull the target file via QGA, rewrite `dst`, run `test()` on the host. |
-| `FILE_CONTENT` | Same as FILE_BASED, for structured files (JSON, CSV, XML, SQLite). |
+| `FILE_CONTENT` | Same as FILE_BASED, for files whose content is read (JSON, CSV, XML, SQLite, INI, images, ...). |
 | `QGA_PROBE` | Run a probe command on the guest via QGA, build the `TestResult` on the host. |
 | `HOST_NATIVE` | Already runs on the host (e.g. visual tests). |
 | `AGENT_ONLY` | Requires the in-guest agent; **not** supported in host mode (the default). |
@@ -93,6 +93,35 @@ prefer catching *specific* exceptions (e.g. `FileNotFoundError`, `json.JSONDecod
 as *failed* makes a wrong path, a typo or a failed pull pass every negative test. Only a
 test whose subject is existence (`standard.file_exists`, `file_does_not_exist`,
 `dir_exists`) may pass or fail on a missing path.
+
+## Shared helpers (adarelib, shipped to the guest with the agent)
+
+- `adarelib.testset.structured`: complete `contains_key` / `value_matches` / `value_count`
+  bodies for any format that loads into dicts and lists. Describe the format once with
+  `StructuredFormat(label, load, errors)` and delegate (see the plist, yaml and toml
+  collections). Also `compare_value`, `compare_count` (`equals`, `greater`, `less`,
+  `greater_equal`, `less_equal`) and `count_parameter_errors` for your own count functions.
+- `adarelib.testset.compare`: key paths (`a.b`, `*`, `[*]`, `[0]`, `['a.b']`).
+- `adarelib.testset.content`: `read_bytes_capped`, `decode_text` (BOM / UTF-16 aware).
+
+Prefer a count function (`expected_count`, `0` = absent) over a separate "absent" test.
+
+## Parameter names (use the shared ones)
+
+The bundled collections use one name per concept, so playbook authors can guess them:
+
+- `dst`: the file (globs, `archive!member`); `content`: a string to find in it.
+- `expected_value`: the value to compare (required unless the function also counts);
+  `regex_match: bool`: treat it as a Python regex searched with `re.search` (unanchored).
+- `expected_count: int` + `comparison_type` (`equals`, `greater`, `less`, `greater_equal`,
+  `less_equal`) for every count; no default for `expected_count`.
+- `wildcard_mode` (`any`/`all`) when a path selects several values; `case_sensitive: bool`.
+- `encoding: str | None = None` (auto: BOM / UTF-16 / UTF-8) for text formats.
+
+An invalid `!re` or an unknown placeholder in `expected_value` is an ERROR, never a
+failure. If a parameter or function is renamed, add the old name to
+`adarelib/adarelib/testset/renames.py` so old playbooks get "X was renamed to Y" instead
+of a bare type error.
 
 Docstring examples use neutral made-up paths (`/home/user/data/app.db`), never a real
 application's paths or table names; `test_neutral_docstrings.py` checks this.

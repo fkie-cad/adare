@@ -68,9 +68,7 @@ class TestSheetExists:
             "test.xlsx", {"Sheet1": [["A", "B"], ["1", "2"]], "Data": [["X", "Y"], ["3", "4"]]}
         )
 
-        test = SheetExists(
-            name="test_sheet_exists", parameter=SheetExistsParameter(dst=str(excel_file), sheet_name="Data")
-        )
+        test = SheetExists(name="test_sheet_exists", parameter=SheetExistsParameter(dst=str(excel_file), sheet="Data"))
         result = test.test()
 
         assert_test_success(result)
@@ -80,7 +78,7 @@ class TestSheetExists:
         excel_file = create_excel_file("test.xlsx", {"Sheet1": [["A", "B"], ["1", "2"]]})
 
         test = SheetExists(
-            name="test_sheet_exists", parameter=SheetExistsParameter(dst=str(excel_file), sheet_name="NonExistent")
+            name="test_sheet_exists", parameter=SheetExistsParameter(dst=str(excel_file), sheet="NonExistent")
         )
         result = test.test()
 
@@ -94,7 +92,7 @@ class TestSheetExists:
 
         test = SheetExists(
             name="test_sheet_exists",
-            parameter=SheetExistsParameter(dst=str(excel_file), sheet_name=r"Data_\d{4}", regex_match=True),
+            parameter=SheetExistsParameter(dst=str(excel_file), sheet=r"Data_\d{4}", regex_match=True),
         )
         result = test.test()
 
@@ -106,7 +104,7 @@ class TestSheetExists:
 
         test = SheetExists(
             name="test_sheet_exists",
-            parameter=SheetExistsParameter(dst=str(excel_file), sheet_name=r"Data_\d{4}", regex_match=True),
+            parameter=SheetExistsParameter(dst=str(excel_file), sheet=r"Data_\d{4}", regex_match=True),
         )
         result = test.test()
 
@@ -117,7 +115,7 @@ class TestSheetExists:
         """Test error when file doesn't exist."""
         test = SheetExists(
             name="test_sheet_exists",
-            parameter=SheetExistsParameter(dst=str(tmp_path / "nonexistent.xlsx"), sheet_name="Sheet1"),
+            parameter=SheetExistsParameter(dst=str(tmp_path / "nonexistent.xlsx"), sheet="Sheet1"),
         )
         result = test.test()
 
@@ -133,9 +131,7 @@ class TestSheetExists:
         df = pd.DataFrame()
         df.to_excel(excel_file, index=False, header=False)
 
-        test = SheetExists(
-            name="test_sheet_exists", parameter=SheetExistsParameter(dst=str(excel_file), sheet_name="Data")
-        )
+        test = SheetExists(name="test_sheet_exists", parameter=SheetExistsParameter(dst=str(excel_file), sheet="Data"))
         result = test.test()
 
         # Should fail because "Data" sheet doesn't exist

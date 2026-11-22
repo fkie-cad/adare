@@ -13,7 +13,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from adare.backend.testfunction.catalog import CatalogEntry
+from adare.backend.testfunction.catalog import CatalogEntry, use_for
 from adare.frontend.terminal.console import DefaultConsole
 
 
@@ -27,6 +27,12 @@ def output_mode(formatter) -> str:
 
 def _default_text(entry_param) -> str:
     return '' if entry_param.required else repr(entry_param.default)
+
+
+def _prose(doc: str) -> str:
+    """Docstring text before ``Args:``, without the ``Use for:`` paragraph (shown on its own)."""
+    paragraphs = doc.split('\nArgs:')[0].strip().split('\n\n')
+    return '\n\n'.join(p.strip() for p in paragraphs if p.strip() and not p.strip().startswith('Use for:'))
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +98,9 @@ def _info_panel(entry: CatalogEntry, version: int | None) -> Panel:
         meta += '\n[yellow]bundled but not synced: run `adare test sync`[/yellow]'
     parts = [Text(entry.summary, style='bold'), Text.from_markup(meta)]
     if entry.doc:
-        parts.append(Text(entry.doc.split('\nArgs:')[0].strip()))
+        parts.append(Text(_prose(entry.doc)))
+    if use_for(entry.doc):
+        parts.append(Text.assemble(('Use for: ', 'bold green'), use_for(entry.doc)))
     parts += [
         params,
         Text('example (paste into the playbook):', style='bold'),
@@ -115,7 +123,10 @@ def render_entry(
         formatter.print_or_save({**entry.to_dict(), 'version': version}, output_file, False)
     elif mode == 'plain':
         header = entry.signature() + (f'  v{version}' if version else '')
-        lines = [header, entry.summary, '', 'parameter\ttype\trequired\tdefault\tdescription']
+        lines = [header, entry.summary]
+        if use_for(entry.doc):
+            lines.append(f'Use for: {use_for(entry.doc)}')
+        lines += ['', 'parameter\ttype\trequired\tdefault\tdescription']
         lines += [f'{p.name}\t{p.type}\t{str(p.required).lower()}\t{_default_text(p)}\t{p.doc}' for p in entry.params]
         lines += ['', entry.example_yaml().rstrip()]
         print('\n'.join(lines))
@@ -144,6 +155,8 @@ def catalog_markdown(entries: list[CatalogEntry]) -> str:
             collection = entry.collection
             out += [f'## {collection}', '']
         out += [f'### `{entry.dotnotation}`', '', entry.summary, '']
+        if use_for(entry.doc):
+            out += [f'**Use for:** {use_for(entry.doc)}', '']
         out += [f'*{entry.category}*, os: {entry.os}', '']
         if entry.params:
             out += ['| parameter | type | default | description |', '|---|---|---|---|']

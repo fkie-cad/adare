@@ -13,7 +13,7 @@ The **Linux** testset provides Linux-specific system testing capabilities for AD
 Overview
 --------
 
-The Linux testset enables validation of Linux system state and configuration. It includes functions to check systemd service status, verify running processes, validate user accounts, and search log files for specific entries using Linux-native tools and APIs.
+The Linux testset enables validation of Linux system state and configuration. It includes functions to check systemd service status, verify running processes, validate user accounts, and search log files for specific entries. ``log_entry_exists`` reads the log file itself (parameters ``dst``, ``content``, ``regex_match``), so unlike the other three it also works in host mode and on rotated, compressed logs (``/var/log/syslog.2.gz!``).
 
 Test Functions
 --------------

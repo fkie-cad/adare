@@ -361,3 +361,180 @@ def test_companions_are_extracted_next_to_member(tmp_path, work):
     res = _resolve(f'{archive}!/records.db', work, companions=('-wal', '-journal'))
     assert _read(res.paths[0] + '-wal') == b'wal'
     assert not os.path.exists(res.paths[0] + '-journal')
+
+
+# --- LZ4 -------------------------------------------------------------------
+
+
+def _lz4_frame(data: bytes) -> bytes:
+    """An LZ4 frame holding ``data`` as one uncompressed block (independent blocks, 4 MiB)."""
+    from adarelib.testset import lz4
+
+    descriptor = b'\x60\x70'
+    hc = (lz4.xxh32(descriptor) >> 8) & 0xFF
+    return (
+        lz4.FRAME_MAGIC
+        + descriptor
+        + bytes([hc])
+        + (0x80000000 | len(data)).to_bytes(4, 'little')
+        + data
+        + b'\x00\x00\x00\x00'
+    )
+
+
+def _block_with_header(data: bytes) -> bytes:
+    """The block-with-header format: magic, u32 size, one LZ4 block of literals only."""
+    from adarelib.testset import lz4
+
+    n = len(data)
+    if n < 15:
+        block = bytes([n << 4]) + data
+    else:
+        rest, ext = n - 15, b''
+        while rest >= 255:
+            ext += b'\xff'
+            rest -= 255
+        block = b'\xf0' + ext + bytes([rest]) + data
+    return lz4.BLOCK_HEADER_MAGIC + n.to_bytes(4, 'little') + block
+
+
+def test_jsonlz4_block_with_header(tmp_path, work):
+    path = tmp_path / 'store.jsonlz4'
+    path.write_bytes(_block_with_header(CONFIG))
+    assert detect_format(str(path)) == 'lz4_block'
+
+    res = _resolve(f'{path}!', work)
+
+    assert _read(res.paths[0]) == CONFIG
+    assert os.path.basename(res.paths[0]) == 'store.json'
+    assert 'decompressed content' in res.details[0]
+
+
+def test_lz4_frame(tmp_path, work):
+    path = tmp_path / 'data.json.lz4'
+    path.write_bytes(_lz4_frame(CONFIG))
+    assert detect_format(str(path)) == 'lz4_frame'
+
+    res = _resolve(f'{path}!', work)
+
+    assert _read(res.paths[0]) == CONFIG
+    assert os.path.basename(res.paths[0]) == 'data.json'
+
+
+def test_tar_inside_lz4(tmp_path, work):
+    tar = _tar(tmp_path / 'b.tar', {'etc/config.json': CONFIG})
+    path = tmp_path / 'b.tar.lz4'
+    path.write_bytes(_lz4_frame(_read(tar)))
+    assert detect_format(str(path)) == 'tar.lz4_frame'
+
+    assert _read(_resolve(f'{path}!/etc/config.json', work).paths[0]) == CONFIG
+
+
+def test_jsonlz4_inside_zip(tmp_path, work):
+    archive = _zip(tmp_path / 'profile.zip', {'p/store.jsonlz4': _block_with_header(CONFIG)})
+    assert _read(_resolve(f'{archive}!/p/store.jsonlz4!', work).paths[0]) == CONFIG
+
+
+@pytest.mark.parametrize(
+    'content',
+    [
+        b'mozLz40\x00\x20\x00\x00\x00\x50hel',  # truncated block
+        b'mozLz40\x00\x09\x00\x00\x00\x50hello',  # size header does not match
+        b'\x04\x22\x4d\x18\x64\x40\x00',  # bad header checksum
+        b'\x02\x21\x4c\x18' + b'\x00' * 8,  # legacy frame: unsupported
+    ],
+)
+def test_corrupt_lz4_is_an_archive_error(tmp_path, work, content):
+    path = tmp_path / 'bad.jsonlz4'
+    path.write_bytes(content)
+    with pytest.raises(ArchiveError, match='cannot read'):
+        _resolve(f'{path}!', work)
+
+
+def test_lz4_size_cap(tmp_path, work):
+    path = tmp_path / 'big.jsonlz4'
+    path.write_bytes(_block_with_header(b'x' * 5000))
+    with pytest.raises(ArchiveError, match='size cap'):
+        _resolve(f'{path}!', work, max_bytes=1000)
+
+
+# --- Snappy ------------------------------------------------------------------
+
+
+def _snappy_framed(data: bytes) -> bytes:
+    """A Snappy framed stream holding ``data`` as uncompressed chunks of at most 64 KiB."""
+    from adarelib.testset import snappy
+
+    out = snappy.STREAM_IDENTIFIER
+    for start in range(0, len(data), 65536):
+        piece = data[start : start + 65536]
+        body = snappy.masked_crc32c(piece).to_bytes(4, 'little') + piece
+        out += b'\x01' + len(body).to_bytes(3, 'little') + body
+    return out
+
+
+def test_snappy_framed(tmp_path, work):
+    path = tmp_path / 'data.json.sz'
+    path.write_bytes(_snappy_framed(CONFIG))
+    assert detect_format(str(path)) == 'snappy_framed'
+
+    res = _resolve(f'{path}!', work)
+
+    assert _read(res.paths[0]) == CONFIG
+    assert os.path.basename(res.paths[0]) == 'data.json'
+    assert 'decompressed content' in res.details[0]
+
+
+def test_tar_inside_snappy(tmp_path, work):
+    tar = _tar(tmp_path / 'b.tar', {'etc/config.json': CONFIG, 'big.bin': os.urandom(100_000)})
+    path = tmp_path / 'b.tar.sz'
+    path.write_bytes(_snappy_framed(_read(tar)))
+    assert detect_format(str(path)) == 'tar.snappy_framed'
+
+    assert _read(_resolve(f'{path}!/etc/config.json', work).paths[0]) == CONFIG
+
+
+def test_snappy_inside_zip(tmp_path, work):
+    archive = _zip(tmp_path / 'bundle.zip', {'d/data.json.sz': _snappy_framed(CONFIG)})
+    assert _read(_resolve(f'{archive}!/d/data.json.sz!', work).paths[0]) == CONFIG
+
+
+@pytest.mark.parametrize(
+    'content',
+    [
+        _snappy_framed(CONFIG)[:-3],  # truncated chunk
+        _snappy_framed(CONFIG)[:14] + b'\x00' + _snappy_framed(CONFIG)[15:],  # checksum mismatch
+        _snappy_framed(CONFIG) + b'\x02\x01\x00\x00x',  # reserved chunk type
+        b'\xff\x06\x00\x00sNaPpY\x00\x05\x00\x00\x00\x00\x00\x00\x05',  # corrupt block
+    ],
+)
+def test_corrupt_snappy_is_an_archive_error(tmp_path, work, content):
+    path = tmp_path / 'bad.json.sz'
+    path.write_bytes(content)
+    with pytest.raises(ArchiveError, match='cannot read'):
+        _resolve(f'{path}!', work)
+
+
+def test_snappy_size_cap(tmp_path, work):
+    path = tmp_path / 'big.sz'
+    path.write_bytes(_snappy_framed(b'x' * 5000))
+    with pytest.raises(ArchiveError, match='size cap'):
+        _resolve(f'{path}!', work, max_bytes=1000)
+
+
+# --- max_bytes reaches the tar-in-stream containers ---------------------------
+
+
+@pytest.mark.parametrize('compress', ['lz4', 'snappy'])
+def test_tar_inside_stream_honours_the_max_bytes_argument(tmp_path, work, monkeypatch, compress):
+    """The cap passed to resolve_archive_path applies, not only the one from the environment."""
+    monkeypatch.delenv(MAX_BYTES_ENV, raising=False)  # environment: the 1 GiB default
+    tar = _tar(tmp_path / 'b.tar', {'etc/big.bin': b'x' * 50_000})
+    path = tmp_path / f'b.tar.{compress}'
+    path.write_bytes(_lz4_frame(_read(tar)) if compress == 'lz4' else _snappy_framed(_read(tar)))
+
+    assert _read(_resolve(f'{path}!/etc/big.bin', work).paths[0]) == b'x' * 50_000
+    with pytest.raises(ArchiveError) as caught:
+        _resolve(f'{path}!/etc/big.bin', work, max_bytes=20_000)
+    assert 'single-file' not in str(caught.value)  # still read as a tar, refused by the cap
+    assert 'cap' in str(caught.value) or 'limit' in str(caught.value) or 'max' in str(caught.value)

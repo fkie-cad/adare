@@ -29,3 +29,17 @@ async def test_structure_host_test_keeps_placeholder_metadata():
     assert test.variable_metadata == metadata
     ok, msg = test.compare_with_placeholder('t0_resolved', '2026-10-24T12:00:01Z')
     assert ok, msg
+
+
+async def test_structure_host_test_names_a_renamed_parameter():
+    # cattrs ignores unknown keys: without this check the old value would silently be dropped
+    loader = object.__new__(TestLoader)
+    loader.get_test_class = lambda name: pytest.fail('renames are checked before the class lookup')
+    resolved_test = {
+        'name': 'gone',
+        'function': 'sqlite.query_result',
+        'parameter': {'dst': '/x.db', 'query': 'SELECT 1', 'expected_rows': 0},
+    }
+
+    with pytest.raises(ValueError, match='"expected_rows" was renamed to "expected_count"'):
+        await loader.structure_host_test('gone', resolved_test)

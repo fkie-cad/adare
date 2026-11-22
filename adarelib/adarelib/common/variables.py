@@ -340,9 +340,9 @@ class Variable:
     @staticmethod
     def _looks_like_timestamp(value: str) -> bool:
         """Heuristic to detect timestamp strings."""
-        # Avoid matching version numbers (e.g. 4.13.0) as timestamps
-        # If it contains only digits and dots, and has more than one dot, it's likely a version
-        if all(c.isdigit() or c == '.' for c in value) and value.count('.') > 1:
+        # Digits and dots only are numbers or versions (2.4, 4.13.0, 42), not timestamps:
+        # dateutil would read "2.4" as 4 February and the variable would render as an ISO date
+        if all(c.isdigit() or c == '.' for c in value):
             return False
 
         try:

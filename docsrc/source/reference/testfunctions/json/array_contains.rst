@@ -28,9 +28,12 @@ Parameters
    * - ``array_path``
      - string
      - **Required.** The path to the JSON array using dot notation (e.g., "users" or "config.servers").
-   * - ``expected_element``
-     - string/int/float/bool/dict/list
-     - **Required.** The element that should exist in the array. Supports placeholders for pattern matching.
+   * - ``expected_value``
+     - string/int/float/bool/dict/list/null
+     - **Required.** An element equal to it must be in the array (type-sensitive ``==``; dicts and lists must match exactly). A ``!re``/``!timestamp`` placeholder passes if any element's string form matches; an invalid regex or unknown placeholder is an ERROR. Renamed from ``expected_element``.
+   * - ``encoding``
+     - string
+     - **Optional.** ``null`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. An unknown name is an ERROR.
 
 Usage Example
 -------------
@@ -46,7 +49,7 @@ Basic String Array Element
        parameter:
          dst: '/home/adare/test_json/config.json'
          array_path: 'features'
-         expected_element: 'logging'
+         expected_value: 'logging'
        description: "Test json_array_contains with string element"
 
 Numeric Array Element
@@ -60,7 +63,7 @@ Numeric Array Element
        parameter:
          dst: '/home/adare/test_json/users.json'
          array_path: 'user_ids'
-         expected_element: 123
+         expected_value: 123
        description: "Test json_array_contains with integer element"
 
 Complex Object in Array
@@ -74,7 +77,7 @@ Complex Object in Array
        parameter:
          dst: '/home/adare/test_json/users.json'
          array_path: 'permissions'
-         expected_element: {"action": "read", "resource": "users"}
+         expected_value: {"action": "read", "resource": "users"}
        description: "Test json_array_contains with object element"
 
 Expected Failure Cases
@@ -89,7 +92,7 @@ Expected Failure Cases
        parameter:
          dst: '/home/adare/test_json/config.json'
          array_path: 'features'
-         expected_element: 'nonexistent_feature'
+         expected_value: 'nonexistent_feature'
        description: "Test json_array_contains with non-existent element"
 
      - name: test_json_array_contains_not_array
@@ -98,7 +101,7 @@ Expected Failure Cases
        parameter:
          dst: '/home/adare/test_json/config.json'
          array_path: 'app_name'
-         expected_element: 'anything'
+         expected_value: 'anything'
        description: "Test json_array_contains with non-array path"
 
 Common Use Cases
@@ -128,9 +131,9 @@ Array Element Matching
   - Arrays and objects are compared by structure and content
 
 **Placeholder Matching**
-  - Use placeholders like ``{timestamp}`` for pattern-based matching
-  - Enables flexible validation of formatted strings within arrays
-  - Supports regex patterns and timestamp tolerance matching
+  - Use a ``!re`` or ``!timestamp`` placeholder for pattern-based matching
+  - The array passes if the string form of any element matches the placeholder
+  - An invalid regex or unknown placeholder is an execution error
 
 Return Values
 -------------
@@ -151,7 +154,8 @@ Return Values
   - The file does not exist, or a glob matches no file or more than one
   - Invalid JSON syntax in the file
   - Permission denied accessing the file
-  - Placeholder comparison encounters errors
+  - ``expected_value`` holds an invalid ``!re`` or an unknown placeholder
+  - ``encoding`` is unknown
   - System I/O errors occur
 
 Example Results

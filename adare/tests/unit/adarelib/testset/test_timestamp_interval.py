@@ -13,7 +13,7 @@ from adarelib.testset.yaml.customtags import YamlTimestamp
 
 pytestmark = pytest.mark.unit
 
-UTC = datetime.UTC
+UTC = datetime.timezone.utc
 T0 = datetime.datetime(2026, 10, 24, 12, 0, 0, tzinfo=UTC)
 
 
@@ -111,10 +111,13 @@ class TestBasicTestIntervalComparison:
         ok, msg = _test_with(_interval_metadata()).compare_with_placeholder('ts_resolved', str(T0.timestamp() + 1.5))
         assert ok, msg
 
-    def test_unresolved_bound_fails_clearly(self):
+    def test_unresolved_bound_is_an_error(self):
+        # nothing was compared, so an absence test must not pass on it: PlaceholderError = ERROR
+        from adarelib.testset.basictest import PlaceholderError
+
         metadata = _interval_metadata(interval=['{{ t0 }}', '{{ t1 }}'])
-        ok, msg = _test_with(metadata).compare_with_placeholder('ts_resolved', '2026-10-24T12:00:04Z')
-        assert not ok and 'save_timestamp' in msg
+        with pytest.raises(PlaceholderError, match='save_timestamp'):
+            _test_with(metadata).compare_with_placeholder('ts_resolved', '2026-10-24T12:00:04Z')
 
     def test_local_artifact_read_in_guest_timezone(self):
         # The artifact stores guest local time without an offset (like .trashinfo DeletionDate).

@@ -7,6 +7,7 @@ with caching to avoid re-downloading the same file multiple times.
 
 import contextlib
 import logging
+import shlex
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -19,6 +20,89 @@ log = logging.getLogger(__name__)
 
 #: Error texts QGA returns when the path does not exist (Linux errno / Windows Win32 message)
 _NOT_FOUND_MARKERS = ('no such file', 'cannot find the file', 'cannot find the path', 'not found', 'does not exist')
+
+
+def shell_glob_word(pattern: str) -> str:
+    """``pattern`` as one POSIX shell word: ``*``, ``?`` and ``[...]`` stay glob characters,
+    everything else is quoted (spaces, quotes, ``;``, ``$`` are literal, never shell syntax)."""
+    parts: list[str] = []
+    literal = ''
+    i = 0
+    while i < len(pattern):
+        char = pattern[i]
+        closing = _bracket_end(pattern, i) if char == '[' else -1
+        if char in '*?' or closing > 0:
+            if literal:
+                parts.append(shlex.quote(literal))
+                literal = ''
+            if char in '*?':
+                parts.append(char)
+                i += 1
+                continue
+            body = pattern[i + 1 : closing]
+            negate = '!' if body[:1] in ('!', '^') else ''
+            body = body[1:] if negate else body
+            parts.append(f'[{negate}{shlex.quote(body)}]')
+            i = closing + 1
+            continue
+        literal += char
+        i += 1
+    if literal:
+        parts.append(shlex.quote(literal))
+    return ''.join(parts) or "''"
+
+
+def _bracket_end(pattern: str, start: int) -> int:
+    """Index of the ``]`` closing the bracket expression at ``start``, or -1 (a literal ``[``)."""
+    i = start + 1
+    if i < len(pattern) and pattern[i] in '!^':
+        i += 1
+    if i < len(pattern) and pattern[i] == ']':  # a leading ] is a member
+        i += 1
+    return pattern.find(']', i)
+
+
+def glob_base(pattern: str) -> str:
+    """The deepest directory of ``pattern`` before its first glob component (for a plain path: its
+    parent); ``''`` when there is none (a relative pattern)."""
+    first = next(
+        (i for i, c in enumerate(pattern) if c in '*?' or (c == '[' and _bracket_end(pattern, i) > 0)), len(pattern)
+    )
+    prefix = pattern[:first]
+    cut = max(prefix.rfind('/'), prefix.rfind('\\'))
+    if cut < 0:
+        return ''
+    base = prefix[:cut] or prefix[: cut + 1]  # '/x*' -> '/'
+    return base + prefix[cut] if base.endswith(':') else base  # 'C:\\*' -> 'C:\\', not 'C:'
+
+
+#: exit code of a listing whose base directory exists but cannot be read
+UNREADABLE_BASE_EXIT = 3
+
+
+def _posix_base_guard(pattern: str) -> str:
+    """Shell prefix that fails (exit 3) when the glob's base directory exists but cannot be listed:
+    the shell would expand the glob to nothing, which reads as "no match"."""
+    base = glob_base(pattern)
+    if not base:
+        return ''
+    q = shlex.quote(base)
+    return (
+        f'if [ -d {q} ] && ! {{ [ -r {q} ] && [ -x {q} ]; }}; then '
+        f'echo "cannot read directory "{q} >&2; exit {UNREADABLE_BASE_EXIT}; fi; '
+    )
+
+
+#: PowerShell suffix: an access-denied error while listing is a failure, not "no match"
+_POWERSHELL_DENIED_EXIT = (
+    '; if ($globErr | Where-Object { $_.Exception -is [System.UnauthorizedAccessException] }) '
+    f'{{ exit {UNREADABLE_BASE_EXIT} }}'
+)
+
+
+def powershell_literal(text: str) -> str:
+    """``text`` as a single-quoted PowerShell string: no variable or subexpression expansion."""
+    return "'" + text.replace("'", "''") + "'"
 
 
 def is_not_found_error(message: str) -> bool:
@@ -162,21 +246,67 @@ class GuestFileProxy(VMOperationProxy):
 
         Returns:
             List of matching absolute paths on guest
+
+        Raises:
+            RuntimeError: the guest command failed, or the glob's base directory exists but cannot
+                be read (an empty list always means "no match"). Only the base directory is
+                checked: an unreadable directory *inside* the glob is skipped, as the shell does.
+                QGA usually runs as root/SYSTEM, where this does not happen.
         """
         if self.is_windows:
-            cmd = f'Get-ChildItem -Path "{pattern}" -ErrorAction SilentlyContinue | ForEach-Object {{ $_.FullName }}'
+            cmd = (
+                f'Get-ChildItem -Path {powershell_literal(pattern)} -ErrorAction SilentlyContinue '
+                f'-ErrorVariable globErr | ForEach-Object {{ $_.FullName }}' + _POWERSHELL_DENIED_EXIT
+            )
         else:
-            # Use find with -path for glob-like behavior, or ls for simple globs
-            cmd = f"ls -d {pattern} 2>/dev/null || true"
+            # no `ls`: its exit code is the same for "no match" and "cannot read"
+            cmd = _posix_base_guard(pattern) + (
+                f'for p in {shell_glob_word(pattern)}; do '
+                'if [ -e "$p" ] || [ -L "$p" ]; then printf \'%s\\n\' "$p"; fi; done'
+            )
 
         result = await self.vm.run_command(cmd, silent=True)
         if result.returncode != 0:
-            log.warning(f"GuestFileProxy: glob resolution failed for '{pattern}': {result.stderr}")
-            return []
+            raise RuntimeError(f"glob resolution failed for '{pattern}' (exit {result.returncode}): {result.stderr}")
 
         paths = [p.strip() for p in result.stdout.strip().split('\n') if p.strip()]
         log.debug(f"GuestFileProxy: glob '{pattern}' resolved to {len(paths)} paths")
         return paths
+
+    async def path_kinds(self, pattern: str) -> list[tuple[str, str]]:
+        """Existing guest paths matching ``pattern`` (glob or plain path) with their kind.
+
+        Kinds: ``file`` (regular file, also through a symlink), ``dir`` (also through a
+        symlink), ``other`` (broken symlink, device, socket, ...). Like
+        :meth:`resolve_guest_glob`, a failed command raises instead of looking like no match,
+        so a count can never pass on a transport error.
+
+        :raises RuntimeError: the guest command failed
+        """
+        has_glob = any(c in pattern for c in '*?[')
+        if self.is_windows:
+            path_arg = '-Path' if has_glob else '-LiteralPath'
+            cmd = (
+                f'Get-Item {path_arg} {powershell_literal(pattern)} -Force -ErrorAction SilentlyContinue '
+                '-ErrorVariable globErr | ForEach-Object { '
+                'if ($_.PSIsContainer) { "D:" + $_.FullName } else { "F:" + $_.FullName } }' + _POWERSHELL_DENIED_EXIT
+            )
+        else:
+            words = shell_glob_word(pattern) if has_glob else shlex.quote(pattern)
+            cmd = _posix_base_guard(pattern) + (
+                f'for p in {words}; do if [ -d "$p" ]; then echo "D:$p"; elif [ -f "$p" ]; then echo "F:$p"; '
+                f'elif [ -L "$p" ] || [ -e "$p" ]; then echo "O:$p"; fi; done'
+            )
+        result = await self.vm.run_command(cmd, silent=True)
+        if result.returncode != 0:
+            raise RuntimeError(f'listing {pattern} on the guest failed: {result.stderr}')
+        kinds = {'F': 'file', 'D': 'dir', 'O': 'other'}
+        found = []
+        for line in result.stdout.splitlines():
+            tag, sep, path = line.strip().partition(':')
+            if sep and tag in kinds and path:
+                found.append((path, kinds[tag]))
+        return found
 
     async def get_file_metadata(self, guest_path: str) -> FileMetadata:
         """Collect file metadata from guest via QGA stat command.
@@ -197,7 +327,7 @@ class GuestFileProxy(VMOperationProxy):
 
         if self.is_windows:
             cmd = (
-                f'$f = Get-Item -LiteralPath "{guest_path}" -Force; '
+                f'$f = Get-Item -LiteralPath {powershell_literal(guest_path)} -Force; '
                 f'"PERM:NA"; '
                 f'"OWNER:" + (Get-Acl $f.FullName).Owner; '
                 f'"SIZE:" + $f.Length; '
@@ -206,7 +336,7 @@ class GuestFileProxy(VMOperationProxy):
                 f'"CTIME:" + (Get-Date $f.CreationTimeUtc -UFormat "%s")'
             )
         else:
-            cmd = f"stat -c 'PERM:%a OWNER:%U GROUP:%G SIZE:%s MTIME:%Y ATIME:%X CTIME:%Z' '{guest_path}'"
+            cmd = f"stat -c 'PERM:%a OWNER:%U GROUP:%G SIZE:%s MTIME:%Y ATIME:%X CTIME:%Z' -- {shlex.quote(guest_path)}"
 
         result = await self.vm.run_command(cmd, silent=True)
         if result.returncode != 0:

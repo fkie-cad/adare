@@ -143,3 +143,17 @@ def test_idiom_templates_parse_and_validate(name):
     assert any(type(a).__name__ == 'ActionTestAction' for a in playbook.actions)
     errors, warnings = check_playbook_tests(path.read_text(), load_catalog())
     assert errors == [] and warnings == []
+
+
+def test_renamed_function_and_parameters_are_errors():
+    errors, warnings = _check('''
+tests:
+  - {name: a, function: csv.line_count, parameter: {dst: /x, entry: [a], expected_count: 1}}
+  - {name: b, function: xml.element_text_matches, parameter: {dst: /x, xpath: //a, expected_text: v}}
+actions:
+  - test: a
+  - test: b
+''')
+    assert 'test "a": testfunction csv.line_count was renamed to csv.row_count' in errors
+    assert 'test "b": xml.element_text_matches: parameter "expected_text" was renamed to "expected_value"' in errors
+    assert warnings == []  # the precise error replaces "unknown function/parameter" warnings

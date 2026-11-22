@@ -13,14 +13,20 @@ Strategy:
 """
 
 import asyncio
+import glob
 import logging
+import os
+import shutil
+import tempfile
 from datetime import datetime
+from pathlib import Path
 
 from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
 from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
 from adarelib.event.event import TestResult
 from adarelib.testset.archive import has_archive_separator, join_archive_path, split_archive_path
 from adarelib.testset.basictest import BasicTest, HostModeCategory
+from adarelib.testset.testfunction import get_testclass_from_testfunction
 
 log = logging.getLogger(__name__)
 
@@ -76,19 +82,9 @@ class GuestToHostTestExecutor:
 
         for test_def in playbook_tests:
             func_name_full = getattr(test_def, 'function', '')
-            # Extract short name (without collection prefix)
-            if '.' in func_name_full:
-                collection, func_name = func_name_full.split('.', 1)
-            else:
-                func_name = func_name_full
-
-            # Look up test class in testfunction_collection
-            test_cls = None
-            for coll_tests in testfunction_collection.values():
-                if isinstance(coll_tests, dict):
-                    test_cls = coll_tests.get(func_name)
-                    if test_cls:
-                        break
+            # By collection.name: several collections share function names (contains_key,
+            # value_matches, value_count), so a lookup by short name could pick another one.
+            test_cls = get_testclass_from_testfunction(func_name_full, testfunction_collection)
 
             if test_cls:
                 category = getattr(test_cls, 'host_mode_category', HostModeCategory.AGENT_ONLY)
@@ -182,8 +178,8 @@ class GuestToHostTestExecutor:
         original_dst = test_instance.parameter.dst
         log.debug(f"GuestToHostTestExecutor: original dst='{original_dst}'")
 
-        if has_archive_separator(original_dst):
-            return await self._execute_archive_test(test_name, test_instance, original_dst)
+        if has_archive_separator(original_dst) or test_function == 'standard.file_count':
+            return await self._execute_without_pull(test_name, test_function, test_instance, original_dst)
 
         # Check for glob patterns
         has_glob = any(c in original_dst for c in ['*', '?', '[', ']'])
@@ -191,7 +187,12 @@ class GuestToHostTestExecutor:
 
         if has_glob:
             # Resolve glob on guest side, then pull matching files
-            matching_paths = await self.guest_file.resolve_guest_glob(original_dst)
+            try:
+                matching_paths = await self.guest_file.resolve_guest_glob(original_dst)
+            except RuntimeError as e:
+                # no answer is not "no match": an absence test must not pass on it
+                return self._pull_error(test_name, original_dst, e)
+            self._drop_stale_copies(original_dst, matching_paths)
             if not matching_paths:
                 # No matches — let the test handle it (will get empty glob results)
                 local_dst = str(self.guest_file._guest_path_to_local(original_dst))
@@ -207,6 +208,7 @@ class GuestToHostTestExecutor:
                 except FileNotFoundError as e:
                     # Gone between glob and pull: it is absent, like an unmatched path.
                     log.warning(f"GuestToHostTestExecutor: {guest_path} vanished before pull: {e}")
+                    self._drop_stale_copies(guest_path, [], literal=True)
                     continue
                 except RuntimeError as e:
                     # A file that matched but could not be read must not silently drop out
@@ -219,27 +221,9 @@ class GuestToHostTestExecutor:
             # Rewrite dst to local glob pattern
             local_dst = str(self.guest_file._guest_path_to_local(original_dst))
         else:
-            # Simple path — pull directly
-            try:
-                local_path = await self.guest_file.pull_file(original_dst, force=True)
-                local_dst = str(local_path)
-            except FileNotFoundError as e:
-                # The guest answered "no such file": a real absence.
-                func_name = test_function.split('.')[-1] if '.' in test_function else test_function
-                if func_name in ('file_does_not_exist', 'dir_does_not_exist'):
-                    return TestResult.success([f'{original_dst} does not exist on guest'])
-                if func_name in ('file_exists', 'dir_exists'):
-                    return TestResult.failed([f'{original_dst} does not exist on guest: {e}'])
-                log.warning(f"GuestToHostTestExecutor: {original_dst} not found on guest: {e}")
-                local_dst = str(self.guest_file._guest_path_to_local(original_dst))
-            except RuntimeError as e:
-                # Transport/permission failure: says nothing about whether the file exists,
-                # so neither an absence test may pass nor an existence test fail on it.
-                return self._pull_error(test_name, original_dst, e)
-            else:
-                missing = await self._pull_sidecars(original_dst, sidecars)
-                if missing:
-                    return self._sidecar_error(missing)
+            local_dst, early = await self._pull_plain_path(test_name, test_function, original_dst, sidecars)
+            if early is not None:
+                return early
 
         # Rewrite dst and run test
         object.__setattr__(test_instance.parameter, 'dst', local_dst)
@@ -251,6 +235,31 @@ class GuestToHostTestExecutor:
 
         return result
 
+    async def _pull_plain_path(
+        self, test_name: str, test_function: str, original_dst: str, sidecars
+    ) -> tuple[str, TestResult | None]:
+        """Pull a plain (non-glob) ``dst``; return the local path, or a result that ends the test."""
+        local_dst = str(self.guest_file._guest_path_to_local(original_dst))
+        try:
+            local_dst = str(await self.guest_file.pull_file(original_dst, force=True))
+        except FileNotFoundError as e:
+            # The guest answered "no such file": a real absence.
+            func_name = test_function.split('.')[-1] if '.' in test_function else test_function
+            if func_name in ('file_does_not_exist', 'dir_does_not_exist'):
+                return local_dst, TestResult.success([f'{original_dst} does not exist on guest'])
+            if func_name in ('file_exists', 'dir_exists'):
+                return local_dst, TestResult.failed([f'{original_dst} does not exist on guest: {e}'])
+            log.warning(f"GuestToHostTestExecutor: {original_dst} not found on guest: {e}")
+            # a copy an earlier test pulled must not stand in for the file that is gone
+            self._drop_stale_copies(original_dst, [], literal=True)
+            return local_dst, None
+        except RuntimeError as e:
+            # Transport/permission failure: says nothing about whether the file exists,
+            # so neither an absence test may pass nor an existence test fail on it.
+            return local_dst, self._pull_error(test_name, original_dst, e)
+        missing = await self._pull_sidecars(original_dst, sidecars)
+        return local_dst, (self._sidecar_error(missing) if missing else None)
+
     async def _execute_archive_test(self, test_name: str, test_instance: BasicTest, original_dst: str) -> TestResult:
         """Pull only the archive of ``archive!/member``; the test extracts the member locally.
 
@@ -260,7 +269,10 @@ class GuestToHostTestExecutor:
         """
         archive, members = split_archive_path(original_dst)
         if any(c in archive for c in ('*', '?', '[', ']')):
-            matches = await self.guest_file.resolve_guest_glob(archive)
+            try:
+                matches = await self.guest_file.resolve_guest_glob(archive)
+            except RuntimeError as e:
+                return self._pull_error(test_name, archive, e)
             if len(matches) != 1:
                 found = 'no file matches' if not matches else f'{len(matches)} files match'
                 return TestResult.error([f'archive {archive}: {found} the glob (must be exactly one)'])
@@ -283,6 +295,79 @@ class GuestToHostTestExecutor:
 
         # report the guest path, not the host's temp copy
         result.details = [d.replace(local_archive, guest_archive) if isinstance(d, str) else d for d in result.details]
+        return result
+
+    def _drop_stale_copies(self, guest_pattern: str, matching_paths: list[str], literal: bool = False) -> None:
+        """Remove files from the shared local mirror that match ``guest_pattern`` but are not
+        among ``matching_paths`` on the guest any more (``literal``: ``guest_pattern`` is one path).
+
+        The mirror keeps every file an earlier test pulled; the test globs the mirror, so a copy
+        of a file since deleted on the guest would still be found (``file_exists`` passing,
+        ``file_does_not_exist`` failing on a file that is gone).
+        """
+        keep = {str(self.guest_file._guest_path_to_local(p)) for p in matching_paths}
+        local_pattern = str(self.guest_file._guest_path_to_local(guest_pattern))
+        for local in [local_pattern] if literal else glob.glob(local_pattern):
+            if local not in keep and (os.path.isfile(local) or os.path.islink(local)):
+                try:
+                    os.remove(local)
+                except OSError as e:
+                    log.warning(f"GuestToHostTestExecutor: could not remove stale copy {local}: {e}")
+
+    async def _execute_without_pull(
+        self, test_name: str, test_function: str, test_instance: BasicTest, original_dst: str
+    ) -> TestResult:
+        """Tests whose dst is not pulled as is: an archive path, or a count of guest paths."""
+        if has_archive_separator(original_dst):
+            return await self._execute_archive_test(test_name, test_instance, original_dst)
+        return await self._execute_path_count_test(test_name, test_instance, original_dst)
+
+    async def _execute_path_count_test(self, test_name: str, test_instance: BasicTest, original_dst: str) -> TestResult:
+        """Count guest paths (``standard.file_count``) without pulling any file.
+
+        The guest lists the matching paths with their kind; the test then runs on a fresh
+        skeleton of exactly those paths (empty files, directories, dangling links). So no copy
+        left in the shared mirror by an earlier test is counted, and directories count too.
+        """
+        try:
+            kinds = await self.guest_file.path_kinds(original_dst)
+        except RuntimeError as e:
+            return self._pull_error(test_name, original_dst, e)
+        mirror_root = self.guest_file._temp_root
+        skeleton = Path(tempfile.mkdtemp(prefix='adare_count_'))
+
+        def local_of(guest_path: str) -> Path:
+            return skeleton / self.guest_file._guest_path_to_local(guest_path).relative_to(mirror_root)
+
+        display = {str(local_of(p)): p for p, _ in kinds}
+        try:
+            for guest_path, kind in sorted(kinds, key=lambda item: item[1] != 'dir'):
+                local = local_of(guest_path)
+                local.parent.mkdir(parents=True, exist_ok=True)
+                if kind == 'dir':
+                    local.mkdir(exist_ok=True)
+                elif kind == 'file':
+                    local.touch()
+                else:
+                    local.symlink_to(skeleton / '.missing')
+            object.__setattr__(test_instance.parameter, 'dst', str(local_of(original_dst)))
+            try:
+                result = await self._run_test(test_instance)
+            finally:
+                object.__setattr__(test_instance.parameter, 'dst', original_dst)
+        except OSError as e:
+            return TestResult.execution_error(e, f'Cannot build the local listing for {original_dst}')
+        finally:
+            shutil.rmtree(skeleton, ignore_errors=True)
+        details = []
+        for detail in result.details:
+            if isinstance(detail, str):
+                # longest first, so a path is never replaced inside a longer one
+                for local_text in sorted(display, key=len, reverse=True):
+                    detail = detail.replace(local_text, display[local_text])
+                detail = detail.replace(str(local_of(original_dst)), original_dst)
+            details.append(detail)
+        result.details = details
         return result
 
     @staticmethod
@@ -340,8 +425,6 @@ class GuestToHostTestExecutor:
             return await self._test_service_status(test_instance)
         if func_name == 'user_exists':
             return await self._test_user_exists(test_instance)
-        if func_name == 'log_entry_exists':
-            return await self._test_log_entry_exists(test_instance)
         if func_name == 'registry_key_exists':
             return await self._test_registry_key_exists(test_instance)
         if func_name == 'registry_value_matches':
@@ -394,24 +477,6 @@ class GuestToHostTestExecutor:
         if exists:
             return TestResult.success([f'user {username} exists'])
         return TestResult.failed([f'user {username} does not exist'])
-
-    async def _test_log_entry_exists(self, test_instance: BasicTest) -> TestResult:
-        """Search for log entries matching a pattern via QGA."""
-        log_file = test_instance.parameter.log_file
-        pattern = test_instance.parameter.pattern
-        max_lines = getattr(test_instance.parameter, 'max_lines', 1000)
-
-        if hasattr(test_instance, 'has_placeholders'):
-            if test_instance.has_placeholders(log_file):
-                log_file = test_instance.resolve_variables(log_file)
-            if test_instance.has_placeholders(pattern):
-                pattern = test_instance.resolve_variables(pattern)
-
-        found, matches = await self.guest_command.search_log_file(log_file, pattern, max_lines)
-
-        if found:
-            return TestResult.success([f'found {len(matches)} log entries matching pattern in {log_file}'])
-        return TestResult.failed([f'no log entries matching pattern found in {log_file}'])
 
     async def _test_registry_key_exists(self, test_instance: BasicTest) -> TestResult:
         """Check if a Windows registry key exists via QGA PowerShell."""

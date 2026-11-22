@@ -12,71 +12,178 @@ import logging
 from typing import Any
 
 from adarelib.event.event import TestResult
+from adarelib.testset.basictest import PlaceholderError
 
 log = logging.getLogger(__name__)
 
 # What a placeholder comparison raises for a value it cannot interpret (an
-# unparsable timestamp, an unknown placeholder, a non-string value). Anything
-# else is a bug and must surface as an ERROR result.
+# unparsable timestamp, a malformed interval, a non-string value). It is a
+# problem of the test definition, so the helpers below turn it into a
+# PlaceholderError, which the @testfunction decorator reports as ERROR.
 PLACEHOLDER_ERRORS = (KeyError, ValueError, TypeError)
 
 
+def compare_placeholder(ctx: Any, placeholder_name: str, actual: str) -> tuple[bool, str]:
+    """``ctx.compare_with_placeholder`` with every evaluation problem raised as ``PlaceholderError``."""
+    try:
+        return ctx.compare_with_placeholder(placeholder_name, actual)
+    except PLACEHOLDER_ERRORS as e:
+        raise PlaceholderError(f"cannot evaluate '{{{{ {placeholder_name} }}}}': {e}") from e
+
+
 def compare_with_single_placeholder(ctx: Any, expected_str: str, actual: str) -> tuple[bool, str]:
-    """Compare ``actual`` against an expected string that must contain exactly one placeholder."""
+    """Compare ``actual`` against an expected string that must contain exactly one placeholder.
+
+    Raises ``PlaceholderError`` (an ERROR result) when ``expected_str`` has more than one
+    placeholder, names an unknown one or holds an invalid regular expression.
+    """
     placeholder_names = ctx.get_placeholders(expected_str)
     if len(placeholder_names) != 1:
-        return False, f"expected 1 placeholder for single value comparison, got {len(placeholder_names)}"
-    try:
-        return ctx.compare_with_placeholder(placeholder_names[0], actual)
-    except PLACEHOLDER_ERRORS as e:
-        return False, f"placeholder comparison error: {e}"
+        raise PlaceholderError(
+            f"expected exactly one placeholder in {expected_str!r}, got {len(placeholder_names)}: "
+            "a value is compared against a single !re or !timestamp"
+        )
+    return compare_placeholder(ctx, placeholder_names[0], actual)
+
+
+def parse_key_path(key_path: str) -> list[tuple[str, Any]]:
+    """Split a key path into steps ``('key', name)``, ``('values',)``, ``('all',)`` or ``('index', n)``.
+
+    Syntax: dot-separated keys (``user.profile.name``); ``*`` as a key = all values of an
+    object; ``[*]`` = all elements of an array; ``[n]`` = element ``n`` (negative counts from
+    the end); ``['a.b']`` / ``["a.b"]`` = a key that contains dots or brackets. A path may
+    start with a bracket to address a top-level array (``[0].name``, ``[*].id``). A ``[``
+    that starts none of these is part of the key name. When resolving, an object key equal
+    to a whole dot segment (``files[0]``) wins over the bracket syntax, as before brackets
+    were supported.
+    """
+    return [step for _, steps in _segments(key_path) for step in steps]
+
+
+def _segments(key_path: str) -> list[tuple[str, list[tuple[str, Any]]]]:
+    """The dot segments of ``key_path`` as ``(raw text, steps)``; dots inside quotes do not split."""
+    segments = []
+    start = 0
+    i = 0
+    while i <= len(key_path):
+        if i == len(key_path) or key_path[i] == '.':
+            raw = key_path[start:i]
+            segments.append((raw, _segment_steps(raw)))
+            start = i + 1
+            i += 1
+            continue
+        if key_path[i] == '[':
+            bracket = _parse_bracket(key_path, i)
+            if bracket is not None:
+                i = bracket[1]
+                continue
+        i += 1
+    return segments
+
+
+def _segment_steps(segment: str) -> list[tuple[str, Any]]:
+    """Steps of one dot segment: an optional key, then any number of brackets."""
+    steps: list[tuple[str, Any]] = []
+    buf: list[str] = []
+    i = 0
+    after_bracket = False
+    while i < len(segment):
+        if segment[i] == '[':
+            bracket = _parse_bracket(segment, i)
+            if bracket is not None:
+                if buf:
+                    steps.append(_key_step(''.join(buf)))
+                    buf = []
+                steps.append(bracket[0])
+                i = bracket[1]
+                after_bracket = True
+                continue
+        buf.append(segment[i])
+        i += 1
+    if buf or not after_bracket:
+        steps.append(_key_step(''.join(buf)))
+    return steps
+
+
+def _key_step(name: str) -> tuple[str, Any]:
+    return ('values',) if name == '*' else ('key', name)
+
+
+def _parse_bracket(path: str, start: int) -> tuple[tuple[str, Any], int] | None:
+    """Parse the bracket at ``start``; return (step, index after it) or None if it is no syntax."""
+    if path[start + 1 : start + 2] in ("'", '"'):
+        quote = path[start + 1]
+        close = path.find(quote + ']', start + 2)
+        if close == -1:
+            return None
+        return ('key', path[start + 2 : close]), close + 2
+    close = path.find(']', start + 1)
+    if close == -1:
+        return None
+    inner = path[start + 1 : close]
+    if inner == '*':
+        return ('all',), close + 1
+    digits = inner[1:] if inner.startswith('-') else inner
+    if digits.isdigit() and digits.isascii():
+        return ('index', int(inner)), close + 1
+    return None
+
+
+def _apply_step(value: Any, step: tuple[str, Any], out: list[Any]) -> None:
+    kind = step[0]
+    if kind == 'key':
+        if isinstance(value, dict) and step[1] in value:
+            out.append(value[step[1]])
+    elif kind == 'values':
+        if isinstance(value, dict):
+            out.extend(value.values())
+    elif kind == 'all':
+        if isinstance(value, list):
+            out.extend(value)
+    elif isinstance(value, list) and -len(value) <= step[1] < len(value):
+        out.append(value[step[1]])
+
+
+def resolve_key_path(data: Any, key_path: str) -> list[Any]:
+    """All values ``key_path`` (syntax: :func:`parse_key_path`) selects in ``data``; empty if none."""
+    current = [data]
+    for raw, steps in _segments(key_path):
+        nxt: list[Any] = []
+        for value in current:
+            if '[' in raw and isinstance(value, dict) and raw in value:
+                nxt.append(value[raw])  # a literal key such as 'files[0]'
+                continue
+            selected = [value]
+            for step in steps:
+                stepped: list[Any] = []
+                for item in selected:
+                    _apply_step(item, step, stepped)
+                selected = stepped
+            nxt.extend(selected)
+        if not nxt:
+            return []
+        current = nxt
+    return current
 
 
 def get_nested_value(data, key_path):
-    """Navigate nested dictionary using dot notation with wildcard support
+    """Navigate nested data with a key path (syntax: :func:`parse_key_path`).
 
     Supports:
     - [*] for all array elements (e.g., "users[*].name")
     - * for all object keys (e.g., "config.*.enabled")
+    - [n] for one array element, a leading [..] for a top-level array, ['a.b'] for keys with dots
 
     Returns:
-    - For exact paths: (value, True) or (None, False)
+    - For exact paths: (value, True) or ([], False)
     - For wildcard paths: (list_of_values, True) or ([], False)
     """
-    keys = key_path.split('.')
-    current_values = [data]  # Start with data wrapped in list for consistent handling
-
-    for key in keys:
-        next_values = []
-
-        for current in current_values:
-            if key == '*':
-                # Wildcard for all keys in dict
-                if isinstance(current, dict):
-                    next_values.extend(current.values())
-            elif key.endswith('[*]'):
-                # Array wildcard (e.g., "users[*]")
-                base_key = key[:-3]  # Remove '[*]'
-                if isinstance(current, dict) and base_key in current:
-                    array_value = current[base_key]
-                    if isinstance(array_value, list):
-                        next_values.extend(array_value)
-            elif isinstance(current, dict) and key in current:
-                # Regular key access
-                next_values.append(current[key])
-
-        if not next_values:
-            # No matching values found
-            return [], False
-
-        current_values = next_values
-
-    # If we have multiple values, it was a wildcard match
-    if len(current_values) > 1:
-        return current_values, True
-    if len(current_values) == 1:
-        return current_values[0], True
-    return None, False
+    values = resolve_key_path(data, key_path)
+    if not values:
+        return [], False
+    if len(values) > 1:
+        return values, True
+    return values[0], True
 
 
 def extract_columns(row: list[str], columns: list[int] | None) -> list[str]:
@@ -94,7 +201,7 @@ def row_matches_pattern(test_instance, row, entry_pattern):
     """
     column_count_match = len(row) == len(entry_pattern)
     if not column_count_match:
-        log.info(
+        log.debug(
             f"Row column count mismatch: got {len(row)} columns {row}, expected {len(entry_pattern)} columns {entry_pattern}"
         )
         return False, [f"column_count({len(row)} != {len(entry_pattern)})"], False
@@ -106,21 +213,9 @@ def row_matches_pattern(test_instance, row, entry_pattern):
         expected_str = str(expected_pattern)
 
         if test_instance.has_placeholders(expected_str):
-            # Has placeholder - use tolerance comparison
-            placeholder_names = test_instance.get_placeholders(expected_str)
-            if len(placeholder_names) == 1:
-                placeholder_name = placeholder_names[0]
-                try:
-                    success, message = test_instance.compare_with_placeholder(placeholder_name, actual_value)
-                    if not success:
-                        failed_columns.append(f"col{i}({message})")
-                except PLACEHOLDER_ERRORS as e:
-                    log.error(f"Error in placeholder comparison for column {i}: {e}")
-                    failed_columns.append(f"col{i}(placeholder_error: {e})")
-            else:
-                failed_columns.append(
-                    f"col{i}(invalid_placeholder: expected 1 placeholder, got {len(placeholder_names)})"
-                )
+            success, message = compare_with_single_placeholder(test_instance, expected_str, actual_value)
+            if not success:
+                failed_columns.append(f"col{i}({message})")
         else:
             # Direct string comparison
             if actual_value != expected_str:
@@ -130,7 +225,7 @@ def row_matches_pattern(test_instance, row, entry_pattern):
 
     # Log failures only if there were any
     if failed_columns:
-        log.info(f"Row {row} failed pattern match: {', '.join(failed_columns)}")
+        log.debug(f"Row {row} failed pattern match: {', '.join(failed_columns)}")
 
     return is_match, failed_columns, column_count_match
 

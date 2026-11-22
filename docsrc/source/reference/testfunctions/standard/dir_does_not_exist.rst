@@ -47,9 +47,10 @@ After Directory Deletion
 .. code-block:: yaml
 
    actions:
-     - right_click:
+     - click:
          target:
            text: "old_project"
+         type: right
      - click:
          target:
            text: "Delete"

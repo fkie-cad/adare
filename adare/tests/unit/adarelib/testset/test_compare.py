@@ -44,3 +44,67 @@ def test_row_comparisons(compare):
     differs = compare(ctx, [['a', '1']], [['a', '2']], None, False, False, label='Excel')
     assert differs.status == StatusEnum.FAILED
     assert differs.details[0].startswith('Excel comparison failed')
+
+
+# --- key paths -----------------------------------------------------------------
+
+from adarelib.testset.compare import parse_key_path, resolve_key_path  # noqa: E402
+
+_DATA = {
+    'users': [{'name': 'a', 'tags': ['x', 'y']}, {'name': 'b', 'tags': []}],
+    'config': {'one': {'enabled': True}, 'two': {'enabled': False}},
+    'com.example.key': 5,
+    'odd[key]': 3,
+    'matrix': [[1, 2], [3]],
+}
+
+
+@pytest.mark.parametrize(
+    ('path', 'expected'),
+    [
+        ('users[*].name', ['a', 'b']),
+        ('config.*.enabled', [True, False]),
+        ('users[0].name', ['a']),
+        ('users[-1].name', ['b']),
+        ('users[2].name', []),
+        ('users[0].tags[1]', ['y']),
+        ('matrix[0][1]', [2]),
+        ('matrix[*][0]', [1, 3]),
+        ("['com.example.key']", [5]),
+        ('["com.example.key"]', [5]),
+        ('com.example.key', []),
+        ('odd[key]', [3]),  # not index syntax: part of the key
+        ('users[x]', []),
+        ('users', [_DATA['users']]),
+        ('missing', []),
+    ],
+)
+def test_resolve_key_path(path, expected):
+    assert resolve_key_path(_DATA, path) == expected
+
+
+def test_top_level_array():
+    rows = [{'id': 1}, {'id': 2}]
+    assert resolve_key_path(rows, '[*].id') == [1, 2]
+    assert resolve_key_path(rows, '[1].id') == [2]
+    assert resolve_key_path(rows, 'id') == []
+
+
+def test_quoted_key_inside_a_path():
+    data = {'prefs': {'a.b.c': {'v': 1}}}
+    assert resolve_key_path(data, "prefs['a.b.c'].v") == [1]
+    assert parse_key_path("prefs['a.b.c'].v") == [('key', 'prefs'), ('key', 'a.b.c'), ('key', 'v')]
+
+
+def test_get_nested_value_keeps_its_return_contract():
+    assert get_nested_value(_DATA, 'users[0].name') == ('a', True)
+    assert get_nested_value(_DATA, 'users[*].name') == (['a', 'b'], True)
+    assert get_nested_value(_DATA, 'nope') == ([], False)
+
+
+def test_literal_key_with_brackets_wins_like_before():
+    data = {'files[0]': 'literal', 'files': ['element'], 'm[*]': 1}
+    assert resolve_key_path(data, 'files[0]') == ['literal']
+    assert resolve_key_path({'files': ['element']}, 'files[0]') == ['element']
+    assert resolve_key_path(data, 'm[*]') == [1]
+    assert get_nested_value({'files[0]': 'a'}, 'files[0]') == ('a', True)

@@ -55,7 +55,7 @@ wheels = [
 
 [[package]]
 name = "adare"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "adare" }
 dependencies = [
     { name = "adarelib" },
@@ -351,7 +351,7 @@ test = [
 
 [[package]]
 name = "adarelib"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "adarelib" }
 dependencies = [
     { name = "cattrs" },

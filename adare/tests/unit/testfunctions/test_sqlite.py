@@ -86,7 +86,7 @@ class TestQueryResult:
 
         test = QueryResult(
             name="test_query",
-            parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table", expected_rows=2),
+            parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table", expected_count=2),
         )
         result = test.test()
 
@@ -109,13 +109,13 @@ class TestQueryResult:
             parameter=QueryResultParameter(
                 dst=str(db_file),
                 query="SELECT * FROM test_table",
-                expected_rows=2,  # Expect 2, but will get 3
+                expected_count=2,  # Expect 2, but will get 3
             ),
         )
         result = test.test()
 
         assert_test_failed(result)
-        assert "expected 2 rows, got 3" in result.details[0]
+        assert "count 3 == 2 does not hold" in result.details[0]
 
     def test_query_result_success_with_expected_result_exact_match(self, create_sqlite_db):
         """Test successful query with exact result content validation."""
@@ -180,7 +180,7 @@ class TestQueryResult:
 
         test = QueryResult(
             name="test_query",
-            parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table", expected_rows=0),
+            parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table", expected_count=0),
         )
         result = test.test()
 
@@ -211,7 +211,7 @@ class TestQueryResult:
 
         test = QueryResult(
             name="test_query",
-            parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table", expected_rows=0),
+            parameter=QueryResultParameter(dst=str(db_file), query="SELECT * FROM test_table", expected_count=0),
         )
         result = test.test()
 
@@ -361,7 +361,7 @@ class TestQueryResult:
                     WHERE users.name = 'Alice'
                     ORDER BY orders.product
                 """,
-                expected_rows=2,
+                expected_count=2,
             ),
         )
         result = test.test()
@@ -413,7 +413,7 @@ class TestQueryResult:
             parameter=QueryResultParameter(
                 dst=str(db_file),
                 query="SELECT * FROM test_table WHERE id <= 2 ORDER BY id",
-                expected_rows=2,
+                expected_count=2,
                 expected_result=[
                     {"id": 1, "value": "alpha"},
                     {"id": 2, "value": "beta"},
@@ -441,7 +441,7 @@ class TestQueryResult:
             parameter=QueryResultParameter(
                 dst=str(db_file),
                 query="SELECT * FROM test_table",
-                expected_rows=2,  # Wrong count
+                expected_count=2,  # Wrong count
                 expected_result=[
                     {"id": 1, "value": "alpha"},
                     {"id": 2, "value": "beta"},
@@ -452,7 +452,7 @@ class TestQueryResult:
         result = test.test()
 
         assert_test_failed(result)
-        assert "expected 2 rows, got 3" in result.details[0]
+        assert "count 3 == 2 does not hold" in result.details[0]
 
     def test_query_result_success_with_null_values(self, create_sqlite_db, tmp_path):
         """Test successful query with NULL values in result."""
@@ -525,7 +525,7 @@ class TestQueryResult:
             parameter=QueryResultParameter(
                 dst=str(db_file),
                 query="SELECT name FROM test_table WHERE id = 1",
-                expected_rows=1,
+                expected_count=1,
                 expected_result=[
                     {"name": "Alice"},
                 ],
@@ -699,13 +699,13 @@ class TestQueryResult:
             parameter=QueryResultParameter(
                 dst=str(db_file),
                 query="SELECT * FROM test_table",
-                expected_rows=1,  # Expect 1 row but will get 0
+                expected_count=1,  # Expect 1 row but will get 0
             ),
         )
         result = test.test()
 
         assert_test_failed(result)
-        assert "expected 1 rows, got 0" in result.details[0]
+        assert "count 0 == 1 does not hold" in result.details[0]
 
     def test_query_result_success_with_limit(self, create_sqlite_db):
         """Test successful query with LIMIT clause."""
@@ -725,7 +725,7 @@ class TestQueryResult:
             parameter=QueryResultParameter(
                 dst=str(db_file),
                 query="SELECT id, name FROM test_table ORDER BY id LIMIT 2",
-                expected_rows=2,
+                expected_count=2,
                 expected_result=[
                     {"id": 1, "name": "Alice"},
                     {"id": 2, "name": "Bob"},
@@ -841,10 +841,10 @@ class TestQueryResultSnapshot:
         main_only = tmp_path / "main_only.sqlite"
         shutil.copyfile(wal_only_evidence, main_only)
 
-        result = _query(main_only, "SELECT * FROM test_table", expected_rows=2)
+        result = _query(main_only, "SELECT * FROM test_table", expected_count=2)
 
         assert_test_failed(result)
-        assert "expected 2 rows, got 0" in result.details[0]
+        assert "count 0 == 2 does not hold" in result.details[0]
 
     def test_original_files_are_not_modified(self, wal_only_evidence):
         evidence_dir = wal_only_evidence.parent
@@ -870,7 +870,7 @@ class TestQueryResultSnapshot:
         journal.write_bytes(b"\0" * 512)  # zeroed header: not hot, must not be rolled back
         journal_hash = _sha256(journal)
 
-        result = _query(db_file, "SELECT * FROM test_table", expected_rows=1)
+        result = _query(db_file, "SELECT * FROM test_table", expected_count=1)
 
         assert_test_success(result)
         assert f"queried snapshot: test.db-journal sha256={journal_hash}" in result.details
@@ -879,7 +879,7 @@ class TestQueryResultSnapshot:
     def test_hashes_reported_on_failure(self, create_sqlite_db):
         db_file = create_sqlite_db("test.db", "CREATE TABLE test_table (id INTEGER)", [(1,)])
 
-        result = _query(db_file, "SELECT * FROM test_table", expected_rows=5)
+        result = _query(db_file, "SELECT * FROM test_table", expected_count=5)
 
         assert_test_failed(result)
         assert f"queried snapshot: test.db sha256={_sha256(db_file)}" in result.details

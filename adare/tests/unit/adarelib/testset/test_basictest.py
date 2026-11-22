@@ -256,11 +256,19 @@ class TestCompareWithPlaceholder:
         assert "no match" in msg.lower()
 
     def test_regex_invalid_pattern(self):
+        from adarelib.testset.basictest import PlaceholderError
+
         metadata = {"PAT": {"type": "regex", "resolved_value": "[invalid"}}
         bt = _make_test(variable_metadata=metadata)
-        success, msg = bt.compare_with_placeholder("PAT", "anything")
-        assert success is False
-        assert "error" in msg.lower()
+        with pytest.raises(PlaceholderError, match="invalid regular expression"):
+            bt.compare_with_placeholder("PAT", "anything")
+
+    def test_unknown_placeholder_is_an_error(self):
+        from adarelib.testset.basictest import PlaceholderError
+
+        bt = _make_test(variable_metadata={"PAT": {"type": "regex", "resolved_value": "a"}})
+        with pytest.raises(PlaceholderError, match="unknown placeholder"):
+            bt.compare_with_placeholder("OTHER", "anything")
 
     # --- timestamp type ---
 
@@ -288,3 +296,12 @@ class TestCompareWithPlaceholder:
         bt = _make_test(variable_metadata=metadata)
         success, msg = bt.compare_with_placeholder("TS", "2026-03-31T12:00:00")
         assert success is True
+
+
+def test_unresolved_interval_bounds_are_an_error():
+    from adarelib.testset.basictest import PlaceholderError
+
+    metadata = {"T": {"type": "timestamp", "interval": ["{{ t_after }}", "{{ t_before }}"], "resolved_value": "x"}}
+    bt = _make_test(variable_metadata=metadata)
+    with pytest.raises(PlaceholderError, match="interval bounds not resolved"):
+        bt.compare_with_placeholder("T", "2026-01-01T00:00:00")

@@ -34,6 +34,7 @@ from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.testset.compare import compare_with_single_placeholder
+from adarelib.testset.structured import compare_count, count_parameter_errors
 
 # configure logging
 import logging
@@ -208,21 +209,6 @@ def _handle_wildcard_matching(
     )
 
 
-def _compare_count(actual_count, expected_count, comparison_type):
-    """Compare counts based on comparison type"""
-    if comparison_type == 'equals':
-        return actual_count == expected_count, f"count is {actual_count}, expected {expected_count}"
-    if comparison_type == 'greater':
-        return actual_count > expected_count, f"count is {actual_count}, expected > {expected_count}"
-    if comparison_type == 'less':
-        return actual_count < expected_count, f"count is {actual_count}, expected < {expected_count}"
-    if comparison_type == 'greater_equal':
-        return actual_count >= expected_count, f"count is {actual_count}, expected >= {expected_count}"
-    if comparison_type == 'less_equal':
-        return actual_count <= expected_count, f"count is {actual_count}, expected <= {expected_count}"
-    raise ValueError(f"Invalid comparison type: {comparison_type}")
-
-
 def _evaluate_xpath(root, xpath, result_type, namespaces=None):
     """Evaluate XPath and convert result based on type"""
     try:
@@ -340,16 +326,19 @@ def element_text_matches(
     ctx: TestContext,
     dst: str,
     xpath: str,
-    expected_text: str = '',
+    expected_value: str,
     regex_match: bool = False,
     case_sensitive: bool = True,
     wildcard_mode: str = "any",
     namespaces: dict[str, str] = None,
 ):
-    """Pass when the text of the element(s) selected by ``xpath`` equals/matches ``expected_text``.
+    """Pass when the text of the element(s) selected by ``xpath`` equals/matches ``expected_value``.
 
-    Use for: asserting an XML setting or record value. "Text" is ``element.text``: only the
-    text before the element's first child, not stripped (missing -> ``''``).
+    Use for: asserting an XML setting or record value, and document properties of office
+    files: the author of a .docx is ``dc:creator`` in ``report.docx!/docProps/core.xml``
+    (xpath ``./dc:creator``, namespaces ``{dc: 'http://purl.org/dc/elements/1.1/'}``).
+    "Text" is ``element.text``: only the text before the element's first child, not
+    stripped (missing -> ``''``). To count elements use xml.element_count.
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
@@ -359,9 +348,10 @@ def element_text_matches(
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
             Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
             error, so no functions such as ``text()``. No match fails.
-        expected_text: Exact expected text, or a regex with ``regex_match``. A single
-            ``!re``/``!timestamp`` tag is matched by type (``case_sensitive`` then ignored).
-        regex_match: Search ``expected_text`` as a Python regex (``re.search``, unanchored).
+        expected_value: Required. Exact expected text (``''`` for an empty element), or a regex
+            with ``regex_match``. A single ``!re``/``!timestamp`` tag is matched by type
+            (``case_sensitive`` then ignored); an invalid regex is an error.
+        regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
         case_sensitive: ``False`` compares lower-cased / uses ``re.IGNORECASE``.
         wildcard_mode: For several matched elements: ``any`` (default) or ``all`` must match;
             other values are an execution error (only checked when several elements match).
@@ -373,7 +363,7 @@ def element_text_matches(
         parameter:
           dst: /home/user/.config/app/settings.xml
           xpath: ./general/language
-          expected_text: de_DE
+          expected_value: de_DE
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
@@ -391,11 +381,11 @@ def element_text_matches(
         # Handle multiple elements based on wildcard mode
         if len(elements) > 1:
             return _handle_wildcard_matching(
-                ctx, elements, expected_text, wildcard_mode, xpath, regex_match, case_sensitive
+                ctx, elements, expected_value, wildcard_mode, xpath, regex_match, case_sensitive
             )
         # Single element matching
         element_text = elements[0].text or ""
-        is_match, message = _compare_values(ctx, element_text, expected_text, regex_match, case_sensitive)
+        is_match, message = _compare_values(ctx, element_text, expected_value, regex_match, case_sensitive)
         if is_match:
             return TestResult.success([message])
         return TestResult.failed([message])
@@ -531,7 +521,7 @@ def element_count(
     ctx: TestContext,
     dst: str,
     xpath: str,
-    expected_count: int = 0,
+    expected_count: int,
     comparison_type: str = 'equals',
     namespaces: dict[str, str] = None,
 ):
@@ -548,9 +538,9 @@ def element_count(
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
             Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
             error, so no functions such as ``text()``.
-        expected_count: Number to compare against (default 0).
+        expected_count: Required non-negative integer to compare against; anything else is an error.
         comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
-            ``less_equal``; other values are an execution error.
+            ``less_equal``; other values are an error.
         namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
             ``//ns:item``); ``{uri}tag`` also works without it.
 
@@ -562,6 +552,9 @@ def element_count(
           expected_count: 1
           comparison_type: greater_equal
     """
+    problems = count_parameter_errors(expected_count, comparison_type)
+    if problems:
+        return TestResult.error(problems)
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
         return TestResult.error([f'XML file {dst} not found ({status})'])
@@ -573,7 +566,7 @@ def element_count(
         elements = _find_elements(root, xpath, namespaces)
         actual_count = len(elements)
 
-        success, message = _compare_count(actual_count, expected_count, comparison_type)
+        success, message = compare_count(actual_count, expected_count, comparison_type)
 
         if success:
             return TestResult.success([f'element count matches: {message}'])
@@ -596,11 +589,11 @@ def xpath_result_matches(
     ctx: TestContext,
     dst: str,
     xpath: str,
-    expected_result: str | int | float | bool = '',
+    expected_value: str | int | float | bool,
     result_type: str = 'text',
     namespaces: dict[str, str] = None,
 ):
-    """Pass when ``xpath`` evaluated as ``result_type`` equals ``expected_result``.
+    """Pass when ``xpath`` evaluated as ``result_type`` equals ``expected_value``.
 
     Use for: typed checks on the first matched element. Prefer xml.element_text_matches for text.
 
@@ -612,7 +605,7 @@ def xpath_result_matches(
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
             Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
             error, so no functions such as ``text()``.
-        expected_result: Converted per ``result_type``: ``str()``, ``float()`` or ``bool()``.
+        expected_value: Required. Converted per ``result_type``: ``str()``, ``float()`` or ``bool()``.
             Note ``bool('false')`` is True -- use unquoted YAML ``true``/``false``.
         result_type: ``text`` (default; first element's ``.text``, ``''`` if none), ``number``
             (``float`` of that text; no match -> 0.0, non-numeric -> execution error) or
@@ -625,7 +618,7 @@ def xpath_result_matches(
         parameter:
           dst: /home/user/.config/app/stats.xml
           xpath: ./counters/opened
-          expected_result: 3
+          expected_value: 3
           result_type: number
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -640,15 +633,15 @@ def xpath_result_matches(
 
         # Type conversion for comparison
         if result_type == 'number':
-            expected_result = float(expected_result)
+            expected = float(expected_value)
         elif result_type == 'boolean':
-            expected_result = bool(expected_result)
+            expected = bool(expected_value)
         else:
-            expected_result = str(expected_result)
+            expected = str(expected_value)
 
-        if actual_result == expected_result:
+        if actual_result == expected:
             return TestResult.success([f'XPath result matches: {actual_result}'])
-        return TestResult.failed([f'XPath result mismatch. Expected: {expected_result}, Got: {actual_result}'])
+        return TestResult.failed([f'XPath result mismatch. Expected: {expected}, Got: {actual_result}'])
 
     except ValueError as e:
         return TestResult.execution_error(e, "XML/XPath processing error")

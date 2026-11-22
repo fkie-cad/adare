@@ -210,6 +210,13 @@ class TestToolsMixin:
             if not function_name:
                 return TestResult.error(["No test function specified"])
 
+            # A playbook written for an older version: say what the name is now
+            from adarelib.testset.renames import rename_problems
+
+            renamed = rename_problems(function_name, resolved_test_data.get('parameter'))
+            if renamed:
+                return TestResult.error(renamed)
+
             # Get test class using the proper helper function
             test_class = get_testclass_from_testfunction(function_name, supported_tests)
             if not test_class:

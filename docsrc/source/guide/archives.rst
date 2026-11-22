@@ -2,10 +2,11 @@ Files inside archives
 =====================
 
 Evidence often sits in an archive: a rotated log (``syslog.2.gz``), a backup
-(``backup.tar.gz``) or an export (``.zip``). Every file testfunction (``json``, ``jsonl``,
-``csv``, ``excel``, ``xml``, ``sqlite`` and the ``standard`` file tests) can read a file
-inside an archive. Point ``dst`` at the member with ``!``. This works the same way in guest
-mode and in host mode.
+(``backup.tar.gz``), an export (``.zip``) or an LZ4-compressed store (``.jsonlz4``). Every
+file testfunction (``json``, ``jsonl``, ``csv``, ``excel``, ``xml``, ``sqlite``, ``ini``,
+``plist``, ``yaml``, ``toml``, ``image``, ``text`` and the ``standard`` file tests) can read
+a file inside an archive. Point ``dst`` at the member with ``!``. This works the same way in
+guest mode and in host mode.
 
 Syntax
 ------
@@ -23,7 +24,7 @@ Syntax
      - name: login_in_rotated_log
        function: standard.file_content_contains
        parameter:
-         dst: /var/log/syslog.2.gz!                           # decompressed content of a .gz/.bz2/.xz
+         dst: /var/log/syslog.2.gz!                           # decompressed content of a .gz/.bz2/.xz/.lz4
          content: Accepted password for alice
 
      - name: nested
@@ -59,13 +60,108 @@ Syntax
 Formats
 -------
 
-tar (plain, ``.gz``, ``.bz2``, ``.xz``), zip (also ``.docx``/``.xlsx``/``.odt``, which are
-zip files), and single-file gzip, bzip2 and xz.
+tar (plain, ``.gz``, ``.bz2``, ``.xz``, ``.lz4``, ``.sz``), zip (also ``.docx``/``.xlsx``/``.odt``,
+which are zip files), and single-file gzip, bzip2, xz, LZ4 and Snappy.
 
 The format comes from the file's **content** (its magic bytes), not from its extension, so
 a renamed or extensionless archive works. A compressed file that holds a tar is a tar:
 ``backup.tar.gz!/etc/x`` reads a member, and ``backup.tar.gz!`` gives the decompressed
-``.tar``. 7z and lz4 are not supported yet.
+``.tar``. 7z is not supported yet.
+
+LZ4 comes in two forms, both read by a decoder in pure Python:
+
+- the **LZ4 frame format** (``.lz4``, magic ``04 22 4D 18``): block and content checksums
+  are verified; linked and independent blocks, uncompressed blocks, concatenated and
+  skippable frames work. Frames that need a dictionary and the legacy frame format give
+  ERROR.
+- an **LZ4 block with an 8-byte magic and size header**, which some applications use for
+  JSON stores (``.jsonlz4``). ``store.jsonlz4!`` is the JSON text, so any ``json`` test
+  reads it:
+
+  .. code-block:: yaml
+
+     - name: entry_in_compressed_store
+       function: json.value_count
+       parameter:
+         dst: /home/user/.config/app/store.jsonlz4!
+         key_path: entries[*].title
+         expected_value: Example
+         expected_count: 1
+
+A size header or frame content size over the size cap is refused before decoding.
+
+**Snappy** is read in its framing format (``.sz``), detected by its stream identifier; chunk
+checksums are verified (``data.json.sz!``, ``backup.tar.sz!/etc/app.json``). Raw Snappy blocks
+have no magic bytes and are not detected.
+
+Office and OpenDocument metadata
+--------------------------------
+
+Office Open XML (``.docx``, ``.xlsx``, ``.pptx``) and OpenDocument (``.odt``, ``.ods``,
+``.odp``) files are zip archives whose document metadata is a small XML member, so the
+``xml`` tests read it through the archive separator. ``xpath`` is evaluated on the member's
+root element; prefixed names need ``namespaces``.
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Member
+     - Holds
+   * - ``docProps/core.xml``
+     - Office Open XML core properties: ``dc:creator`` (author), ``cp:lastModifiedBy``,
+       ``cp:revision``, ``dcterms:created``, ``dcterms:modified``, ``dc:title``
+   * - ``docProps/app.xml``
+     - Office Open XML extended properties (default namespace): ``TotalTime`` (editing
+       minutes), ``Pages``, ``Company``, the writing application and its version
+   * - ``meta.xml``
+     - OpenDocument metadata under ``office:meta``: ``meta:initial-creator``,
+       ``dc:creator`` (last modified by), ``meta:editing-cycles``, ``meta:creation-date``,
+       ``dc:date``
+
+.. code-block:: yaml
+
+   - name: author_and_last_editor
+     function: xml.element_text_matches
+     parameter:
+       dst: /home/user/Documents/report.docx!/docProps/core.xml
+       xpath: ./cp:lastModifiedBy
+       expected_value: analyst
+       namespaces:
+         cp: http://schemas.openxmlformats.org/package/2006/metadata/core-properties
+         dc: http://purl.org/dc/elements/1.1/
+         dcterms: http://purl.org/dc/terms/
+
+   - name: saved_twice
+     function: xml.element_text_matches
+     parameter:
+       dst: /home/user/Documents/report.docx!/docProps/core.xml
+       xpath: ./cp:revision
+       expected_value: '2'
+       namespaces:
+         cp: http://schemas.openxmlformats.org/package/2006/metadata/core-properties
+
+   - name: odt_editing_cycles
+     function: xml.element_text_matches
+     parameter:
+       dst: /home/user/Documents/doc.odt!/meta.xml
+       xpath: ./office:meta/meta:editing-cycles
+       expected_value: '3'
+       namespaces:
+         office: urn:oasis:names:tc:opendocument:xmlns:office:1.0
+         meta: urn:oasis:names:tc:opendocument:xmlns:meta:1.0
+
+   - name: xlsx_company
+     function: xml.element_text_matches
+     parameter:
+       dst: /home/user/Documents/book.xlsx!/docProps/app.xml
+       xpath: ./ep:Company
+       expected_value: Example Ltd
+       namespaces:
+         ep: http://schemas.openxmlformats.org/officeDocument/2006/extended-properties
+
+An element the application did not write (no ``cp:lastModifiedBy`` in a never-edited file) is
+absent, not empty: ``xml.element_count`` with ``expected_count: 0`` asserts that.
 
 Results
 -------

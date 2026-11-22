@@ -5,7 +5,7 @@ FAILED means the test read the evidence and the condition does not hold. A missi
 ``expect_to_fail`` inverts only SUCCESS/FAILED, so reporting such a case as FAILED would
 let a wrong path or a failed host-mode pull pass a negative test.
 
-Existence tests (``standard.file_exists`` and friends) are exempt: for them a missing
+Existence tests (``standard.file_exists``, ``standard.file_count`` and friends) are exempt: for them a missing
 path is the finding.
 """
 
@@ -25,7 +25,7 @@ CASES = {
     'csv.contains_line': {'entry': ['a']},
     'csv.compare_rows': {'reference_rows': [['a']]},
     'csv.compare_files': {},
-    'excel.sheet_exists': {'sheet_name': 'S'},
+    'excel.sheet_exists': {'sheet': 'S'},
     'excel.cell_value_matches': {'row': 1, 'column': 1, 'expected_value': 'x'},
     'excel.contains_row': {'entry': ['a']},
     'excel.validate_columns': {'expected_columns': ['a']},
@@ -34,15 +34,15 @@ CASES = {
     'excel.compare_files': {},
     'json.contains_key': {'key_path': 'a'},
     'json.value_matches': {'key_path': 'a', 'expected_value': 1},
-    'json.array_contains': {'array_path': 'a', 'expected_element': 1},
+    'json.array_contains': {'array_path': 'a', 'expected_value': 1},
     'jsonl.line_matches': {'conditions': {'a': 1}},
     'jsonl.line_count': {'expected_count': 1},
     'jsonl.value_in_any_line': {'key_path': 'a', 'expected_value': 1},
     'xml.element_exists': {'xpath': './/a'},
-    'xml.element_text_matches': {'xpath': './/a', 'expected_text': 'x'},
+    'xml.element_text_matches': {'xpath': './/a', 'expected_value': 'x'},
     'xml.attribute_matches': {'xpath': './/a', 'attribute': 'b', 'expected_value': 'c'},
     'xml.element_count': {'xpath': './/a', 'expected_count': 1},
-    'xml.xpath_result_matches': {'xpath': './/a', 'expected_result': 'x'},
+    'xml.xpath_result_matches': {'xpath': './/a', 'expected_value': 'x'},
     'xml.namespace_matches': {'expected_namespaces': {'a': 'urn:a'}},
     'standard.file_content_contains': {'content': 'a'},
     'standard.file_content_equals': {'content': 'a'},
@@ -50,6 +50,32 @@ CASES = {
     'standard.file_hash_matches': {'expected_hash': '0' * 64},
     'standard.file_timestamps': {'comparison_type': 'within_last', 'within_duration': '1h'},
     'standard.file_permissions': {'expected_permissions': '644'},
+    'plist.contains_key': {'key_path': 'a'},
+    'plist.value_matches': {'key_path': 'a', 'expected_value': 1},
+    'plist.value_count': {'key_path': 'a', 'expected_count': 0},
+    'yaml.contains_key': {'key_path': 'a'},
+    'yaml.value_matches': {'key_path': 'a', 'expected_value': 1},
+    'yaml.value_count': {'key_path': 'a', 'expected_count': 0},
+    'toml.contains_key': {'key_path': 'a'},
+    'toml.value_matches': {'key_path': 'a', 'expected_value': 1},
+    'toml.value_count': {'key_path': 'a', 'expected_count': 0},
+    'ini.section_exists': {'section': 'a'},
+    'ini.contains_key': {'section': 'a', 'key': 'b'},
+    'ini.value_matches': {'section': 'a', 'key': 'b', 'expected_value': 'c'},
+    'ini.value_count': {'section': 'a', 'key': 'b', 'expected_count': 1},
+    'image.png_text_matches': {'keyword': 'k'},
+    'image.png_text_count': {'keyword': 'k', 'expected_count': 1},
+    'image.exif_value_matches': {'tag': 'Make', 'expected_value': 'x'},
+    'image.exif_value_count': {'tag': 'Make', 'expected_count': 1},
+    'image.dimensions_match': {'width': 1},
+    'csv.row_count': {'entry': ['a'], 'expected_count': 1},
+    'json.value_count': {'key_path': 'a', 'expected_count': 1},
+    'standard.file_size': {'expected_size': 1},
+    'text.occurrence_count': {'content': 'a', 'expected_count': 1},
+    'text.line_count': {'content': 'a', 'expected_count': 1},
+    'sqlite.query_result': {'query': 'SELECT 1'},
+    'sqlite.row_count': {'query': 'SELECT 1', 'expected_count': 1},
+    'excel.row_count': {'entry': ['a'], 'expected_count': 1},
 }
 TWO_PATHS = {'csv.compare_files', 'excel.compare_sheets', 'excel.compare_files'}
 

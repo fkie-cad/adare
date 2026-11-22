@@ -78,6 +78,10 @@ These tests are *negative*:
 - ``*_does_not_exist`` (e.g. ``standard.file_does_not_exist``)
 - ``visual.not_exists``
 - ``visual.count_max`` with ``max: 0``
+- a count of zero: ``expected_count: 0`` (``comparison_type`` ``equals`` or ``less_equal``,
+  or ``less`` than 1), ``jsonl.line_count`` with ``{max: 0}``; this includes ``sqlite.query_result`` and
+  ``sqlite.row_count`` with ``expected_count: 0`` (with ``expect_to_fail`` such a test asserts
+  presence and is not negative); see :doc:`absence`
 - any test with ``expect_to_fail: true``
 - any testfunction declared with ``@testfunction(..., negative=True)``
 
