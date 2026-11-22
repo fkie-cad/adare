@@ -40,7 +40,7 @@ time.
 | Category | Meaning |
 | --- | --- |
 | `FILE_BASED` | Pull the target file via QGA, rewrite `dst`, run `test()` on the host. |
-| `FILE_CONTENT` | Same as FILE_BASED, for structured files (JSON, CSV, XML, SQLite). |
+| `FILE_CONTENT` | Same as FILE_BASED, for files whose content is read (JSON, CSV, XML, SQLite, INI, images, ...). |
 | `QGA_PROBE` | Run a probe command on the guest via QGA, build the `TestResult` on the host. |
 | `HOST_NATIVE` | Already runs on the host (e.g. visual tests). |
 | `AGENT_ONLY` | Requires the in-guest agent; **not** supported in host mode (the default). |
@@ -93,6 +93,18 @@ prefer catching *specific* exceptions (e.g. `FileNotFoundError`, `json.JSONDecod
 as *failed* makes a wrong path, a typo or a failed pull pass every negative test. Only a
 test whose subject is existence (`standard.file_exists`, `file_does_not_exist`,
 `dir_exists`) may pass or fail on a missing path.
+
+## Shared helpers (adarelib, shipped to the guest with the agent)
+
+- `adarelib.testset.structured`: complete `contains_key` / `value_matches` / `value_count`
+  bodies for any format that loads into dicts and lists. Describe the format once with
+  `StructuredFormat(label, load, errors)` and delegate (see the plist, yaml and toml
+  collections). Also `compare_value`, `compare_count` (`equals`, `greater`, `less`,
+  `greater_equal`, `less_equal`) and `count_parameter_errors` for your own count functions.
+- `adarelib.testset.compare`: key paths (`a.b`, `*`, `[*]`, `[0]`, `['a.b']`).
+- `adarelib.testset.content`: `read_bytes_capped`, `decode_text` (BOM / UTF-16 aware).
+
+Prefer a count function (`expected_count`, `0` = absent) over a separate "absent" test.
 
 Docstring examples use neutral made-up paths (`/home/user/data/app.db`), never a real
 application's paths or table names; `test_neutral_docstrings.py` checks this.

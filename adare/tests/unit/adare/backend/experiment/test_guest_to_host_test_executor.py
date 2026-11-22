@@ -351,6 +351,29 @@ class TestValidatePlaybookTests:
         assert len(issues) == 1
         assert 't_bad' in issues[0]
 
+    def test_lookup_is_by_collection_and_name(self):
+        """Collections share function names; each test must get its own collection's class."""
+        testfunction_collection = {
+            # an agent-only collection listed first would win a lookup by short name
+            'custom': {'value_matches': AgentOnlyTest, 'line_count': AgentOnlyTest},
+            'plist': {'value_matches': FileContentTest},
+            'text': {'line_count': FileContentTest},
+        }
+
+        playbook_tests = [
+            self._make_test_def('t_plist', 'plist.value_matches'),
+            self._make_test_def('t_text', 'text.line_count'),
+        ]
+
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
+        assert ok is True, issues
+
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
+            [self._make_test_def('t_custom', 'custom.value_matches')], testfunction_collection
+        )
+        assert ok is False
+        assert 'agent_only' in issues[0]
+
     def test_no_category_test_defaults_to_agent_only(self):
         """Test class without explicit host_mode_category defaults to AGENT_ONLY."""
         testfunction_collection = {

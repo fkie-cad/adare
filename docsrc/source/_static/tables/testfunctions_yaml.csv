@@ -1,0 +1,4 @@
+Function Name,S,Description,Parameters
+:doc:`contains_key <../yaml/contains_key>`,:status-tested:`●`,Tests if a YAML file contains the specified key path (supports several documents),"dst (str), key_path (str)"
+:doc:`value_matches <../yaml/value_matches>`,:status-tested:`●`,Tests if the YAML value at a key path matches the expected value (supports wildcards with any/all modes),"dst (str), key_path (str), expected_value (str/int/float/bool), regex_match* (bool), wildcard_mode* (str)"
+:doc:`value_count <../yaml/value_count>`,:status-tested:`●`,"Tests how many YAML values exist at a key path, optionally only those matching a value (0 = absent)","dst (str), key_path (str), expected_count (int), expected_value* (str/int/float/bool), regex_match* (bool), comparison_type* (str)"

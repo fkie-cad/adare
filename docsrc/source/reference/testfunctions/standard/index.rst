@@ -5,7 +5,7 @@ Standard
    :class: status-tested
 
 :Status: :status-tested:`● Tested`
-:Functions: 11
+:Functions: 12
 :Category: File System Operations
 
 The **Standard** testset provides fundamental file system testing capabilities for ADARE experiments. This testset focuses on file and directory operations, content validation, permissions, and metadata verification.
@@ -43,4 +43,6 @@ Test Functions
    file_hash_matches
    file_timestamps
    file_permissions
+   file_size
+   file_count
 

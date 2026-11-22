@@ -9,6 +9,7 @@ from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.testset.compare import compare_row_sequences, compare_row_sets, extract_columns, row_matches_pattern
+from adarelib.testset.structured import compare_count, count_parameter_errors
 
 # configure logging
 import logging
@@ -393,3 +394,65 @@ def compare_files(
         return TestResult.execution_error(e, "Cannot read CSV files")
     except csv.Error as e:
         return TestResult.execution_error(e, "CSV parsing error")
+
+
+@testfunction(
+    name='line_count',
+    description='tests the number of rows in a CSV file that match the given entry layout',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def line_count(ctx: TestContext, dst: str, entry: list, expected_count: int, comparison_type: str = 'equals'):
+    """Pass when the number of rows of CSV file ``dst`` matching ``entry`` satisfies ``comparison_type``.
+
+    Use for: asserting how often a record occurs (exactly one row for a file); absence of
+    a row: ``expected_count: 0`` (or ``expect_to_fail: true`` on csv.contains_line).
+
+    Args:
+        dst: Guest path to the CSV file. A glob must match exactly one path; no/ambiguous
+            match, a missing file, undecodable content or a CSV parse error is an error.
+            Parsed like csv.contains_line (default ``csv`` dialect, guest's default
+            encoding; the header row is a normal row).
+        entry: Expected row as a list, matched exactly like csv.contains_line: one item per
+            column (a row with another column count never matches), exact case-sensitive
+            strings or ``!re``/``!timestamp`` tags. A non-list is an error.
+        expected_count: Non-negative integer to compare against; anything else is an error.
+        comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
+            ``less_equal``; other values are an error.
+
+    Example:
+        function: csv.line_count
+        parameter:
+          dst: '{{ out_dir }}/timeline.csv'
+          entry: [report.txt, !re '.*', Deleted]
+          expected_count: 1
+    """
+    problems = count_parameter_errors(expected_count, comparison_type)
+    if not isinstance(entry, list):
+        problems.append(f'entry must be a list (one item per column), got {entry!r}')
+    if problems:
+        return TestResult.error(problems)
+    dst_resolved, status = ctx.resolve_globfilepath(dst)
+    if not dst_resolved:
+        return TestResult.error(
+            [f"file with path {dst} can't be used, because no unambiguous file could be identified ({status})"]
+        )
+    log.debug(f'dst file {dst_resolved} will be used for test line_count')
+    try:
+        try:
+            csv.field_size_limit(sys.maxsize)
+        except OverflowError:
+            csv.field_size_limit(10485760)  # 10MB
+        with open(dst_resolved) as f:
+            rows = list(csv.reader(f))
+    except FileNotFoundError:
+        return TestResult.error([f'file with path {dst} does not exist'])
+    except UnicodeDecodeError as e:
+        return TestResult.execution_error(e, f'Cannot decode CSV file {dst_resolved}')
+    except OSError as e:
+        return TestResult.execution_error(e, f'Cannot read CSV file {dst_resolved}')
+    except csv.Error as e:
+        return TestResult.execution_error(e, f'CSV parsing error in file {dst_resolved}')
+    matching = sum(1 for row in rows if row_matches_pattern(ctx, row, entry)[0])
+    ok, message = compare_count(matching, expected_count, comparison_type)
+    details = [f'{matching} of {len(rows)} row(s) match {entry}', message]
+    return TestResult.success(details) if ok else TestResult.failed(details)

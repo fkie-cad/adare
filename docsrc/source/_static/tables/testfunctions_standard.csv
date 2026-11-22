@@ -10,3 +10,5 @@ Function Name,S,Description,Parameters
 :doc:`file_timestamps <../standard/file_timestamps>`,:status-tested:`●`,Tests file timestamps with various comparison types,"dst (str), timestamp_type* (str), comparison_type* (str), expected_time* (str/num)"
 :doc:`file_permissions <../standard/file_permissions>`,:status-tested:`●`,Tests file permissions owner and group,"dst (str), expected_permissions (str), check_owner* (str), check_group* (str)"
 :doc:`file_content_contains <../standard/file_content_contains>`,:status-tested:`●`,Tests if file content contains specified string or byte pattern,"dst (str), content (str), content_type* (str)"
+:doc:`file_size <../standard/file_size>`,:status-tested:`●`,Tests the size of a file in bytes,"dst (str), expected_size (int), comparison_type* (str)"
+:doc:`file_count <../standard/file_count>`,:status-tested:`●`,Tests the number of files (or directories) matching a path or glob,"dst (str), expected_count (int), comparison_type* (str), kind* (str)"

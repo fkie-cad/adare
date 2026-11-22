@@ -505,8 +505,12 @@ Use custom tags in test parameters for precise matching:
 - ``!re <pattern>`` - Regex pattern match
 - ``!path`` - Path exact match
 - ``!reALL`` - Wildcard (match any value)
-- ``!timestamp {timestamp, tolerance, timezone, format}`` - Timestamp with tolerance
+- ``!timestamp {timestamp, tolerance, timezone, format}`` - Timestamp with tolerance: a number
+  ``n`` allows ``n`` seconds either way; a list ``[a, b]`` bounds *expected minus actual*, so
+  ``[-5, 10]`` accepts an artifact time from 10 s before to 5 s after the expected one. Anything
+  else is a playbook load error.
 - ``!timestamp {after, before, precision, localtime, format}`` - Timestamp inside a measured interval
+- ``epoch`` / ``unit`` on either form - the artifact stores the time as a number (see below)
 
 **Timestamps inside a measured interval:** instead of guessing a ``tolerance``, bracket the
 action with two ``save_timestamp`` actions (they read the guest clock) and require the artifact's
@@ -540,6 +544,68 @@ the test, never the host's. For a file's own MACB times use ``standard.file_time
      - save_timestamp: {variable: deleted_before}
      # ... export the Recycle Bin with RBCmd to trashbin_csv ...
      - test: trashbin_check
+
+**Numeric timestamps:** many artifacts store a time as a number of units since a fixed date
+(an integer column in a SQLite database, a number in a JSON file). ``epoch`` names the date the
+count starts from (1 January of ``1970``, ``1601`` or ``2001``, UTC; default ``1970``) and ``unit``
+what one step is (``s``, ``ms``, ``us``, ``ns`` or ``100ns``; default ``s``). The artifact value may
+be an integer or a string of digits; a fraction is allowed (a ``REAL`` column counting seconds).
+Values are converted exactly down to the microsecond, finer digits are cut off. Both options work
+with ``tolerance`` and with ``after``/``before``, and need one of them; an invalid ``epoch`` or
+``unit`` is an error when the playbook is loaded. With ``localtime: true`` the converted value is
+read as the guest's local wall time instead of UTC. An artifact value that is not a number fails
+the comparison.
+
+.. list-table:: Common numeric timestamp formats
+   :widths: 50 15 15 20
+   :header-rows: 1
+
+   * - Format
+     - ``epoch``
+     - ``unit``
+     - 2024-01-02 03:04:05 UTC
+   * - Unix time in seconds
+     - ``1970``
+     - ``s``
+     - 1704164645
+   * - Unix time in milliseconds
+     - ``1970``
+     - ``ms``
+     - 1704164645000
+   * - Unix time in microseconds
+     - ``1970``
+     - ``us``
+     - 1704164645000000
+   * - Unix time in nanoseconds
+     - ``1970``
+     - ``ns``
+     - 1704164645000000000
+   * - Windows FILETIME
+     - ``1601``
+     - ``100ns``
+     - 133486382450000000
+   * - Microseconds since 1601 (used by some browser databases)
+     - ``1601``
+     - ``us``
+     - 13348638245000000
+   * - Apple / Core Data reference date (seconds since 2001)
+     - ``2001``
+     - ``s``
+     - 725857445
+
+.. code-block:: yaml
+
+   tests:
+     - name: created_time
+       function: json.value_matches
+       parameter:
+         dst: /home/user/data/items.json
+         key_path: items[0].created      # e.g. 133486382450000000
+         expected_value: !timestamp
+           after: '{{created_after}}'
+           before: '{{created_before}}'
+           epoch: 1601
+           unit: 100ns
 
 Actions Reference
 *****************

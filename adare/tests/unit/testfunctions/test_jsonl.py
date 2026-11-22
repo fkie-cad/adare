@@ -739,3 +739,60 @@ class TestValueInAnyLine:
         result = test.test()
 
         assert_test_success(result)
+
+
+# ============================================================================
+# LineCount comparison_type
+# ============================================================================
+
+
+def _count(path, **params):
+    return LineCount(name="t", parameter=LineCountParameter(dst=str(path), **params)).test()
+
+
+@pytest.fixture
+def three_active(create_jsonl_file):
+    return create_jsonl_file("c.jsonl", [{"status": "active"}] * 3 + [{"status": "inactive"}])
+
+
+@pytest.mark.parametrize(
+    ("expected_count", "comparison_type", "status"),
+    [
+        (3, "equals", StatusEnum.SUCCESS),
+        (2, "greater", StatusEnum.SUCCESS),
+        (3, "greater", StatusEnum.FAILED),
+        (4, "less", StatusEnum.SUCCESS),
+        (3, "less", StatusEnum.FAILED),
+        (3, "greater_equal", StatusEnum.SUCCESS),
+        (4, "greater_equal", StatusEnum.FAILED),
+        (3, "less_equal", StatusEnum.SUCCESS),
+        (2, "less_equal", StatusEnum.FAILED),
+    ],
+)
+def test_line_count_comparison_type(three_active, expected_count, comparison_type, status):
+    result = _count(
+        three_active, conditions={"status": "active"}, expected_count=expected_count, comparison_type=comparison_type
+    )
+
+    assert result.status == status, result.details
+    assert "Found 3 matching lines" in result.details[0]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"expected_count": {"min": 1}, "comparison_type": "greater"},
+        {"expected_count": None, "comparison_type": "less"},
+        {"expected_count": 1, "comparison_type": "roughly"},
+        {"expected_count": -1},
+        {"expected_count": True},
+    ],
+)
+def test_line_count_bad_comparison_parameters_are_errors(three_active, params):
+    assert _count(three_active, **params).status == StatusEnum.ERROR
+
+
+def test_line_count_range_with_equals_still_works(three_active):
+    result = _count(three_active, expected_count={"min": 1, "max": 3}, comparison_type="equals")
+
+    assert result.status == StatusEnum.FAILED  # 4 valid lines, no conditions

@@ -36,6 +36,15 @@ Rules:
 - A parameter with a default of `''` is required in practice (e.g. `dst`).
 - Prefer the explicit inverse over negating: `standard.file_does_not_exist`, not
   `file_exists` expected to fail.
+- Absence of content (a key, value, string, line, text chunk): use the count function
+  with `expected_count: 0` (`json.value_count`, `ini.value_count`, `text.occurrence_count`,
+  `csv.line_count`, `xml.element_count`, ...), or `expect_to_fail: true` on the presence
+  test. Both are negative tests (INCONCLUSIVE without proof of the act). A missing or
+  unreadable file stays ERROR either way, never a pass.
+- Compressed files: `dst: /path/store.jsonlz4!` (LZ4, also gz/bz2/xz) gives the
+  decompressed content to any file test; `a.zip!/member` reads an archive member.
+- Formats: json, jsonl, csv, xml, excel, sqlite, ini, plist, yaml, toml, image (PNG text
+  chunks, EXIF, dimensions), text (raw byte/encoding search, line counts), standard.
 - `visual.*` tests run on the host against the VM screen (text/image/icon). Use them
   for UI state, not for files.
 
@@ -89,7 +98,8 @@ def file_exists(ctx, dst: str, match_mode: str = "any"):
   wrong path pass a negative test. Only existence tests (`file_exists`,
   `file_does_not_exist`) may fail on a missing path.
 - **A test whose pass means "something is absent"** (cleared, deleted, never written)
-  should declare `@testfunction(..., negative=True)`. The host then reports an
+  should declare `@testfunction(..., negative=True)` (a count function needs no flag:
+  `expected_count: 0` is recognised as negative). The host then reports an
   unproven pass (an earlier GUI action skipped or without visible effect) as
   INCONCLUSIVE instead of SUCCESS, so every playbook that uses it gets that for
   free. Names ending in `_does_not_exist` are recognised without the flag. Tell

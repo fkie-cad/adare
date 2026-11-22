@@ -5,7 +5,7 @@ FAILED means the test read the evidence and the condition does not hold. A missi
 ``expect_to_fail`` inverts only SUCCESS/FAILED, so reporting such a case as FAILED would
 let a wrong path or a failed host-mode pull pass a negative test.
 
-Existence tests (``standard.file_exists`` and friends) are exempt: for them a missing
+Existence tests (``standard.file_exists``, ``standard.file_count`` and friends) are exempt: for them a missing
 path is the finding.
 """
 
@@ -50,6 +50,29 @@ CASES = {
     'standard.file_hash_matches': {'expected_hash': '0' * 64},
     'standard.file_timestamps': {'comparison_type': 'within_last', 'within_duration': '1h'},
     'standard.file_permissions': {'expected_permissions': '644'},
+    'plist.contains_key': {'key_path': 'a'},
+    'plist.value_matches': {'key_path': 'a', 'expected_value': 1},
+    'plist.value_count': {'key_path': 'a', 'expected_count': 0},
+    'yaml.contains_key': {'key_path': 'a'},
+    'yaml.value_matches': {'key_path': 'a', 'expected_value': 1},
+    'yaml.value_count': {'key_path': 'a', 'expected_count': 0},
+    'toml.contains_key': {'key_path': 'a'},
+    'toml.value_matches': {'key_path': 'a', 'expected_value': 1},
+    'toml.value_count': {'key_path': 'a', 'expected_count': 0},
+    'ini.section_exists': {'section': 'a'},
+    'ini.contains_key': {'section': 'a', 'key': 'b'},
+    'ini.value_matches': {'section': 'a', 'key': 'b', 'expected_value': 'c'},
+    'ini.value_count': {'section': 'a', 'key': 'b', 'expected_count': 1},
+    'image.png_text_matches': {'keyword': 'k'},
+    'image.png_text_count': {'keyword': 'k', 'expected_count': 1},
+    'image.exif_value_matches': {'tag': 'Make', 'expected_value': 'x'},
+    'image.exif_value_count': {'tag': 'Make', 'expected_count': 1},
+    'image.dimensions_match': {'width': 1},
+    'csv.line_count': {'entry': ['a'], 'expected_count': 1},
+    'json.value_count': {'key_path': 'a', 'expected_count': 1},
+    'standard.file_size': {'expected_size': 1},
+    'text.occurrence_count': {'content': 'a', 'expected_count': 1},
+    'text.line_count': {'content': 'a', 'expected_count': 1},
 }
 TWO_PATHS = {'csv.compare_files', 'excel.compare_sheets', 'excel.compare_files'}
 

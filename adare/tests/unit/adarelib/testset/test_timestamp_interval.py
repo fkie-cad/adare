@@ -13,7 +13,7 @@ from adarelib.testset.yaml.customtags import YamlTimestamp
 
 pytestmark = pytest.mark.unit
 
-UTC = datetime.UTC
+UTC = datetime.timezone.utc
 T0 = datetime.datetime(2026, 10, 24, 12, 0, 0, tzinfo=UTC)
 
 

@@ -1,0 +1,4 @@
+Function Name,S,Description,Parameters
+:doc:`contains_key <../toml/contains_key>`,:status-tested:`●`,"Tests if a TOML file contains the specified key path (tables, arrays of tables)","dst (str), key_path (str)"
+:doc:`value_matches <../toml/value_matches>`,:status-tested:`●`,Tests if the TOML value at a key path matches the expected value (dates/times as ISO strings),"dst (str), key_path (str), expected_value (str/int/float/bool), regex_match* (bool), wildcard_mode* (str)"
+:doc:`value_count <../toml/value_count>`,:status-tested:`●`,"Tests how many TOML values exist at a key path, optionally only those matching a value (0 = absent)","dst (str), key_path (str), expected_count (int), expected_value* (str/int/float/bool), regex_match* (bool), comparison_type* (str)"

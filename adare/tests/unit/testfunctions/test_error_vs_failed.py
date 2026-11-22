@@ -69,6 +69,12 @@ def files(tmp_path):
         'bad_xml': tmp_path / 'bad.xml',
         'bad_xlsx': tmp_path / 'bad.xlsx',
         'bad_csv_bytes': tmp_path / 'bad.csv',
+        'bad_plist': tmp_path / 'bad.plist',
+        'bad_yaml': tmp_path / 'bad.yaml',
+        'bad_toml': tmp_path / 'bad.toml',
+        'bad_ini': tmp_path / 'bad.ini',
+        'bad_png': tmp_path / 'bad.png',
+        'bad_image': tmp_path / 'bad.jpg',
     }
     paths['csv'].write_text('a,b\nc,d\n')
     paths['json'].write_text('{"a": 1, "arr": [1, 2], "s": "text"}')
@@ -82,6 +88,15 @@ def files(tmp_path):
     # Undecodable as UTF-8 and as cp1252 (a Windows guest's default encoding), where
     # 0x81/0x8d/0x8f/0x90/0x9d are unassigned.
     paths['bad_csv_bytes'].write_bytes(b'a,b\n\x81\x8d,\x90\x9d\n')
+    paths['bad_plist'].write_bytes(b'<?xml version="1.0"?><plist version="1.0"><dict><key>a</key>')
+    paths['bad_yaml'].write_text('a: [1, 2\nb: 3\n')
+    paths['bad_toml'].write_text('[server\nport = 1\n')
+    paths['bad_ini'].write_bytes(b'[a]\nb = \xff\xfe\xfa\x80\n')
+    # a tEXt chunk whose CRC is 0
+    paths['bad_png'].write_bytes(
+        b'\x89PNG\r\n\x1a\n' + b'\x00\x00\x00\x03tEXtk\x00v' + b'\x00\x00\x00\x00' + b'\x00\x00\x00\x00IEND\xaeB`\x82'
+    )
+    paths['bad_image'].write_bytes(b'not an image')
     out = {k: str(v) for k, v in paths.items()}
     out['xlsx'] = _workbook(tmp_path / 'good.xlsx', {'S': [['a', 'b'], ['c', 'd']]})
     out['other_xlsx'] = _workbook(tmp_path / 'other.xlsx', {'S': [['a', 'b'], ['x', 'y']]})
@@ -105,6 +120,27 @@ CORRUPT = [
     ('excel.validate_columns', 'bad_xlsx', {'expected_columns': ['a']}),
     ('excel.compare_rows', 'bad_xlsx', {'reference_rows': [['a', 'b']]}),
     ('csv.contains_line', 'bad_csv_bytes', {'entry': ['a', 'b']}),
+    ('plist.contains_key', 'bad_plist', {'key_path': 'a'}),
+    ('plist.value_matches', 'bad_plist', {'key_path': 'a', 'expected_value': 1}),
+    ('plist.value_count', 'bad_plist', {'key_path': 'a', 'expected_count': 0}),
+    ('yaml.contains_key', 'bad_yaml', {'key_path': 'a'}),
+    ('yaml.value_matches', 'bad_yaml', {'key_path': 'a', 'expected_value': 1}),
+    ('yaml.value_count', 'bad_yaml', {'key_path': 'a', 'expected_count': 0}),
+    ('toml.contains_key', 'bad_toml', {'key_path': 'a'}),
+    ('toml.value_matches', 'bad_toml', {'key_path': 'a', 'expected_value': 1}),
+    ('toml.value_count', 'bad_toml', {'key_path': 'a', 'expected_count': 0}),
+    ('ini.section_exists', 'bad_ini', {'section': 'a'}),
+    ('ini.contains_key', 'bad_ini', {'section': 'a', 'key': 'b'}),
+    ('ini.value_matches', 'bad_ini', {'section': 'a', 'key': 'b', 'expected_value': 'c'}),
+    ('ini.value_count', 'bad_ini', {'section': 'a', 'key': 'b', 'expected_count': 1}),
+    ('image.png_text_matches', 'bad_png', {'keyword': 'k'}),
+    ('image.png_text_count', 'bad_png', {'keyword': 'k', 'expected_count': 1}),
+    ('image.exif_value_matches', 'bad_image', {'tag': 'Make', 'expected_value': 'x'}),
+    ('image.exif_value_count', 'bad_image', {'tag': 'Make', 'expected_count': 1}),
+    ('image.dimensions_match', 'bad_image', {'width': 1}),
+    ('json.value_count', 'bad_json', {'key_path': 'a', 'expected_count': 1}),
+    ('csv.line_count', 'bad_csv_bytes', {'entry': ['a', 'b'], 'expected_count': 1}),
+    ('text.line_count', 'bad_csv_bytes', {'content': 'a', 'expected_count': 1}),
 ]
 
 
@@ -175,6 +211,26 @@ BAD_PARAMS = [
     ('xml.element_count', 'xml', {'xpath': './/item', 'expected_count': 1, 'comparison_type': 'roughly'}),
     ('standard.file_content_matches_regex', 'txt', {'regex': '[unclosed'}),
     ('standard.file_hash_matches', 'txt', {'expected_hash': '0' * 64, 'hash_type': 'crc0'}),
+    ('json.value_count', 'json', {'key_path': 'a', 'expected_count': -1}),
+    ('json.value_count', 'json', {'key_path': 'a', 'expected_count': 1, 'comparison_type': 'roughly'}),
+    (
+        'json.value_count',
+        'json',
+        {'key_path': 's', 'expected_count': 1, 'expected_value': '[unclosed', 'regex_match': True},
+    ),
+    ('csv.line_count', 'csv', {'entry': 'a,b', 'expected_count': 1}),
+    ('csv.line_count', 'csv', {'entry': ['a', 'b'], 'expected_count': 'one'}),
+    ('standard.file_size', 'txt', {'expected_size': -1}),
+    ('standard.file_size', 'txt', {'expected_size': 1, 'comparison_type': 'roughly'}),
+    ('standard.file_count', 'txt', {'expected_count': -1}),
+    ('standard.file_count', 'txt', {'expected_count': 1, 'kind': 'symlink'}),
+    ('jsonl.line_count', 'jsonl', {'expected_count': {'min': 1}, 'comparison_type': 'greater'}),
+    ('jsonl.line_count', 'jsonl', {'expected_count': 1, 'comparison_type': 'roughly'}),
+    ('text.occurrence_count', 'txt', {'content': 'a', 'expected_count': 1, 'content_type': 'regex'}),
+    ('text.occurrence_count', 'txt', {'content': 'a', 'expected_count': 1, 'encodings': ['no-such-codec']}),
+    ('text.occurrence_count', 'txt', {'content': 'zz', 'expected_count': 1, 'content_type': 'hex'}),
+    ('text.line_count', 'txt', {'content': '[unclosed', 'expected_count': 1, 'regex_match': True}),
+    ('text.line_count', 'txt', {'content': 'a', 'expected_count': 1, 'encoding': 'no-such-codec'}),
 ]
 
 
@@ -307,6 +363,13 @@ MISMATCH = [
     ('standard.file_content_equals', 'txt', {'content': 'other text'}),
     ('standard.file_content_matches_regex', 'txt', {'regex': '^absent$'}),
     ('standard.file_hash_matches', 'txt', {'expected_hash': '0' * 64}),
+    ('json.value_count', 'json', {'key_path': 'arr[*]', 'expected_count': 5}),
+    ('csv.line_count', 'csv', {'entry': ['a', 'b'], 'expected_count': 2}),
+    ('standard.file_size', 'txt', {'expected_size': 1}),
+    ('standard.file_count', 'txt', {'expected_count': 2}),
+    ('jsonl.line_count', 'jsonl', {'expected_count': 0, 'comparison_type': 'less'}),
+    ('text.occurrence_count', 'txt', {'content': 'o', 'expected_count': 1}),
+    ('text.line_count', 'txt', {'content': 'hello', 'expected_count': 0}),
 ]
 
 

@@ -20,7 +20,7 @@ from adarelib.testset.api import TestContext
 pytestmark = pytest.mark.unit
 
 COLLECTIONS = Path(__file__).resolve().parents[3] / 'appdata' / 'testfunctions'
-FILE_COLLECTIONS = ('csv', 'excel', 'json', 'jsonl', 'xml', 'standard')
+FILE_COLLECTIONS = ('csv', 'excel', 'json', 'jsonl', 'xml', 'standard', 'plist', 'yaml', 'toml', 'ini', 'image', 'text')
 
 _DUMMIES = {str: 'x', int: 1, float: 1.0, bool: False, list: [], dict: {}}
 
@@ -38,7 +38,9 @@ def _file_testfunctions():
         module = import_module_from_pyfile(COLLECTIONS / collection / f'{collection}.py')
         for name, obj in vars(module).items():
             test_class = getattr(obj, '_test_class', None)
-            if test_class is None or 'resolve_globfilepath' not in inspect.getsource(obj):
+            source = inspect.getsource(obj) if test_class is not None else ''
+            # file tests resolve dst themselves or through adarelib.testset.structured
+            if 'resolve_globfilepath' not in source and 'structured.' not in source:
                 continue
             yield pytest.param(obj, id=f'{collection}.{name}')
 

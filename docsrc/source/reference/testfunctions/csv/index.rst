@@ -5,7 +5,7 @@ CSV
    :class: status-tested
 
 :Status: :status-tested:`● Tested`
-:Functions: 1
+:Functions: 2
 :Category: CSV Data Validation
 
 The **CSV** testset provides CSV file testing capabilities for ADARE experiments. This testset focuses on validating CSV row content, supporting complex pattern matching with regex patterns and timestamp tolerance.
@@ -32,3 +32,4 @@ Test Functions
    :hidden:
 
    contains_line
+   line_count

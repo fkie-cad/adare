@@ -10,6 +10,7 @@ from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.testset.compare import compare_with_single_placeholder, get_nested_value
+from adarelib.testset.structured import compare_count, count_parameter_errors
 
 # configure logging
 import logging
@@ -241,6 +242,7 @@ def line_count(
     expected_count: int | dict[str, int] | None = None,
     regex_match: bool = False,
     skip_malformed: bool = True,
+    comparison_type: str = 'equals',
 ):
     """Pass when the number of JSONL lines meeting all ``conditions`` is within ``expected_count``.
 
@@ -252,13 +254,17 @@ def line_count(
             has 0 lines (passes ``expected_count: 0``).
         conditions: Mapping ``key_path -> expected value`` (all must hold; for multi-value
             paths one matching element suffices). ``None``/empty counts every valid JSON line.
-        expected_count: ``int`` for an exact count, ``{min: N, max: M}`` for a range (either
-            bound optional: min defaults to 0, max to unbounded), or ``None`` for "at least 1".
+        expected_count: Non-negative ``int`` compared with ``comparison_type``, ``{min: N, max: M}``
+            for a range (either bound optional: min defaults to 0, max to unbounded), or ``None``
+            for "at least 1". Anything else (a negative number, a boolean) is an error.
         regex_match: Treat string expected values as regexes searched (``re.search``) in
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
             makes the first malformed line an error.
+        comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
+            ``less_equal``, applied to an ``int`` ``expected_count``. With the range form or
+            ``None`` only ``equals`` is allowed; other values are an error.
 
     Example:
         function: jsonl.line_count
@@ -267,6 +273,18 @@ def line_count(
           conditions: {event: file_deleted}
           expected_count: {min: 1, max: 5}
     """
+    if isinstance(expected_count, int) and not isinstance(expected_count, bool):
+        problems = count_parameter_errors(expected_count, comparison_type)
+    elif comparison_type != 'equals':
+        problems = [
+            f'comparison_type {comparison_type!r} needs an integer expected_count; '
+            f'with {expected_count!r} only equals is allowed'
+        ]
+    else:
+        problems = []
+    if problems:
+        return TestResult.error(problems)
+
     dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
@@ -281,7 +299,7 @@ def line_count(
         # No expected_count specified - require at least 1 match
         min_count = 1
         max_count = float('inf')
-    elif isinstance(expected_count, int):
+    elif isinstance(expected_count, int) and not isinstance(expected_count, bool):
         min_count = expected_count
         max_count = expected_count
     elif isinstance(expected_count, dict):
@@ -358,6 +376,14 @@ def line_count(
         # Log malformed lines if any
         if malformed_count > 0:
             log.warning(f"Skipped {malformed_count} malformed JSON lines in {dst}")
+
+        if isinstance(expected_count, int) and comparison_type != 'equals':
+            ok, comparison = compare_count(matching_count, expected_count, comparison_type)
+            messages = [f'Found {matching_count} matching lines', comparison]
+            messages.append(f'Total valid lines: {total_lines - malformed_count}')
+            if conditions:
+                messages.append(f'Conditions: {conditions}')
+            return TestResult.success(messages) if ok else TestResult.failed(messages)
 
         # Check if count is within expected range
         if min_count <= matching_count <= max_count:

@@ -1,5 +1,6 @@
 """Comprehensive unit tests for JSON testfunctions."""
 
+import json
 import pytest
 import sys
 from pathlib import Path
@@ -31,6 +32,8 @@ ValueMatches = json_tf_module.value_matches._test_class
 ValueMatchesParameter = json_tf_module.value_matches._parameter_class
 ArrayContains = json_tf_module.array_contains._test_class
 ArrayContainsParameter = json_tf_module.array_contains._parameter_class
+ValueCount = json_tf_module.value_count._test_class
+ValueCountParameter = json_tf_module.value_count._parameter_class
 
 # Import test helpers
 import importlib.util
@@ -688,3 +691,199 @@ class TestArrayContains:
 
         assert_test_error(result)
         assert "does not exist" in result.details[0]
+
+
+# ============================================================================
+# Key path syntax: numeric indexes, top-level arrays, quoted keys
+# ============================================================================
+
+PATH_DATA = {
+    "items": [{"name": "first"}, {"name": "middle"}, {"name": "last"}],
+    "a.b": {"c": 1},
+    "list[x]": "bracketed",
+}
+
+
+@pytest.mark.parametrize(
+    ("key_path", "expected"),
+    [
+        ("items[0].name", "first"),
+        ("items[-1].name", "last"),
+        ("['a.b'].c", 1),
+        ('["a.b"].c', 1),
+        ("list[x]", "bracketed"),
+    ],
+)
+def test_value_matches_path_syntax(create_json_file, key_path, expected):
+    json_file = create_json_file("paths.json", PATH_DATA)
+
+    result = ValueMatches(
+        name="t", parameter=ValueMatchesParameter(dst=str(json_file), key_path=key_path, expected_value=expected)
+    ).test()
+
+    assert_test_success(result)
+
+
+def test_value_matches_index_out_of_range_fails(create_json_file):
+    json_file = create_json_file("paths.json", PATH_DATA)
+
+    result = ValueMatches(
+        name="t", parameter=ValueMatchesParameter(dst=str(json_file), key_path="items[3].name", expected_value="x")
+    ).test()
+
+    assert_test_failed(result)
+
+
+@pytest.mark.parametrize(("key_path", "expected"), [("[1].id", 2), ("[*].id", 3), ("[-1].tags[0]", "z")])
+def test_value_matches_top_level_array(create_json_file, key_path, expected):
+    json_file = create_json_file("top.json", [{"id": 1}, {"id": 2}, {"id": 3, "tags": ["z"]}])
+
+    result = ValueMatches(
+        name="t", parameter=ValueMatchesParameter(dst=str(json_file), key_path=key_path, expected_value=expected)
+    ).test()
+
+    assert_test_success(result)
+
+
+def test_contains_key_quoted_key(create_json_file):
+    json_file = create_json_file("paths.json", PATH_DATA)
+
+    result = ContainsKey(name="t", parameter=ContainsKeyParameter(dst=str(json_file), key_path="['a.b']")).test()
+
+    assert_test_success(result)
+
+
+# ============================================================================
+# ValueCount Tests
+# ============================================================================
+
+COUNT_DATA = {
+    "groups": [
+        {"items": [{"tag": "archived"}, {"tag": "new"}]},
+        {"items": [{"tag": "archived"}, {"tag": "archived-old"}, {"other": None}]},
+    ],
+    "tags": ["a", "b", "a"],
+    "empty": None,
+}
+
+
+def _count(path, **params):
+    return ValueCount(name="t", parameter=ValueCountParameter(dst=str(path), **params)).test()
+
+
+class TestValueCount:
+    """Tests for ValueCount testfunction."""
+
+    @pytest.mark.parametrize(
+        ("key_path", "count"),
+        [
+            ("groups[*].items[*].tag", 4),
+            ("groups[*].items[*]", 5),
+            ("tags", 1),  # an array is one value
+            ("tags[*]", 3),
+            ("empty", 1),  # null counts
+            ("missing", 0),
+            ("groups[5].items", 0),
+        ],
+    )
+    def test_counts_resolved_values(self, create_json_file, key_path, count):
+        result = _count(create_json_file("c.json", COUNT_DATA), key_path=key_path, expected_count=count)
+
+        assert_test_success(result)
+        assert f"{count} value(s)" in result.details[0]
+
+    def test_absent_key_with_zero_count(self, create_json_file):
+        path = create_json_file("c.json", COUNT_DATA)
+
+        assert_test_success(_count(path, key_path="settings.secret", expected_count=0))
+        assert_test_failed(_count(path, key_path="tags", expected_count=0))
+
+    def test_counts_matching_values(self, create_json_file):
+        path = create_json_file("c.json", COUNT_DATA)
+
+        assert_test_success(
+            _count(path, key_path="groups[*].items[*].tag", expected_value="archived", expected_count=2)
+        )
+        # a path selecting one array compares its elements
+        assert_test_success(_count(path, key_path="tags", expected_value="a", expected_count=2))
+        assert_test_success(_count(path, key_path="tags", expected_value="c", expected_count=0))
+
+    def test_regex_match(self, create_json_file):
+        path = create_json_file("c.json", COUNT_DATA)
+
+        result = _count(
+            path, key_path="groups[*].items[*].tag", expected_value="^archived", regex_match=True, expected_count=3
+        )
+
+        assert_test_success(result)
+
+    @pytest.mark.parametrize(
+        ("comparison_type", "expected_count", "passes"),
+        [
+            ("greater", 3, True),
+            ("greater", 4, False),
+            ("less", 5, True),
+            ("greater_equal", 4, True),
+            ("less_equal", 3, False),
+            ("equals", 5, False),
+        ],
+    )
+    def test_comparison_types(self, create_json_file, comparison_type, expected_count, passes):
+        path = create_json_file("c.json", COUNT_DATA)
+
+        result = _count(
+            path, key_path="groups[*].items[*].tag", expected_count=expected_count, comparison_type=comparison_type
+        )
+
+        (assert_test_success if passes else assert_test_failed)(result)
+
+    @pytest.mark.parametrize(
+        "params",
+        [
+            {"expected_count": -1},
+            {"expected_count": "two"},
+            {"expected_count": True},
+            {"expected_count": 1, "comparison_type": "roughly"},
+            {"expected_count": 1, "expected_value": "[unclosed", "regex_match": True},
+        ],
+    )
+    def test_bad_parameters_are_errors(self, create_json_file, params):
+        result = _count(create_json_file("c.json", COUNT_DATA), key_path="tags", **params)
+
+        assert_test_error(result)
+
+    def test_missing_file_is_error(self, tmp_path):
+        result = _count(tmp_path / "missing.json", key_path="a", expected_count=0)
+
+        assert_test_error(result)
+        assert "does not exist" in result.details[0]
+
+    def test_invalid_json_is_error(self, tmp_path):
+        path = tmp_path / "bad.json"
+        path.write_text('{"a": 1,')
+
+        result = _count(path, key_path="a", expected_count=0)
+
+        assert_test_error(result)
+        assert "Invalid JSON" in result.details[0]
+
+    def test_glob_without_match_is_error(self, tmp_path):
+        assert_test_error(_count(tmp_path / "none*.json", key_path="a", expected_count=0))
+
+    def test_lz4_compressed_json(self, tmp_path):
+        from adarelib.testset import lz4
+
+        data = json.dumps(COUNT_DATA).encode()
+        n = len(data)
+        rest, ext = n - 15, b""
+        while rest >= 255:
+            ext += b"\xff"
+            rest -= 255
+        # block-with-header format: magic, u32 size, one LZ4 block of literals only
+        block = b"\xf0" + ext + bytes([rest]) + data
+        path = tmp_path / "store.jsonlz4"
+        path.write_bytes(lz4.BLOCK_HEADER_MAGIC + n.to_bytes(4, "little") + block)
+
+        result = _count(f"{path}!", key_path="tags[*]", expected_value="a", expected_count=2)
+
+        assert_test_success(result)

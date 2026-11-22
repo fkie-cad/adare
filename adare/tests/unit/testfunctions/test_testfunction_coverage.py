@@ -69,10 +69,12 @@ def test_testfunctions_are_discovered():
     ("collection", "func", "testname"), TESTFUNCTIONS, ids=[f"{c}.{t}" for c, _, t in TESTFUNCTIONS]
 )
 def test_testfunction_has_unit_tests(collection, func, testname):
-    test_file = TESTS_DIR / f"test_{collection}.py"
-    assert test_file.exists(), f"{collection} has no test file {test_file.name}"
-    assert f".{func}._test_class" in test_file.read_text(encoding="utf-8"), (
-        f"{collection}.{testname} is not exercised in {test_file.name} "
+    # test_<collection>.py, plus test_<collection>_<topic>.py once the main file is at its size budget
+    test_files = [TESTS_DIR / f"test_{collection}.py", *sorted(TESTS_DIR.glob(f"test_{collection}_*.py"))]
+    test_files = [f for f in test_files if f.exists()]
+    assert test_files, f"{collection} has no test file test_{collection}.py"
+    assert any(f".{func}._test_class" in f.read_text(encoding="utf-8") for f in test_files), (
+        f"{collection}.{testname} is not exercised in {', '.join(f.name for f in test_files)} "
         f"(expected a reference to <module>.{func}._test_class)"
     )
 

@@ -641,30 +641,36 @@ _PRIMITIVE_UNION_HOOK = False
 
 
 def register_primitive_union_hook() -> None:
-    """Let cattrs structure ``str | int | float`` style parameters (passed through unchanged).
+    """Let cattrs structure unions of plain YAML types (the value is passed through unchanged).
 
-    Test functions declare e.g. ``expected_time: str | int | float``. cattrs refuses such unions without
-    a hook, so a test using one (``standard.file_timestamps``) could not be structured for host
-    execution, while the guest agent structures it. The value is already a plain YAML scalar.
+    Test functions declare e.g. ``expected_time: str | int | float``, ``expected_count: int |
+    dict[str, int] | None`` or ``encodings: list[str] | str | None``. cattrs refuses such unions
+    without a hook, so a test using one could not be structured for host execution, dry-run or
+    validation, while the guest agent builds the parameter object directly from the YAML value.
+    Members may be scalars, ``bytes``, ``list``/``dict`` and their generics (``list[str]``); the
+    value stays as given, like on the guest, and the testfunction validates it.
     """
     global _PRIMITIVE_UNION_HOOK
     if _PRIMITIVE_UNION_HOOK:
         return
+    import cattrs
+
+    cattrs.register_structure_hook_func(is_plain_union, lambda value, _type: value)
+    _PRIMITIVE_UNION_HOOK = True
+
+
+_PLAIN_TYPES = (str, int, float, bool, bytes, list, dict, type(None))
+
+
+def is_plain_union(t: Any) -> bool:
+    """Whether ``t`` is a union whose members are all plain YAML-like types (see the hook)."""
     import types
     import typing
 
-    import cattrs
-
-    scalars = (str, int, float, bool, type(None))
-
-    def _is_scalar_union(t) -> bool:
-        if typing.get_origin(t) not in (typing.Union, types.UnionType):
-            return False
-        args = typing.get_args(t)
-        return bool(args) and all(a in scalars for a in args)
-
-    cattrs.register_structure_hook_func(_is_scalar_union, lambda value, _type: value)
-    _PRIMITIVE_UNION_HOOK = True
+    if typing.get_origin(t) not in (typing.Union, types.UnionType):
+        return False
+    args = typing.get_args(t)
+    return bool(args) and all(a in _PLAIN_TYPES or typing.get_origin(a) in (list, dict) for a in args)
 
 
 def _attach_guest_utc_offset(metadata: dict[str, Any], runtime_execution_context: dict[str, Any]) -> None:

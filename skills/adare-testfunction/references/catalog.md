@@ -72,6 +72,29 @@ tests:
     dst: <str>
 ```
 
+### `csv.line_count`
+
+tests the number of rows in a CSV file that match the given entry layout
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the CSV file. A glob must match exactly one path; no/ambiguous match, a missing file, undecodable content or a CSV parse error is an error. Parsed like csv.contains_line (default ``csv`` dialect, guest's default encoding; the header row is a normal row). |
+| **entry** | `list` |  | Expected row as a list, matched exactly like csv.contains_line: one item per column (a row with another column count never matches), exact case-sensitive strings or ``!re``/``!timestamp`` tags. A non-list is an error. |
+| **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+
+```yaml
+tests:
+- name: check_line_count
+  function: csv.line_count
+  parameter:
+    dst: <str>
+    entry: <list>
+    expected_count: <int>
+```
+
 ## excel
 
 ### `excel.cell_value_matches`
@@ -247,6 +270,227 @@ tests:
     dst: <str>
 ```
 
+## image
+
+### `image.dimensions_match`
+
+tests if an image has the expected width and/or height in pixels
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the image (any format Pillow reads); a glob must match exactly one path. A missing file or a file that is not an image is an error. |
+| width | `int` | `None` | Expected width in pixels (positive integer). |
+| height | `int` | `None` | Expected height in pixels (positive integer). Give at least one of the two; neither, or a non-positive / non-integer value, is an error. |
+
+```yaml
+tests:
+- name: check_dimensions_match
+  function: image.dimensions_match
+  parameter:
+    dst: <str>
+```
+
+### `image.exif_value_count`
+
+tests the number of occurrences of an EXIF tag (optionally with a matching value)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the image; a glob must match exactly one path. A missing file, a file that is not an image or has corrupt EXIF data is an error. |
+| **tag** | `str \| int` |  | Tag name (``Make``, ``GPSLatitude``) or number (``0x010f``); names are looked up in their IFD (IFD0 + Exif IFD, or GPS IFD), numbers in all three, and each IFD that has the tag counts once. An unknown name is an error. |
+| **expected_count** | `int` |  | Required non-negative integer to compare against; anything else is an error. |
+| expected_value | `str \| int \| float \| bool \| None` | `None` | Count only occurrences whose value text equals/matches this (same formatting as image.exif_value_matches); ``None`` (default) counts every occurrence. |
+| regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+
+```yaml
+tests:
+- name: check_exif_value_count
+  function: image.exif_value_count
+  parameter:
+    dst: <str>
+    tag: <str | int>
+    expected_count: <int>
+```
+
+### `image.exif_value_matches`
+
+tests if an EXIF tag (IFD0, Exif or GPS IFD) equals or matches an expected value
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the image; a glob must match exactly one path. A missing file, a file that is not an image or has corrupt EXIF data is an error. |
+| **tag** | `str \| int` |  | Tag name as in Pillow's tables (``Make``, ``DateTimeOriginal``, ``GPSLatitude``) or a number (``0x9003``, ``36867``). Main-table names are looked up in IFD0 and the Exif IFD, GPS names in the GPS IFD, numbers in all three. An unknown name is an error. |
+| **expected_value** | `str \| int \| float \| bool` |  | Compared with the value's text form: text as stored (trailing NULs removed); integers in decimal; rationals and floats as decimals (``72``, ``2.8``, ``0.004``; ``nan`` for x/0); sequences joined with ``", "`` (GPS ``51, 30, 12.5``); bytes as text when printable UTF-8, else lowercase hex; the user comment without its 8-byte charset prefix; the UTF-16 title/comment tags (0x9C9B-0x9C9F) decoded. A YAML number is formatted the same way (write a sequence as text, ``51, 30, 12.5``); a ``!re``/``!timestamp`` tag or ``{{placeholder}}`` is matched by type. |
+| regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). An invalid regex is an error. |
+
+```yaml
+tests:
+- name: check_exif_value_matches
+  function: image.exif_value_matches
+  parameter:
+    dst: <str>
+    tag: <str | int>
+    expected_value: <str | int | float | bool>
+```
+
+### `image.png_text_count`
+
+tests the number of PNG text chunks with a keyword (optionally with a matching text)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the PNG file; a glob must match exactly one path. A missing file, a bad signature, a truncated chunk, any chunk CRC mismatch, a malformed or undecompressable text chunk, or a missing IEND is an error. |
+| **keyword** | `str` |  | Chunk keyword, compared exactly; tEXt, zTXt and iTXt chunks are counted together, also those after the image data. |
+| **expected_count** | `int` |  | Required non-negative integer to compare against; anything else is an error. |
+| expected_value | `str \| int \| float \| bool \| None` | `None` | Count only chunks whose text equals/matches this (same rules as image.png_text_matches); ``None`` (default) counts every chunk with ``keyword``. |
+| regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+
+```yaml
+tests:
+- name: check_png_text_count
+  function: image.png_text_count
+  parameter:
+    dst: <str>
+    keyword: <str>
+    expected_count: <int>
+```
+
+### `image.png_text_matches`
+
+tests if a PNG text chunk (tEXt/zTXt/iTXt) with a keyword exists or matches an expected value
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the PNG file; a glob must match exactly one path. A missing file, a bad signature, a truncated chunk, any chunk CRC mismatch, a malformed or undecompressable text chunk, or a missing IEND is an error. |
+| **keyword** | `str` |  | Chunk keyword, compared exactly (case-sensitive). All chunks up to IEND are read, also those after the image data. tEXt is Latin-1, zTXt zlib + Latin-1, iTXt UTF-8 (compressed or not; language tag and translated keyword are ignored). |
+| expected_value | `str \| int \| float \| bool \| None` | `None` | ``None`` (default): the keyword exists. Otherwise compared with the text; a YAML number/boolean is compared as its text, a ``!re``/``!timestamp`` tag or ``{{placeholder}}`` is matched by type. |
+| regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). An invalid regex is an error. |
+
+```yaml
+tests:
+- name: check_png_text_matches
+  function: image.png_text_matches
+  parameter:
+    dst: <str>
+    keyword: <str>
+```
+
+## ini
+
+### `ini.contains_key`
+
+tests if an INI file contains a key in a section
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the INI file; a glob must match exactly one path. A missing, unreadable or undecodable file is an error. |
+| **section** | `str` |  | Section name without brackets; ``''`` = keys before the first header. Duplicate sections are searched together. |
+| **key** | `str` |  | Key name, compared after stripping. The first ``=`` on a line splits key and value; lines without ``=`` are ignored, so a bare word is not a key. |
+| case_sensitive | `bool` | `True` | ``False`` compares section and key names case-insensitively. |
+| encoding | `str` | `None` | Text encoding; default auto: a BOM wins, BOM-less UTF-16 is recognised, everything else is read as UTF-8. An unknown name is an error. |
+
+```yaml
+tests:
+- name: check_contains_key
+  function: ini.contains_key
+  parameter:
+    dst: <str>
+    section: <str>
+    key: <str>
+```
+
+### `ini.section_exists`
+
+tests if an INI file contains a section
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the INI file; a glob must match exactly one path. A missing, unreadable or undecodable file is an error. |
+| **section** | `str` |  | Section name without brackets, compared after stripping. Keys before the first header belong to section ``''``, which exists only as a header ``[]``. |
+| case_sensitive | `bool` | `True` | ``False`` compares section names case-insensitively. |
+| encoding | `str` | `None` | Text encoding; default auto: a BOM wins, BOM-less UTF-16 is recognised, everything else is read as UTF-8. An unknown name is an error. |
+
+```yaml
+tests:
+- name: check_section_exists
+  function: ini.section_exists
+  parameter:
+    dst: <str>
+    section: <str>
+```
+
+### `ini.value_count`
+
+tests the number of occurrences of an INI key (optionally with a matching value)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the INI file; a glob must match exactly one path. A missing, unreadable or undecodable file is an error. |
+| **section** | `str` |  | Section name without brackets; ``''`` = keys before the first header. Occurrences in duplicate sections are added up. |
+| **key** | `str` |  | Key name; the first ``=`` on a line splits key and value. |
+| **expected_count** | `int` |  | Required non-negative integer to compare against; anything else is an error. |
+| expected_value | `str \| int \| float \| bool \| None` | `None` | Count only occurrences whose raw value equals/matches this (same rules as ini.value_matches); ``None`` (default) counts every occurrence. |
+| regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+| case_sensitive | `bool` | `True` | ``False`` compares section and key names case-insensitively. |
+| encoding | `str` | `None` | Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8). |
+
+```yaml
+tests:
+- name: check_value_count
+  function: ini.value_count
+  parameter:
+    dst: <str>
+    section: <str>
+    key: <str>
+    expected_count: <int>
+```
+
+### `ini.value_matches`
+
+tests if an INI value equals or matches an expected value (regex and placeholders supported)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the INI file; a glob must match exactly one path. A missing, unreadable or undecodable file is an error. |
+| **section** | `str` |  | Section name without brackets; ``''`` = keys before the first header. |
+| **key** | `str` |  | Key name; the first ``=`` on a line splits key and value. |
+| **expected_value** | `str \| int \| float \| bool` |  | Compared with the raw value text (stripped; quotes and inline comments are kept, ``a = "x" ; note`` has the value ``"x" ; note``). A YAML number or boolean is compared as its text (``8080``, ``true``/``false``). A ``!re``/``!timestamp`` tag or ``{{placeholder}}`` is matched by type. |
+| regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). An invalid regex is an error. |
+| case_sensitive | `bool` | `True` | ``False`` compares section and key names case-insensitively; values are always compared as given. |
+| encoding | `str` | `None` | Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8). |
+
+```yaml
+tests:
+- name: check_value_matches
+  function: ini.value_matches
+  parameter:
+    dst: <str>
+    section: <str>
+    key: <str>
+    expected_value: <str | int | float | bool>
+```
+
 ## json
 
 ### `json.array_contains`
@@ -257,7 +501,7 @@ tests if JSON array at specified path contains expected element
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error; an unresolvable path or non-array value fails. |
+| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error; an unresolvable path or non-array value fails. ``x.jsonlz4!`` reads LZ4-compressed JSON. |
 | **array_path** | `str` |  | Dot path to the array (same syntax as json.value_matches ``key_path``); a wildcard yielding several values is treated as the array of those values. |
 | expected_element | `str \| int \| float \| bool \| dict \| list` | `None` | Element tested with Python ``in`` (type-sensitive; dicts and lists must match exactly). A ``!re``/``!timestamp`` tag passes if any element's ``str()`` matches. |
 
@@ -278,8 +522,8 @@ tests if JSON file contains specified key path (supports dot notation like "user
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error. Read with the guest's default encoding. |
-| **key_path** | `str` |  | Dot path from the root object, e.g. ``user.profile.name``. ``*`` expands all values of an object (``config.*.enabled``), ``name[*]`` all elements of array ``name`` (``users[*].email``). No numeric indexes; keys containing ``.`` and top-level arrays cannot be addressed. |
+| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error. Read with the guest's default encoding. LZ4-compressed JSON is read through the archive separator (``/home/user/data/store.jsonlz4!``). |
+| **key_path** | `str` |  | Dot path from the root, e.g. ``user.profile.name``. ``*`` expands all values of an object (``config.*.enabled``), ``[*]`` all elements of an array (``users[*].email``), ``[n]`` one element (``items[0]``; ``items[-1]`` = last). A leading bracket addresses a top-level array (``[0].name``, ``[*].id``); ``['a.b']`` quotes a key that contains dots or brackets. |
 
 ```yaml
 tests:
@@ -290,6 +534,31 @@ tests:
     key_path: <str>
 ```
 
+### `json.value_count`
+
+tests the number of JSON values at a key path (optionally only those matching a value)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error. ``x.jsonlz4!`` reads LZ4-compressed JSON. |
+| **key_path** | `str` |  | Dot path from the root, e.g. ``user.profile.name``. ``*`` expands all values of an object (``config.*.enabled``), ``[*]`` all elements of an array (``users[*].email``), ``[n]`` one element (``items[0]``; ``items[-1]`` = last). A leading bracket addresses a top-level array (``[0].name``, ``[*].id``); ``['a.b']`` quotes a key that contains dots or brackets. |
+| **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
+| expected_value | `str \| int \| float \| bool \| None` | `None` | ``None`` (default) counts the values the path selects (a ``null`` value counts; an array is one value, ``items[*]`` counts its elements). Otherwise counts the values equal to it (type-sensitive ``==``; ``!re``/``!timestamp`` tags compare ``str(value)``); a path that selects exactly one array compares its elements one by one. |
+| regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``; an invalid regex is an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+
+```yaml
+tests:
+- name: check_value_count
+  function: json.value_count
+  parameter:
+    dst: <str>
+    key_path: <str>
+    expected_count: <int>
+```
+
 ### `json.value_matches`
 
 tests if JSON value at key path matches expected value using placeholders (supports wildcards [*] and * with any/all modes)
@@ -298,8 +567,8 @@ tests if JSON value at key path matches expected value using placeholders (suppo
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error; an unresolvable key path fails. |
-| **key_path** | `str` |  | Dot path from the root object, e.g. ``user.profile.name``. ``*`` expands all values of an object (``config.*.enabled``), ``name[*]`` all elements of array ``name`` (``users[*].email``). No numeric indexes; keys containing ``.`` and top-level arrays cannot be addressed. |
+| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error; an unresolvable key path fails. ``x.jsonlz4!`` reads LZ4-compressed JSON. |
+| **key_path** | `str` |  | Dot path from the root, e.g. ``user.profile.name``. ``*`` expands all values of an object (``config.*.enabled``), ``[*]`` all elements of an array (``users[*].email``), ``[n]`` one element (``items[0]``; ``items[-1]`` = last). A leading bracket addresses a top-level array (``[0].name``, ``[*].id``); ``['a.b']`` quotes a key that contains dots or brackets. |
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``; ``null`` needs ``None``/``null``). A ``!re``/``!timestamp`` tag compares ``str(value)`` by type. |
 | regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``. |
 | wildcard_mode | `str` | `'any'` | ``any`` (default): one value must match; ``all``: every value must match. Other values are an error. |
@@ -325,9 +594,10 @@ counts lines in JSONL file matching conditions and validates against expected co
 |---|---|---|---|
 | dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file has 0 lines (passes ``expected_count: 0``). |
 | conditions | `dict[str, str \| int \| float \| bool \| None] \| None` | `None` | Mapping ``key_path -> expected value`` (all must hold; for multi-value paths one matching element suffices). ``None``/empty counts every valid JSON line. |
-| expected_count | `int \| dict[str, int] \| None` | `None` | ``int`` for an exact count, ``{min: N, max: M}`` for a range (either bound optional: min defaults to 0, max to unbounded), or ``None`` for "at least 1". |
+| expected_count | `int \| dict[str, int] \| None` | `None` | Non-negative ``int`` compared with ``comparison_type``, ``{min: N, max: M}`` for a range (either bound optional: min defaults to 0, max to unbounded), or ``None`` for "at least 1". Anything else (a negative number, a boolean) is an error. |
 | regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
 | skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``, applied to an ``int`` ``expected_count``. With the range form or ``None`` only ``equals`` is allowed; other values are an error. |
 
 ```yaml
 tests:
@@ -464,6 +734,77 @@ tests:
     username: <str>
 ```
 
+## plist
+
+### `plist.contains_key`
+
+tests if a property list (XML or binary plist) contains the specified key path
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the plist; XML and binary plists are detected from the content. A glob must match exactly one path; ``archive.zip!/member.plist`` reads an archive member. A missing, unreadable or invalid file is an error. |
+| **key_path** | `str` |  | Dot path from the root dictionary, e.g. ``window.frame``. Keys that contain dots use quotes in brackets (``['com.example.lastVersion']``, also mid-path: ``recent['com.example.doc'].name``). ``*`` expands all values of a dictionary, ``name[*]`` all elements of array ``name``, ``name[0]`` / ``name[-1]`` one element; a leading ``[0]`` / ``[*]`` addresses a top-level array. |
+
+```yaml
+tests:
+- name: check_contains_key
+  function: plist.contains_key
+  parameter:
+    dst: <str>
+    key_path: <str>
+```
+
+### `plist.value_count`
+
+tests how many property list values exist at a key path, optionally only those matching a value (0 = absent)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the plist (XML or binary, detected from the content); a glob must match exactly one path. |
+| **key_path** | `str` |  | Dot path from the root dictionary (syntax as in plist.contains_key). |
+| **expected_count** | `int` |  | Non-negative integer to compare with. |
+| expected_value | `str \| int \| float \| bool \| None` | `None` | Only count values equal to this (normalised as in plist.value_matches: dates are ISO strings, data is hex). ``None`` (default) counts every value. |
+| regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched in ``str(value)``. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Other values are an error. |
+
+```yaml
+tests:
+- name: check_value_count
+  function: plist.value_count
+  parameter:
+    dst: <str>
+    key_path: <str>
+    expected_count: <int>
+```
+
+### `plist.value_matches`
+
+tests if the property list value at a key path matches the expected value (dates as ISO strings, data as hex)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the plist (XML or binary, detected from the content); a glob must match exactly one path. A missing or invalid file is an error; an unresolvable key path fails. |
+| **key_path** | `str` |  | Dot path from the root dictionary; ``['com.example.key']`` for keys with dots, ``*`` all values of a dictionary, ``name[*]`` / ``name[0]`` array elements, a leading ``[0]`` / ``[*]`` for a top-level array. |
+| **expected_value** | `str \| int \| float \| bool \| None` |  | Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``). A ``!re`` tag (``re.match``) or ``{{placeholder}}`` compares ``str(value)``. |
+| regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``. An invalid regex is an error. |
+| wildcard_mode | `str` | `'any'` | ``any`` (default): one value must match; ``all``: every value must match. Other values are an error. |
+
+```yaml
+tests:
+- name: check_value_matches
+  function: plist.value_matches
+  parameter:
+    dst: <str>
+    key_path: <str>
+    expected_value: <str | int | float | bool | None>
+```
+
 ## sqlite
 
 ### `sqlite.query_result`
@@ -556,7 +897,7 @@ tests if file content contains specified string or byte pattern
 | parameter | type | default | description |
 |---|---|---|---|
 | dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file is an error. |
-| content | `str` | `''` | Text to find (case-sensitive). In ``bytes`` mode Python escape sequences are decoded first (``\x00``, ``\n``) to latin-1 bytes. An empty value always passes. |
+| content | `str` | `''` | Text to find (case-sensitive). An empty value always passes. In ``bytes`` mode ASCII characters stand for their byte and Python escapes (``\x00``, ``\n``, ``\\``) are decoded; a non-ASCII character or an unknown escape is an error (write ``\xNN``, or use ``string`` mode with an ``encoding``). |
 | content_type | `str` | `'string'` | ``bytes`` searches the raw file bytes; any other value (default ``string``) searches the decoded text. |
 | encoding | `str` | `'utf-8'` | Codec for ``string`` mode; undecodable bytes are silently dropped. ``BOM`` detects UTF-8/16/32 from the byte-order mark and errors if there is none. |
 | strip_bom | `bool` | `False` | Remove a leading U+FEFF from the decoded text (``string`` mode only). |
@@ -612,6 +953,28 @@ tests:
   parameter:
     dst: <str>
     regex: <str>
+```
+
+### `standard.file_count`
+
+tests the number of files (or directories) matching a path or glob
+
+*FILE_BASED*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path or glob (Python ``glob``, not recursive: ``**`` acts like ``*``; ``*`` skips dotfiles), e.g. ``/home/user/logs/*.log``. No match counts 0, it is not an error; an empty ``dst`` or an unresolved ``{{placeholder}}`` is. Inside an archive (``a.zip!/logs/*.log``) the matching file members are counted; the archive itself must exist and be readable, otherwise an error. |
+| **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+| kind | `str` | `'file'` | ``file`` (default): regular files (also through a symlink); ``dir``: directories; ``any``: every existing path. Archives have file members only, so ``dir`` with an archive path is an error. |
+
+```yaml
+tests:
+- name: check_file_count
+  function: standard.file_count
+  parameter:
+    dst: <str>
+    expected_count: <int>
 ```
 
 ### `standard.file_does_not_exist`
@@ -695,6 +1058,27 @@ tests:
     expected_permissions: <str>
 ```
 
+### `standard.file_size`
+
+tests the size of a file in bytes
+
+*FILE_BASED*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the file. A glob must match exactly one path; a missing file or a directory is an error. An archive member (``a.zip!/p/x.db``) has its extracted size. |
+| **expected_size** | `int` |  | Non-negative integer number of bytes; anything else is an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+
+```yaml
+tests:
+- name: check_file_size
+  function: standard.file_size
+  parameter:
+    dst: <str>
+    expected_size: <int>
+```
+
 ### `standard.file_timestamps`
 
 tests file timestamps with various comparison types and formats
@@ -719,6 +1103,130 @@ tests:
   function: standard.file_timestamps
   parameter:
     dst: <str>
+```
+
+## text
+
+### `text.line_count`
+
+tests the number of text lines that contain a string or match a regex
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the text file; a glob must match exactly one path. A missing file or content not valid in the encoding is an error; an empty file has 0 lines. Lines end at ``\n``, ``\r\n`` or ``\r``. |
+| **content** | `str` |  | Substring a line must contain (case-sensitive); an empty string counts every line. With ``regex_match`` a regex searched in each line (``re.search``; ``(?i)`` for case-insensitive); an invalid regex is an error. |
+| **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+| encoding | `str \| None` | `None` | Text encoding; ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8. A BOM always wins. Unknown names are an error. |
+| regex_match | `bool` | `False` | Treat ``content`` as a regex (see ``content``). |
+
+```yaml
+tests:
+- name: check_line_count
+  function: text.line_count
+  parameter:
+    dst: <str>
+    content: <str>
+    expected_count: <int>
+```
+
+### `text.occurrence_count`
+
+tests how often a string or byte sequence occurs in a (text or binary) file
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the file; a glob must match exactly one path. A missing file is an error. The raw bytes are searched, nothing is decoded. |
+| **content** | `str` |  | What to find; must not be empty. Its meaning depends on ``content_type``. |
+| **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
+| content_type | `str` | `'string'` | ``string`` (default): ``content`` encoded in each of ``encodings``. ``bytes``: ASCII characters stand for their byte, Python escapes (``\x00``, ``\n``, ``\\``) are decoded; a non-ASCII character or an unknown escape is an error (write ``\xNN``, or use ``string`` with an encoding). ``hex``: hex digits, whitespace allowed (``4d 5a 90 00``). |
+| encodings | `list[str] \| str \| None` | `None` | Encodings for ``string`` mode: a list (default ``[utf-8]``), e.g. ``[utf-8, utf-16-le]``, or one name (``utf-16-le``). Occurrences of the distinct encoded forms are summed (the same text stored once in each of two forms counts twice); a match on bytes already counted for an earlier form is skipped. ``utf-16``/``utf-32`` search both byte orders without BOM. Forms are matched at any byte offset, not aligned to characters. Unknown encodings, or ``content`` not encodable in one, are an error. |
+| case_sensitive | `bool` | `True` | ``False`` matches each character in any of its one-character case forms (``a``/``A``, ``ä``/``Ä``); case mappings to several characters (German sharp s to ``SS``) are not matched. ``string`` mode only, otherwise an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+
+```yaml
+tests:
+- name: check_occurrence_count
+  function: text.occurrence_count
+  parameter:
+    dst: <str>
+    content: <str>
+    expected_count: <int>
+```
+
+## toml
+
+### `toml.contains_key`
+
+tests if a TOML file contains the specified key path (tables, arrays of tables)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the TOML file (UTF-8). A glob must match exactly one path; ``archive.zip!/member.toml`` reads an archive member. A missing, unreadable or invalid file is an error. |
+| **key_path** | `str` |  | Dot path from the root table; ``[server]`` / ``server.port = 1`` are both ``server.port``. An array of tables (``[[items]]``) is an array: ``items[*].name`` for all entries, ``items[0].name`` / ``items[-1].name`` for one. ``*`` expands all values of a table (``profiles.*.enabled``). Keys with dots (quoted TOML keys such as ``"app.window"``) use quotes in brackets: ``['app.window'].width``. |
+
+```yaml
+tests:
+- name: check_contains_key
+  function: toml.contains_key
+  parameter:
+    dst: <str>
+    key_path: <str>
+```
+
+### `toml.value_count`
+
+tests how many TOML values exist at a key path, optionally only those matching a value (0 = absent)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the TOML file; a glob must match exactly one path. |
+| **key_path** | `str` |  | Dot path from the root table (syntax as in toml.contains_key). |
+| **expected_count** | `int` |  | Non-negative integer to compare with. |
+| expected_value | `str \| int \| float \| bool \| None` | `None` | Only count values equal to this (normalised as in toml.value_matches). ``None`` (default) counts every value. |
+| regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched in ``str(value)``. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Other values are an error. |
+
+```yaml
+tests:
+- name: check_value_count
+  function: toml.value_count
+  parameter:
+    dst: <str>
+    key_path: <str>
+    expected_count: <int>
+```
+
+### `toml.value_matches`
+
+tests if the TOML value at a key path matches the expected value (dates/times as ISO strings)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the TOML file; a glob must match exactly one path. A missing or invalid file is an error; an unresolvable key path fails. |
+| **key_path** | `str` |  | Dot path from the root table (syntax as in toml.contains_key), e.g. ``items[*].name`` for every ``[[items]]`` entry. |
+| **expected_value** | `str \| int \| float \| bool \| None` |  | Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``). A ``!re`` tag (``re.match``) or ``{{placeholder}}`` compares ``str(value)``. |
+| regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``. An invalid regex is an error. |
+| wildcard_mode | `str` | `'any'` | ``any`` (default): one value must match; ``all``: every value must match. Other values are an error. |
+
+```yaml
+tests:
+- name: check_value_matches
+  function: toml.value_matches
+  parameter:
+    dst: <str>
+    key_path: <str>
+    expected_value: <str | int | float | bool | None>
 ```
 
 ## visual
@@ -1005,4 +1513,75 @@ tests:
     dst: <str>
     xpath: <str>
     expected_result: <str | int | float | bool>
+```
+
+## yaml
+
+### `yaml.contains_key`
+
+tests if a YAML file contains the specified key path (supports several documents)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the YAML file (read with ``safe_load``; UTF-8, or UTF-16 with a BOM). A glob must match exactly one path; ``archive.zip!/member.yaml`` reads an archive member. A missing, unreadable or invalid file is an error. A file with several documents (``---``) is a top-level list, one per document; an empty file has no keys. |
+| **key_path** | `str` |  | Dot path from the root, e.g. ``display.font.size``. ``*`` expands all values of a mapping, ``name[*]`` all elements of sequence ``name``, ``name[0]`` / ``name[-1]`` one element; a leading ``[0]`` / ``[*]`` addresses a top-level sequence or a document of a multi-document file (``[1].kind``, ``[*].kind``). Keys with dots use quotes in brackets (``['app.window'].width``). |
+
+```yaml
+tests:
+- name: check_contains_key
+  function: yaml.contains_key
+  parameter:
+    dst: <str>
+    key_path: <str>
+```
+
+### `yaml.value_count`
+
+tests how many YAML values exist at a key path, optionally only those matching a value (0 = absent)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the YAML file; a glob must match exactly one path. Several documents form a top-level list; an empty file has no values. |
+| **key_path** | `str` |  | Dot path from the root (syntax as in yaml.contains_key). |
+| **expected_count** | `int` |  | Non-negative integer to compare with. |
+| expected_value | `str \| int \| float \| bool \| None` | `None` | Only count values equal to this (normalised as in yaml.value_matches). ``None`` (default) counts every value. |
+| regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched in ``str(value)``. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Other values are an error. |
+
+```yaml
+tests:
+- name: check_value_count
+  function: yaml.value_count
+  parameter:
+    dst: <str>
+    key_path: <str>
+    expected_count: <int>
+```
+
+### `yaml.value_matches`
+
+tests if the YAML value at a key path matches the expected value (supports wildcards with any/all modes)
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the YAML file; a glob must match exactly one path. Several documents form a top-level list. A missing or invalid file is an error; an unresolvable key path fails. |
+| **key_path** | `str` |  | Dot path from the root (syntax as in yaml.contains_key), e.g. ``servers[*].port`` or ``[0].kind`` for the first document. |
+| **expected_value** | `str \| int \| float \| bool \| None` |  | Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``; ``null`` needs ``null``). A ``!re`` tag (``re.match``) or ``{{placeholder}}`` compares ``str(value)``. |
+| regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``. An invalid regex is an error. |
+| wildcard_mode | `str` | `'any'` | ``any`` (default): one value must match; ``all``: every value must match. Other values are an error. |
+
+```yaml
+tests:
+- name: check_value_matches
+  function: yaml.value_matches
+  parameter:
+    dst: <str>
+    key_path: <str>
+    expected_value: <str | int | float | bool | None>
 ```

@@ -66,6 +66,14 @@ class GuestFSFileProxy:
     async def file_exists(self, guest_path: str) -> bool:
         return self.fs.exists(guest_path)
 
+    async def path_kinds(self, pattern: str) -> list[tuple[str, str]]:
+        """Existing paths matching ``pattern`` with kind ``file``/``dir``/``other``."""
+        try:
+            paths = self.fs.glob(pattern)
+            return [(p, 'file' if self.fs.is_file(p) else 'dir' if self.fs.is_dir(p) else 'other') for p in paths]
+        except GuestFSError as e:
+            raise RuntimeError(f'cannot list {pattern} in {self.fs.origin}: {e}') from e
+
     def cleanup(self) -> None:
         shutil.rmtree(self._temp_root, ignore_errors=True)
         self._cache.clear()

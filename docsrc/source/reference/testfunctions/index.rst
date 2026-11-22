@@ -32,13 +32,13 @@ ADARE organizes test functions into logical testsets based on their purpose and 
      - Functions
      - Description
    * - :doc:`standard/index`
-     - 11
+     - 12
      - File system operations, content validation, permissions, and metadata testing
    * - :doc:`json/index`
-     - 3
-     - JSON data validation, key existence checking, value comparison, and array element verification
+     - 4
+     - JSON data validation, key existence checking, value comparison and counting, and array element verification
    * - :doc:`csv/index`
-     - 1
+     - 2
      - CSV data validation and row pattern matching with regex and timestamp support
    * - :doc:`xml/index`
      - 6
@@ -52,6 +52,24 @@ ADARE organizes test functions into logical testsets based on their purpose and 
    * - :doc:`windows/index`
      - 2
      - Windows system validation including registry key and value operations
+   * - :doc:`text/index`
+     - 2
+     - Occurrences of strings or byte sequences in any file (several encodings), matching line counts
+   * - :doc:`ini/index`
+     - 4
+     - INI / key-file sections, keys and values (duplicates kept, BOM and UTF-16 aware)
+   * - :doc:`plist/index`
+     - 3
+     - Property lists (XML and binary): keys, values and value counts
+   * - :doc:`yaml/index`
+     - 3
+     - YAML files (also several documents): keys, values and value counts
+   * - :doc:`toml/index`
+     - 3
+     - TOML files: keys, values and value counts
+   * - :doc:`image/index`
+     - 5
+     - PNG text chunks, EXIF tags and image dimensions
 
 
 Usage in Playbooks
@@ -79,8 +97,17 @@ Test functions are used in the ``tests`` section of ADARE playbooks:
 Files inside archives
 ---------------------
 
-Every file test function can read a file inside a tar, zip, gzip, bzip2 or xz archive:
-``dst: /home/user/backup.tar.gz!/etc/app/config.json``. See :doc:`/guide/archives`.
+Every file test function can read a file inside a tar, zip, gzip, bzip2, xz or LZ4 archive:
+``dst: /home/user/backup.tar.gz!/etc/app/config.json``, ``dst: /home/user/store.jsonlz4!``.
+See :doc:`/guide/archives`.
+
+Checking that something is absent
+---------------------------------
+
+Use a count function with ``expected_count: 0`` (``json.value_count``,
+``text.occurrence_count``, ``ini.value_count``, ...) or ``expect_to_fail: true`` on a
+presence test. A missing or unreadable file is an ERROR either way, never a pass. See
+:doc:`/guide/absence`.
 
 Overvies of all Test Functions
 -------------------------------
@@ -107,4 +134,10 @@ Overvies of all Test Functions
    sqlite/index
    linux/index
    windows/index
+   text/index
+   ini/index
+   plist/index
+   yaml/index
+   toml/index
+   image/index
 

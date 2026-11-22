@@ -127,6 +127,9 @@ jobs:
       - name: Testfunction tests
         run: make test-testfunctions-guest
 
+      - name: adarelib tests
+        run: make test-adarelib-guest
+
   cv-server:
     name: CV server
     runs-on: ubuntu-latest

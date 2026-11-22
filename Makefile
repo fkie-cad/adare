@@ -1,5 +1,5 @@
 .DEFAULT_GOAL = help
-.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx install-skills test test-cov test-testfunctions test-testfunctions-guest test-cv test-agent test-install guest-venv lock-guest lint lint-fix lint-baseline lint-baseline-deps typecheck hooks ci-hygiene release-check build smoke-live
+.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx install-skills test test-cov test-testfunctions test-testfunctions-guest test-adarelib-guest test-cv test-agent test-install guest-venv lock-guest lint lint-fix lint-baseline lint-baseline-deps typecheck hooks ci-hygiene release-check build smoke-live
 
 # uv owns the environments and the lock; make only names the tasks. CI calls these
 # same targets (with UV_LOCKED=1, i.e. --locked), so each command is written once,
@@ -25,6 +25,7 @@ help:
 	@echo "  test-cov        Run the unit suite with coverage; fails below the floor (COV_MIN)."
 	@echo "  test-testfunctions  Run only the testfunction tests on the host Python (no libvirt needed)."
 	@echo "  test-testfunctions-guest  Run the testfunction tests on the guests' Python 3.10."
+	@echo "  test-adarelib-guest  Run the adarelib tests on the guests' Python 3.10."
 	@echo "  test-cv         Run the CV server suite."
 	@echo "  test-agent      Run the guest agent suite on the guests' Python 3.10."
 	@echo "  test-install    Run 'make install' then 'make update', and check the installed CLI."
@@ -151,6 +152,10 @@ test-agent: guest-venv
 # --confcutdir keeps tests/conftest.py (which imports the 3.13 host package) out.
 test-testfunctions-guest: guest-venv
 	cd adare && ../$(GUEST_PY) -m pytest tests/unit/testfunctions --confcutdir=tests/unit/testfunctions -q $(PYTEST_ARGS)
+
+# adarelib (archives, decoders, placeholders, timestamps) ships in the guest wheel too.
+test-adarelib-guest: guest-venv
+	cd adare && ../$(GUEST_PY) -m pytest tests/unit/adarelib --confcutdir=tests/unit/adarelib -q $(PYTEST_ARGS)
 
 # What a user does on a fresh clone, then after a pull: CI runs it on all three OSes.
 # It is a real install (the same as running those targets yourself).

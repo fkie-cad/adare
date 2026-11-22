@@ -38,10 +38,12 @@ pandas==3.1.0 ; python_full_version >= '3.11'
     # via -r adare/appdata/testfunctions/excel/requirements.txt
 pillow==12.3.0 ; python_full_version < '3.11'
     # via
+    #   -r adare/appdata/testfunctions/image/requirements.txt
     #   adarevm
     #   pyscreeze
 pillow==13.0.0 ; python_full_version >= '3.11'
     # via
+    #   -r adare/appdata/testfunctions/image/requirements.txt
     #   adarevm
     #   pyscreeze
 pluggy==1.7.0
@@ -98,7 +100,9 @@ pytz==2026.5
 pywin32==312 ; sys_platform == 'win32'
     # via -r requirements-guest-test.in
 pyyaml==6.0.3
-    # via adarelib
+    # via
+    #   -r adare/appdata/testfunctions/yaml/requirements.txt
+    #   adarelib
 rubicon-objc==0.5.6 ; python_full_version < '3.11' and sys_platform == 'darwin'
     # via mouseinfo
 rubicon-objc==0.5.7 ; python_full_version >= '3.11' and sys_platform == 'darwin'
@@ -106,7 +110,9 @@ rubicon-objc==0.5.7 ; python_full_version >= '3.11' and sys_platform == 'darwin'
 six==1.17.0
     # via python-dateutil
 tomli==2.5.0 ; python_full_version < '3.11'
-    # via pytest
+    # via
+    #   -r adare/appdata/testfunctions/toml/requirements.txt
+    #   pytest
 typing-extensions==4.16.0
     # via
     #   cattrs

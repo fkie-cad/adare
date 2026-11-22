@@ -229,8 +229,10 @@ class BasicTest:
         if metadata.get('interval'):
             return self._compare_timestamp_with_interval(metadata, actual_value)
 
-        if 'tolerance' not in metadata or not metadata['tolerance']:
-            # No tolerance - do exact comparison
+        numeric = 'epoch' in metadata or 'unit' in metadata
+        if 'tolerance' not in metadata or (not metadata['tolerance'] and not numeric):
+            # No tolerance - do exact comparison (a numeric value is always converted first:
+            # `tolerance: 0` with epoch/unit is an exact comparison of the converted instant)
             expected = metadata.get('resolved_value', '')
             success = actual_value == expected
             return success, f"Exact comparison: {'match' if success else 'no match'}"
@@ -307,8 +309,8 @@ class BasicTest:
                 f"Outside tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)",
             )
 
-        except Exception as e:
-            # Fallback to string comparison
+        except (ValueError, TypeError, OverflowError, OSError) as e:
+            # an unparsable value or one side with a zone and the other without: string comparison
             expected = metadata.get('resolved_value', '')
             success = actual_value == expected
             return success, f"Tolerance comparison failed ({e}), used string comparison"
@@ -332,10 +334,13 @@ class BasicTest:
         return check_interval(actual, lower, upper, float(metadata.get('precision') or 0))
 
     def _parse_timestamp_with_format(
-        self, timestamp_str: str, metadata: dict, is_expected: bool = False
+        self, timestamp_str: str | int | float, metadata: dict, is_expected: bool = False
     ) -> 'datetime.datetime':
         """
         Parse timestamp using format metadata.
+
+        With ``metadata['epoch']`` / ``metadata['unit']`` the actual value must be numeric and is
+        converted from that epoch and unit (``ValueError`` otherwise); the expected value is not.
 
         Behavior:
         - is_expected == True (host/template/expected side):
@@ -407,6 +412,17 @@ class BasicTest:
                 dt = dt.replace(tzinfo=datetime.timezone.utc)  # label as UTC
             # Convert aware/UTC to system local for display/consistency.
             return dt.astimezone(_SYSTEM_TZ)
+
+        if not is_expected and ('epoch' in metadata or 'unit' in metadata):
+            # A numeric artifact value counted from an epoch in a unit (FILETIME, Unix ms, ...).
+            # The result is wall time; _finalize reads it as UTC, or as guest local time with localtime.
+            from adarelib.testset.yaml.customtags import numeric_timestamp_to_datetime
+
+            dt = numeric_timestamp_to_datetime(timestamp_str, metadata.get('epoch', 1970), metadata.get('unit', 's'))
+            return _finalize(dt)
+
+        if isinstance(timestamp_str, (int, float)) and not isinstance(timestamp_str, bool):
+            timestamp_str = str(timestamp_str)  # e.g. a numeric SQLite column or JSON value
 
         fmt = metadata.get('format')
 

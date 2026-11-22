@@ -1,7 +1,8 @@
 """Implicit controls for negative tests: was the act behind an absence actually done?
 
 A test for an absent artifact (``*_does_not_exist``, ``visual.not_exists``, ``count_max``
-with max 0, anything with ``expect_to_fail``, or a test function declaring
+with max 0, a count of zero (``expected_count: 0``, ``expected_rows: 0``), anything with
+``expect_to_fail``, or a test function declaring
 ``negative = True``) passes just as well when the GUI action that should have produced
 the absence never took effect. So a *passing* negative test becomes **INCONCLUSIVE** when
 any GUI action before it in the run
@@ -31,6 +32,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+import attrs
+
 from adare.backend.experiment.execution.effect_check import PROOF_MODES
 from adare.types.playbook import BlockAction, ClickAction, DragAction, GotoAction, KeyboardAction, ScrollAction
 
@@ -51,14 +54,57 @@ def _is_zero(value: Any) -> bool:
         return False
 
 
+def _counts_zero(parameter: dict) -> bool:
+    """True if the parameters demand a count of zero (``expected_count: 0`` and friends)."""
+    if _is_zero(parameter.get('expected_rows')):  # sqlite.query_result
+        return True
+    count = parameter.get('expected_count')
+    if isinstance(count, dict):  # jsonl.line_count range form
+        return _is_zero(count.get('max'))
+    comparison = parameter.get('comparison_type') or 'equals'
+    if comparison in ('equals', 'less_equal'):
+        return _is_zero(count)
+    if comparison == 'less':
+        return count is not None and _is_one(count)
+    return False
+
+
+def _with_count_default(parameter: Any, test_class: type | None) -> Any:
+    """``parameter`` plus the test function's default ``expected_count`` when it is left out.
+
+    ``xml.element_count`` defaults to 0, so a test without ``expected_count`` asserts absence.
+    """
+    if not isinstance(parameter, dict) or 'expected_count' in parameter or test_class is None:
+        return parameter
+    try:
+        parameter_class = attrs.fields(test_class).parameter.type
+        default = attrs.fields(parameter_class).expected_count.default
+    except (attrs.exceptions.NotAnAttrsClassError, AttributeError, TypeError):
+        return parameter
+    if default is attrs.NOTHING or isinstance(default, attrs.Factory):  # type: ignore[arg-type]
+        return parameter
+    return {**parameter, 'expected_count': default}
+
+
+def _is_one(value: Any) -> bool:
+    try:
+        return float(value) == 1
+    except (TypeError, ValueError):
+        return False
+
+
 def is_negative_test(test_def: dict, test_class: type | None = None) -> bool:
     """True if a passing result of this test asserts that something is absent."""
     function = str(test_def.get('function') or '')
     short = function.rsplit('.', 1)[-1]
+    parameter = _with_count_default(test_def.get('parameter') or {}, test_class)
     if short.endswith('_does_not_exist') or function in NEGATIVE_FUNCTIONS:
         return True
-    if short == 'count_max' and _is_zero((test_def.get('parameter') or {}).get('max')):
+    if short == 'count_max' and _is_zero(parameter.get('max')):
         return True
+    if isinstance(parameter, dict) and _counts_zero(parameter):
+        # a count of zero asserts absence; with expect_to_fail it asserts presence
+        return not test_def.get('expect_to_fail')
     if test_def.get('expect_to_fail'):
         return True
     return bool(getattr(test_class, 'negative', False))

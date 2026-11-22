@@ -4,12 +4,18 @@ A ``!`` followed by ``/`` (or at the end of the path) separates an archive from 
 path inside it::
 
     /home/u/backup.tar.gz!/etc/app/config.json     member of a tar/zip
-    /var/log/syslog.2.gz!                          decompressed content of a gz/bz2/xz file
+    /var/log/syslog.2.gz!                          decompressed content of a gz/bz2/xz/lz4/sz file
+    /home/u/store.jsonlz4!                         decompressed content of an LZ4 file
     /home/u/outer.zip!/inner.tar.gz!/data.json     nested archives
 
 The format comes from the file's magic bytes, never from its extension. Only the requested
 member is extracted (streamed, size-capped) into a work directory under a sanitized name;
 nothing is ever extracted by the name stored in the archive, so there is no path traversal.
+
+LZ4 is read in both its frame format and as a block with an 8-byte magic and size header
+(:mod:`adarelib.testset.lz4`, pure Python). Snappy is read in its framing format (``.sz``,
+:mod:`adarelib.testset.snappy`, pure Python); raw Snappy blocks have no magic bytes and are
+never detected.
 
 Standard library only (the guest agent runs on Python 3.10). A new format is one entry in
 ``_MAGIC`` plus one entry in ``_STREAMS`` (single-file compressors) or ``_CONTAINERS``
@@ -21,6 +27,7 @@ import bz2
 import fnmatch
 import gzip
 import hashlib
+import io
 import logging
 import lzma
 import os
@@ -33,6 +40,8 @@ from contextlib import contextmanager
 from typing import IO, Any
 
 import attrs
+
+from adarelib.testset import lz4, snappy
 
 log = logging.getLogger(__name__)
 
@@ -173,13 +182,42 @@ _MAGIC: list[tuple[int, bytes, str]] = [
     (0, b'\xfd7zXZ\x00', 'xz'),
     (0, b'PK\x03\x04', 'zip'),
     (0, b'PK\x05\x06', 'zip'),  # empty zip
+    (0, lz4.BLOCK_HEADER_MAGIC, 'lz4_block'),
+    (0, lz4.FRAME_MAGIC, 'lz4_frame'),
+    (0, lz4.LEGACY_FRAME_MAGIC, 'lz4_frame'),  # reported as unsupported when read
+    *((0, magic, 'lz4_frame') for magic in lz4.SKIPPABLE_MAGICS),
+    (0, snappy.STREAM_IDENTIFIER, 'snappy_framed'),
 ]
 
-# single-file compressors: format -> opener returning a binary file object
-_STREAMS: dict[str, Callable[[str], IO[bytes]]] = {
-    'gzip': lambda path: gzip.open(path, 'rb'),  # noqa: SIM115 - caller closes
-    'bzip2': lambda path: bz2.open(path, 'rb'),  # noqa: SIM115
-    'xz': lambda path: lzma.open(path, 'rb'),  # noqa: SIM115
+
+def _open_lz4(path: str, max_bytes: int, head: int | None) -> IO[bytes]:
+    """Decode a whole LZ4 file into memory (``head``: only its first bytes, for sniffing)."""
+    if os.path.getsize(path) > max_bytes:
+        raise lz4.Lz4SizeError(f'LZ4 file {path} is larger than the size cap of {max_bytes} bytes')
+    with open(path, 'rb') as f:
+        data = f.read()
+    return io.BytesIO(lz4.decompress(data, max_bytes, stop_at=head))
+
+
+def _open_snappy(path: str, max_bytes: int, head: int | None) -> IO[bytes]:
+    """Decode a whole Snappy framed file into memory (``head``: only its first bytes, for sniffing)."""
+    if os.path.getsize(path) > max_bytes:
+        raise snappy.SnappySizeError(f'Snappy file {path} is larger than the size cap of {max_bytes} bytes')
+    with open(path, 'rb') as f:
+        data = f.read()
+    return io.BytesIO(snappy.decompress_framed(data, max_bytes, stop_at=head))
+
+
+# single-file compressors: format -> opener(path, max_bytes, head) returning a binary file
+# object; ``max_bytes`` and ``head`` (bytes needed for sniffing, None = all) matter only to
+# openers that decode into memory
+_STREAMS: dict[str, Callable[[str, int, int | None], IO[bytes]]] = {
+    'gzip': lambda path, _max, _head: gzip.open(path, 'rb'),  # noqa: SIM115 - caller closes
+    'bzip2': lambda path, _max, _head: bz2.open(path, 'rb'),  # noqa: SIM115
+    'xz': lambda path, _max, _head: lzma.open(path, 'rb'),  # noqa: SIM115
+    'lz4_block': _open_lz4,
+    'lz4_frame': _open_lz4,
+    'snappy_framed': _open_snappy,
 }
 
 # Errors that mean "this archive cannot be read": truncated or corrupt data, encrypted or
@@ -194,13 +232,19 @@ _READ_ERRORS = (
     zlib.error,
     RuntimeError,
     NotImplementedError,
+    lz4.Lz4Error,
+    snappy.SnappyError,
 )
 
 
-def detect_format(path: str) -> str:
+def detect_format(path: str, max_bytes: int | None = None) -> str:
     """Format of the file at ``path`` from its content.
 
-    :return: ``'tar'``, ``'zip'``, ``'gzip'``, ``'bzip2'``, ``'xz'``, or ``'tar.<compressor>'``
+    ``max_bytes`` caps the decoding of an LZ4/Snappy stream that is checked for a tar
+    inside (default: the cap from the environment).
+
+    :return: ``'tar'``, ``'zip'``, ``'gzip'``, ``'bzip2'``, ``'xz'``, ``'lz4_frame'``,
+             ``'lz4_block'``, ``'snappy_framed'``, or ``'tar.<compressor>'``
              for a compressed tar (e.g. ``'tar.gzip'``)
     :raises ArchiveError: missing, unreadable or unsupported file
     """
@@ -216,13 +260,13 @@ def detect_format(path: str) -> str:
 
     for offset, magic, fmt in _MAGIC:
         if head[offset : offset + len(magic)] == magic:
-            if fmt in _STREAMS and _stream_holds_tar(path, fmt):
+            if fmt in _STREAMS and _stream_holds_tar(path, fmt, max_bytes):
                 return f'tar.{fmt}'
             return fmt
     if _is_tar_header(head):
         return 'tar'
     raise ArchiveError(
-        f'{path} is not a supported archive (supported: tar, tar.gz/bz2/xz, zip, gzip, bzip2, xz; '
+        f'{path} is not a supported archive (supported: tar, tar.gz/bz2/xz/lz4/sz, zip, gzip, bzip2, xz, lz4, snappy; '
         f'detected from content, not extension)'
     )
 
@@ -239,10 +283,14 @@ def _is_tar_header(block: bytes) -> bool:
     return True
 
 
-def _stream_holds_tar(path: str, fmt: str) -> bool:
+def _stream_holds_tar(path: str, fmt: str, max_bytes: int | None) -> bool:
+    cap = max_bytes_from_env() if max_bytes is None else max_bytes
     try:
-        with _STREAMS[fmt](path) as stream:
+        with _STREAMS[fmt](path, cap, 512) as stream:
             return _is_tar_header(stream.read(512))
+    except (lz4.Lz4SizeError, snappy.SnappySizeError) as e:
+        # over the cap: neither as a tar nor as one stream can it be read
+        raise ArchiveError(f'{e} (set {MAX_BYTES_ENV} to raise it)') from e
     except _READ_ERRORS:
         # corrupt stream: reported when the content is actually read
         return False
@@ -261,7 +309,7 @@ class Entry:
 
 
 class _TarContainer:
-    def __init__(self, path: str):
+    def __init__(self, path: str, max_bytes: int):
         self._tar = tarfile.open(path, 'r:*')  # noqa: SIM115 - closed by close()
         self._infos: dict[str, tarfile.TarInfo] = {}
 
@@ -290,8 +338,24 @@ class _TarContainer:
         self._tar.close()
 
 
+class _LZ4TarContainer(_TarContainer):
+    """A tar inside LZ4 (tarfile cannot decompress LZ4 itself)."""
+
+    def __init__(self, path: str, max_bytes: int):
+        self._tar = tarfile.open(fileobj=_open_lz4(path, max_bytes, None))  # noqa: SIM115
+        self._infos = {}
+
+
+class _SnappyTarContainer(_TarContainer):
+    """A tar inside Snappy framing (tarfile cannot decompress Snappy itself)."""
+
+    def __init__(self, path: str, max_bytes: int):
+        self._tar = tarfile.open(fileobj=_open_snappy(path, max_bytes, None))  # noqa: SIM115
+        self._infos = {}
+
+
 class _ZipContainer:
-    def __init__(self, path: str):
+    def __init__(self, path: str, max_bytes: int):
         self._zip = zipfile.ZipFile(path)
         self._infos: dict[str, zipfile.ZipInfo] = {}
 
@@ -321,14 +385,18 @@ _CONTAINERS: dict[str, Callable[[str], Any]] = {
     'tar.gzip': _TarContainer,
     'tar.bzip2': _TarContainer,
     'tar.xz': _TarContainer,
+    'tar.lz4_block': _LZ4TarContainer,
+    'tar.lz4_frame': _LZ4TarContainer,
+    'tar.snappy_framed': _SnappyTarContainer,
     'zip': _ZipContainer,
 }
 
 
 @contextmanager
-def _open_container(path: str, fmt: str) -> Iterator[Any]:
+def _open_container(path: str, fmt: str, max_bytes: int) -> Iterator[Any]:
+    """Open an archive; ``max_bytes`` caps the decompressed stream of a tar inside LZ4/Snappy."""
     try:
-        container = _CONTAINERS[fmt](path)
+        container = _CONTAINERS[fmt](path, max_bytes)
     except _READ_ERRORS as e:
         raise ArchiveError(f'cannot read {fmt} archive {path}: {e}') from e
     try:
@@ -479,7 +547,7 @@ def resolve_archive_path(
     :raises ArchiveError: the archive or a nested archive cannot be used
     """
     work = _Workdir(workdir)
-    fmt = detect_format(archive)
+    fmt = detect_format(archive, max_bytes)
     try:
         outer_hash = sha256_file(archive)
     except OSError as e:
@@ -495,7 +563,7 @@ def resolve_archive_path(
     for member in members[:-1]:
         _check_safe_request(member)
         _require_container(current_fmt, chain)
-        with _open_container(current, current_fmt) as container:
+        with _open_container(current, current_fmt, max_bytes) as container:
             found = _find(_entries(container, chain), member)
             if len(found) != 1:
                 what = 'not found' if not found else f'matches {len(found)} members (must be one)'
@@ -505,7 +573,7 @@ def resolve_archive_path(
             out = work.new_path(_safe_basename(entry.name))
             _extract_entry(container, entry, out, max_bytes, chain)
         current, chain = out, f'{chain}{ARCHIVE_SEPARATOR}/{_norm(entry.name)}'
-        current_fmt = detect_format(current)
+        current_fmt = detect_format(current, max_bytes)
 
     member = members[-1]
     if member == '':
@@ -570,7 +638,17 @@ def _extract_entry(container: Any, entry: Entry, out: str, max_bytes: int, chain
 
 
 # suffix of a compressed file -> suffix of its decompressed content
-_DECOMPRESSED_EXT = {'.gz': '', '.bz2': '', '.xz': '', '.tgz': '.tar', '.tbz2': '.tar', '.txz': '.tar'}
+_DECOMPRESSED_EXT = {
+    '.gz': '',
+    '.bz2': '',
+    '.xz': '',
+    '.lz4': '',
+    '.jsonlz4': '.json',
+    '.sz': '',
+    '.tgz': '.tar',
+    '.tbz2': '.tar',
+    '.txz': '.tar',
+}
 
 
 def _decompress(path: str, fmt: str, chain: str, work: _Workdir, max_bytes: int) -> str:
@@ -586,7 +664,7 @@ def _decompress(path: str, fmt: str, chain: str, work: _Workdir, max_bytes: int)
         base = stem + _DECOMPRESSED_EXT[ext.lower()]
     out = work.new_path(base)
     try:
-        src = _STREAMS[compressor](path)
+        src = _STREAMS[compressor](path, max_bytes, None)
     except _READ_ERRORS as e:
         raise ArchiveError(f'cannot read {fmt} file {chain}: {e}') from e
     with src:
@@ -605,7 +683,7 @@ def _extract_last(
     companions: tuple[str, ...],
     provenance: str,
 ) -> Resolution:
-    with _open_container(current, fmt) as container:
+    with _open_container(current, fmt, max_bytes) as container:
         entries = _entries(container, chain)
         found = _find(entries, member)
         is_glob = _has_glob(_norm(member))

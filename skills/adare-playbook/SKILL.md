@@ -127,7 +127,7 @@ An absent member counts like a missing file. Guide: `docsrc/source/guide/archive
 ### Negative tests need proof of the act
 
 An absence test (`*_does_not_exist`, `visual.not_exists`, `count_max` with `max: 0`,
-anything with `expect_to_fail`) passes just as well when the deleting click never
+a count function with `expected_count: 0`, anything with `expect_to_fail`) passes just as well when the deleting click never
 took effect. ADARE guards this by itself: every click/keyboard/drag/scroll/goto is
 checked for a screen change near its input and recorded (`settings.effect_check: warn`
 by default, `off` disables it). A passing negative test becomes **INCONCLUSIVE** if an
