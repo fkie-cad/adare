@@ -9,6 +9,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Dependabot pins one version for every Python split, which uv cannot resolve
+    # here: new numpy/pandas drop Python 3.10 (the guests), and rapidocr pins
+    # pyyaml exactly. Upgrade these by hand with `uv lock --upgrade-package`.
+    ignore:
+      - dependency-name: numpy
+      - dependency-name: pandas
+      - dependency-name: pyyaml
     groups:
       # Bumping these shifts quality-baseline.json counts: re-run `make lint-baseline`.
       lint-tools:
