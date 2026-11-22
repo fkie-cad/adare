@@ -79,7 +79,9 @@ def files(tmp_path):
     paths['bad_jsonl'].write_text('{"a": 1}\n{not json\n')
     paths['bad_xml'].write_text('<root><item></root>')
     paths['bad_xlsx'].write_bytes(b'PK\x03\x04 this is not a workbook')
-    paths['bad_csv_bytes'].write_bytes(b'a,b\n\xff\xfe\xfa,\x80\n')
+    # Undecodable as UTF-8 and as cp1252 (a Windows guest's default encoding), where
+    # 0x81/0x8d/0x8f/0x90/0x9d are unassigned.
+    paths['bad_csv_bytes'].write_bytes(b'a,b\n\x81\x8d,\x90\x9d\n')
     out = {k: str(v) for k, v in paths.items()}
     out['xlsx'] = _workbook(tmp_path / 'good.xlsx', {'S': [['a', 'b'], ['c', 'd']]})
     out['other_xlsx'] = _workbook(tmp_path / 'other.xlsx', {'S': [['a', 'b'], ['x', 'y']]})
