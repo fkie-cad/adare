@@ -19,6 +19,7 @@ from datetime import datetime
 from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
 from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
 from adarelib.event.event import TestResult
+from adarelib.testset.archive import has_archive_separator, join_archive_path, split_archive_path
 from adarelib.testset.basictest import BasicTest, HostModeCategory
 
 log = logging.getLogger(__name__)
@@ -170,7 +171,8 @@ class GuestToHostTestExecutor:
         Strategy:
         1. Read the original guest path from parameter.dst
         2. Handle glob patterns by resolving on guest first
-        3. Pull the file(s) from guest to local temp dir
+        3. Pull the file(s) from guest to local temp dir, always fresh: a test reads the
+           file as it is now, not a copy an earlier test pulled (before/after tests)
         4. Rewrite parameter.dst to local path
         5. Run test() locally
         """
@@ -179,6 +181,9 @@ class GuestToHostTestExecutor:
 
         original_dst = test_instance.parameter.dst
         log.debug(f"GuestToHostTestExecutor: original dst='{original_dst}'")
+
+        if has_archive_separator(original_dst):
+            return await self._execute_archive_test(test_name, test_instance, original_dst)
 
         # Check for glob patterns
         has_glob = any(c in original_dst for c in ['*', '?', '[', ']'])
@@ -198,7 +203,7 @@ class GuestToHostTestExecutor:
             # Pull each matching file
             for guest_path in matching_paths:
                 try:
-                    await self.guest_file.pull_file(guest_path, force=bool(sidecars))
+                    await self.guest_file.pull_file(guest_path, force=True)
                 except FileNotFoundError as e:
                     # Gone between glob and pull: it is absent, like an unmatched path.
                     log.warning(f"GuestToHostTestExecutor: {guest_path} vanished before pull: {e}")
@@ -216,7 +221,7 @@ class GuestToHostTestExecutor:
         else:
             # Simple path — pull directly
             try:
-                local_path = await self.guest_file.pull_file(original_dst, force=bool(sidecars))
+                local_path = await self.guest_file.pull_file(original_dst, force=True)
                 local_dst = str(local_path)
             except FileNotFoundError as e:
                 # The guest answered "no such file": a real absence.
@@ -244,6 +249,40 @@ class GuestToHostTestExecutor:
             # Restore original dst for correct reporting
             object.__setattr__(test_instance.parameter, 'dst', original_dst)
 
+        return result
+
+    async def _execute_archive_test(self, test_name: str, test_instance: BasicTest, original_dst: str) -> TestResult:
+        """Pull only the archive of ``archive!/member``; the test extracts the member locally.
+
+        Unlike a plain path, a missing archive is an ERROR for every test (also
+        file_does_not_exist): without the archive nothing can be said about its members.
+        Members' sidecars (SQLite -wal) come from the archive, so none are pulled.
+        """
+        archive, members = split_archive_path(original_dst)
+        if any(c in archive for c in ('*', '?', '[', ']')):
+            matches = await self.guest_file.resolve_guest_glob(archive)
+            if len(matches) != 1:
+                found = 'no file matches' if not matches else f'{len(matches)} files match'
+                return TestResult.error([f'archive {archive}: {found} the glob (must be exactly one)'])
+            guest_archive = matches[0]
+        else:
+            guest_archive = archive
+
+        try:
+            local_archive = str(await self.guest_file.pull_file(guest_archive, force=True))
+        except FileNotFoundError as e:
+            return TestResult.error([f'archive {guest_archive} does not exist on guest: {e}'])
+        except RuntimeError as e:
+            return self._pull_error(test_name, guest_archive, e)
+
+        object.__setattr__(test_instance.parameter, 'dst', join_archive_path(local_archive, members))
+        try:
+            result = await self._run_test(test_instance)
+        finally:
+            object.__setattr__(test_instance.parameter, 'dst', original_dst)
+
+        # report the guest path, not the host's temp copy
+        result.details = [d.replace(local_archive, guest_archive) if isinstance(d, str) else d for d in result.details]
         return result
 
     @staticmethod

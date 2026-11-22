@@ -361,8 +361,11 @@ def exec_dry_run_testfunction(arguments):
         'variable_metadata': None,
     }
 
+    from adare.backend.experiment.test_loader import register_primitive_union_hook
     from adare.console import console
 
+    # same structuring as a real run: `str | int | float` parameters pass through as given
+    register_primitive_union_hook()
     try:
         test_instance = cattrs.structure(test_dict, testclass)
     except cattrs.errors.ClassValidationError as e:
