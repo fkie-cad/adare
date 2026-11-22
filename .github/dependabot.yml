@@ -33,3 +33,16 @@ updates:
     groups:
       actions:
         patterns: ['*']
+
+  # Hook revs in .pre-commit-config.yaml (gitleaks, pre-commit-hooks, ruff). A ruff
+  # rev bump fails `make ci-hygiene` until the ruff pins in both pyproject.toml lint
+  # groups (and the ratchet hook's additional_dependencies) match, plus
+  # `make lint-baseline`: finish that PR by hand.
+  - package-ecosystem: pre-commit
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: monthly
+    groups:
+      hooks:
+        patterns: ['*']

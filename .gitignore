@@ -10,6 +10,8 @@ bin/
 docsrc/build/
 develop-eggs/
 dist/
+# `make release-check` output (the GitHub Release notes)
+/release-notes.md
 eggs/
 lib/
 lib64/
