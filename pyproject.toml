@@ -1,6 +1,6 @@
 [project]
 name = "adaredepend"
-version = "0.1.0"
+version = "0.1.1"
 description = "ADARE workspace root: host client, guest agent, shared library and CV server"
 authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
 license = "MIT"
