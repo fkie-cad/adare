@@ -159,7 +159,8 @@ Every decorated test function receives ``ctx`` as its first argument. This is a 
 
 **File resolution:**
 
-- ``ctx.resolve_globfilepath(path, match_mode="single", return_list=False)`` — Resolve glob patterns to file paths
+- ``ctx.resolve_globfilepath(path, match_mode="single", return_list=False)`` — Resolve glob patterns to file paths. It also resolves a file inside an archive
+  (``backup.tar.gz!/etc/app.json``; see :doc:`/guide/archives`)
 
 **Placeholder/variable support:**
 
@@ -253,6 +254,17 @@ Keep docstring examples neutral and made up (``/home/user/data/app.db``,
 ``/home/user/data/list.xml``), never a real application's paths or table names: agents read
 the docstrings to pick tests, and an example must not tell them where an application keeps
 its traces (enforced by ``tests/unit/testfunctions/test_neutral_docstrings.py``).
+
+Files inside archives
+~~~~~~~~~~~~~~~~~~~~~
+
+A testfunction gets archive support without any code of its own, as long as it resolves
+every path parameter with ``ctx.resolve_globfilepath``. For ``backup.tar.gz!/etc/app.json``
+the call returns a temporary file that holds the extracted member. An absent member gives
+a path that does not exist, like a missing plain file. An unusable archive gives an empty
+path and a status, so ``ctx.error_if(not dst_path, ...)`` turns it into ERROR. ADARE adds
+the provenance line to the result, shows the archive path instead of the temp path in
+messages, and removes the temp file after the test. See :doc:`/guide/archives`.
 
 Parameters
 ----------

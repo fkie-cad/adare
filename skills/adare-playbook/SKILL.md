@@ -108,6 +108,22 @@ actions:
 `adare exp playbook validate` checks the YAML and that each `- test:` refers to a
 defined test. Parameter names and types come from `adare test info`.
 
+### Files inside archives
+
+Any file test reads a file inside an archive: put `!` between the archive and the
+member path. Formats: tar (also .gz/.bz2/.xz), zip, and single-file gz/bz2/xz. The format
+is detected from the content, not the extension.
+
+```yaml
+dst: /home/u/backup.tar.gz!/etc/app/config.json   # member of a tar/zip
+dst: /var/log/syslog.2.gz!                         # decompressed content of a .gz
+dst: /home/u/outer.zip!/inner.tar.gz!/data.json    # nested
+dst: {archive: /home/u/backup.tar.gz, member: etc/app/config.json}   # mapping form
+```
+
+A missing or unreadable archive is an ERROR for every test, also `file_does_not_exist`.
+An absent member counts like a missing file. Guide: `docsrc/source/guide/archives.rst`.
+
 ### Negative tests need proof of the act
 
 An absence test (`*_does_not_exist`, `visual.not_exists`, `count_max` with `max: 0`,

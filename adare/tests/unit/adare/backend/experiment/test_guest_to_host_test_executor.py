@@ -532,3 +532,73 @@ class TestQgaNotFoundClassification:
         from adare.backend.experiment.host_services.guest_file_proxy import is_not_found_error
 
         assert not is_not_found_error(message)
+
+
+# ============================================================================
+# Archive members: only the archive is pulled; the test extracts the member
+# ============================================================================
+
+
+class TestArchiveDst:
+    """dst 'archive!/member' pulls the archive only and rewrites dst to the local copy."""
+
+    def _make_executor(self, tmp_path, pull_error=None):
+        guest_file = MagicMock()
+        guest_file.pull_file = AsyncMock(
+            side_effect=pull_error or (lambda p, force=False: tmp_path / 'pulled' / p.lstrip('/'))
+        )
+        guest_file.file_exists = AsyncMock(return_value=True)
+        guest_file.resolve_guest_glob = AsyncMock(return_value=['/home/u/backup-1.tar.gz'])
+        executor = GuestToHostTestExecutor(guest_file=guest_file, guest_command=MagicMock(), testfunction_collection={})
+        seen = []
+
+        async def run(instance):
+            seen.append(instance.parameter.dst)
+            local = str(tmp_path / 'pulled/home/u/backup-1.tar.gz')
+            return TestResult.success([f'archive member: x.json from {local} sha256=00, 2 bytes'])
+
+        executor._run_test = AsyncMock(side_effect=run)
+        return executor, guest_file, seen
+
+    @pytest.mark.asyncio
+    async def test_pulls_only_the_archive_and_rewrites_dst(self, tmp_path):
+        executor, guest_file, seen = self._make_executor(tmp_path)
+        instance = SidecarTest(parameter=SidecarParam(dst='/home/u/backup-*.tar.gz!/etc/x.json'))
+
+        result = await executor._execute_file_based_test('t', 'sqlite.query_result', instance)
+
+        assert result.status == StatusEnum.SUCCESS
+        # one pull, of the resolved archive; no sidecar lookups next to the archive
+        assert [c.args[0] for c in guest_file.pull_file.await_args_list] == ['/home/u/backup-1.tar.gz']
+        guest_file.file_exists.assert_not_awaited()
+        assert seen == [f'{tmp_path}/pulled/home/u/backup-1.tar.gz!/etc/x.json']
+        assert instance.parameter.dst == '/home/u/backup-*.tar.gz!/etc/x.json'  # restored
+        assert result.details == ['archive member: x.json from /home/u/backup-1.tar.gz sha256=00, 2 bytes']
+
+    @pytest.mark.asyncio
+    async def test_missing_archive_is_error_even_for_absence_test(self, tmp_path):
+        executor, _, _ = self._make_executor(tmp_path, pull_error=FileNotFoundError('no such file'))
+        instance = FileBasedTest(parameter=DummyParam(dst='/home/u/gone.zip!/x'))
+
+        result = await executor._execute_file_based_test('t', 'standard.file_does_not_exist', instance)
+
+        assert result.status == StatusEnum.ERROR
+        executor._run_test.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_archive_glob_must_match_one(self, tmp_path):
+        executor, guest_file, _ = self._make_executor(tmp_path)
+        guest_file.resolve_guest_glob.return_value = ['/a/1.zip', '/a/2.zip']
+        instance = FileBasedTest(parameter=DummyParam(dst='/a/*.zip!/x'))
+
+        result = await executor._execute_file_based_test('t', 'standard.file_exists', instance)
+
+        assert result.status == StatusEnum.ERROR
+        guest_file.pull_file.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_transport_error_is_error(self, tmp_path):
+        executor, _, _ = self._make_executor(tmp_path, pull_error=RuntimeError('QGA timeout'))
+        instance = FileBasedTest(parameter=DummyParam(dst='/home/u/b.zip!/x'))
+        result = await executor._execute_file_based_test('t', 'standard.file_exists', instance)
+        assert result.status == StatusEnum.ERROR
