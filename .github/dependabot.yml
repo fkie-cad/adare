@@ -9,8 +9,16 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Dependabot pins one version for every Python split, which uv cannot resolve
+    # here: new numpy/pandas drop Python 3.10 (the guests), and rapidocr pins
+    # pyyaml exactly. Upgrade these by hand with `uv lock --upgrade-package`.
+    ignore:
+      - dependency-name: numpy
+      - dependency-name: pandas
+      - dependency-name: pyyaml
     groups:
-      # Bumping these shifts quality-baseline.json counts: re-run `make lint-baseline`.
+      # Bumps shift quality-baseline.json counts; dependabot-baseline.yml re-measures
+      # them on the PR (`make lint-baseline-deps`).
       lint-tools:
         patterns: [ruff, mypy]
       minor-and-patch:
@@ -24,4 +32,17 @@ updates:
       interval: monthly
     groups:
       actions:
+        patterns: ['*']
+
+  # Hook revs in .pre-commit-config.yaml (gitleaks, pre-commit-hooks, ruff). A ruff
+  # rev bump fails `make ci-hygiene` until the ruff pins in both pyproject.toml lint
+  # groups (and the ratchet hook's additional_dependencies) match, plus
+  # `make lint-baseline`: finish that PR by hand.
+  - package-ecosystem: pre-commit
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: monthly
+    groups:
+      hooks:
         patterns: ['*']
