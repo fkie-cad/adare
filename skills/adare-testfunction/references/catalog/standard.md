@@ -371,7 +371,7 @@ asserts: content, value · formats: text · runs: guest agent, host test mode or
 | parameter | type | default | description |
 |---|---|---|---|
 | **dst** | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file is an error; a failure includes a unified diff. |
-| **content** | `str` | `''` | Expected text. Both sides are `strip()`-ed; inner whitespace must match (line endings are normalised to `\n` by text-mode reading). `!re`/`!timestamp` tags inside the value become placeholders matched by type; the literal text around them must match exactly. |
+| **content** | `str` | `''` | Expected text. Both sides are `strip()`-ed; inner whitespace must match (line endings are normalised to `\n` by text-mode reading). `!re`/`!timestamp` tags inside the value become placeholders matched by type; the literal text around them must match exactly. An invalid `!re` regex is an error even when the text around it does not match. |
 | encoding | `str` | `'utf-8'` | Python codec used to decode the file (strict). `BOM` detects UTF-8/16/32 from the byte-order mark and errors if there is none. |
 | strip_bom | `bool` | `False` | Remove a leading U+FEFF from the decoded text before comparing. |
 

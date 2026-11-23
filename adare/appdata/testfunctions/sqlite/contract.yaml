@@ -65,7 +65,7 @@ functions:
         use: sqlite.row_count
       - goal: how many frames or transactions the write-ahead log holds
         use: sqlite.wal_frame_count
-      - goal: a value in deleted records or free pages that no query returns
+      - goal: a value in deleted records, free pages or anywhere in the file and its sidecars
         use: sqlite.free_space_pattern_count
       - goal: a query value compared with another query value, another view or another database
         use: sqlite.values_compare
@@ -556,14 +556,12 @@ functions:
     features: [archive_dst, glob_dst, count_comparison, encoding, negative]
     unsupported:
       regex_tag: 'A ``!re`` or ``!timestamp`` pattern is an error; use ``pattern_type: regex`` with a plain string.'
-      sqlite_view: '``view`` is ``main_file`` or ``current`` (the ``-wal`` checkpointed into a copy) only; no ``wal_added`` / ``wal_removed`` / ``commit:N``.'
+      sqlite_view: '``view`` is ``main_file`` or ``current`` (the ``-wal`` checkpointed into a copy) only; no ``wal_added`` / ``wal_removed`` / ``commit:N``. With ``region: whole_file`` it has no meaning and ``current`` is an error.'
     not_for:
       - goal: whether a query still returns the row
         use: sqlite.row_count
-      - goal: a pattern anywhere in the file, live rows included
+      - goal: a byte range or offset of one file
         use: binary.pattern_count
-      - goal: content of stale frames in the write-ahead log
-        use: text.occurrence_count
     related:
       - use: sqlite.row_count
         why: '``expected_count: 0`` that the row is gone, next to this test that its bytes remain'
@@ -576,23 +574,26 @@ functions:
         - 'a corrupt header, or a broken freelist or freeblock chain (a pointer out of range, a cycle, a freelist count that does not match the header): the free space could not be located'
         - '``view: current`` and SQLite cannot checkpoint the copy'
         - an empty ``pattern``; invalid escapes, hex or regex; a ``!re`` / ``!timestamp`` pattern
-        - an unknown ``region``, ``view``, ``pattern_type`` or ``encoding``; a negative or non-integer ``expected_count``; an unknown ``comparison_type``
+        - 'a broken overflow chain (a page out of range, on the freelist or claimed twice, a cycle, a chain shorter or longer than the value); not for ``region: whole_file``'
+        - 'an unknown ``region``, ``view``, ``pattern_type`` or ``encoding``; ``view: current`` with ``region: whole_file``; a negative or non-integer ``expected_count``; an unknown ``comparison_type``'
     limits:
-      - 'The file is parsed per the SQLite file format, without SQLite: freelist pages (with the overflow pages of a deleted large row), freeblocks inside b-tree pages, and the unallocated space of each b-tree page. Live rows are never counted.'
-      - Occurrences are counted per region, so a match never spans two regions. The details list the matching pages and regions (absolute file offsets) and the size of each kind of free space.
+      - 'The file is parsed per the SQLite file format, without SQLite: freelist pages (with the overflow pages of a deleted large row), freeblocks inside b-tree pages, the unallocated space of each b-tree page, and the overflow tail (the bytes after a large value on the last page of its overflow chain, which can hold old rows even with ``secure_delete``). ``all`` is these four; live rows are not counted there.'
+      - Regions never overlap and occurrences are counted per region, so a match never spans two regions. The details list the matching pages and regions (absolute file offsets) and the size of each kind of free space.
+      - 'Free space is not every byte of the file: ``sqlite_stat4`` samples (after ``ANALYZE``), full-text index segments, the ``-wal`` / ``-journal``, reserved page bytes and fragments under 4 bytes are outside it. ``region: whole_file`` counts every byte of the database and of its ``-wal`` and ``-journal`` (each file on its own, live rows included, nothing parsed), so "deleted and gone from the evidence" is ``whole_file`` with ``expected_count: 0``; search each encoding the database uses.'
+      - SQLite can leave a record twice (a page split keeps the old cells as unallocated space) or overwrite freed data when it rewrites pages; prefer ``comparison_type greater_equal`` unless the number of copies is the point.
       - Freeing a cell overwrites its first 4 bytes (the freeblock header), and later writes reuse free space; search for a part of the deleted value that is long enough to be unique.
       - '``PRAGMA secure_delete`` (on in some builds) zeroes freed space, so ``expected_count: 0`` proves the delete erased it.'
       - '``pattern_type: regex`` is an ASCII regular expression over the raw bytes; empty matches are not counted.'
     choices:
       pattern_type: [text, bytes, hex, regex]
-      region: [all, freelist, freeblocks, unallocated]
+      region: [all, freelist, freeblocks, unallocated, overflow_tail, whole_file]
       view: [main_file, current]
       comparison_type: [equals, greater, less, greater_equal, less_equal]
     use_cases:
       - title: A deleted record is still recoverable
         text: '``comparison_type: greater_equal`` with ``expected_count: 1`` in the free space, while sqlite.row_count no longer returns the row.'
       - title: A delete erased the data
-        text: '``expected_count: 0``, as with ``PRAGMA secure_delete`` or after a ``VACUUM``.'
+        text: '``expected_count: 0`` with ``region: whole_file``: the value is nowhere in the database, its ``-wal`` or ``-journal`` (free space alone misses ``sqlite_stat4`` and full-text indexes).'
     examples:
       - title: a deleted title is still in the free space
         files:
@@ -625,6 +626,33 @@ functions:
           dst: /home/user/app/notes.db
           pattern: deleted-note-title
           expected_count: 0
+      - title: gone from the whole evidence
+        text: '``whole_file`` counts every byte of the database and its sidecars; the secure delete left nothing anywhere.'
+        files:
+          /home/user/app/notes.db: *erased_note
+        parameter:
+          dst: /home/user/app/notes.db
+          pattern: deleted-note-title
+          region: whole_file
+          expected_count: 0
+      - title: a live row counts in the whole file
+        files:
+          /home/user/app/notes.db: *deleted_note
+        parameter:
+          dst: /home/user/app/notes.db
+          pattern: kept-note
+          region: whole_file
+          expected_count: 1
+          comparison_type: greater_equal
+      - title: current has no meaning for the whole file
+        expect: error
+        files:
+          /home/user/app/notes.db: *deleted_note
+        parameter:
+          dst: /home/user/app/notes.db
+          pattern: deleted-note-title
+          region: whole_file
+          view: current
       - title: recoverable data fails an erase check
         expect: failed
         files:

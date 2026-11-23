@@ -265,7 +265,7 @@ asserts: value, order · formats: yaml · runs: guest agent, host test mode or h
 | timestamp_unit | `str \| None` | `None` | Unit of that count: `s` (default), `ms`, `us`, `ns` or `100ns`. Allowed: `s`, `ms`, `us`, `ns`, `100ns`. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (`+02:00`); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: `url` (percent-decoding), `base64`, `hex`, `utf16` (bytes as UTF-16 text), `json` (parse, then take `decoded_key_path`). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (syntax as in `key_path`); it must select one value. Required with `json`, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (syntax as in `key_path`); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with `json`, an error without it. |
 
 **Outcomes:**
 - PASSED: the value at `key_path` (`any`: one of the values, `all`: every value) matches `expected_value`
@@ -420,7 +420,7 @@ asserts: order, compare · formats: yaml · runs: guest agent, host test mode or
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (`+02:00`); default UTC. |
 | other_dst | `str \| None` | `None` | Guest path of a second file to read `other_key_path` from (same rules as `dst`, `archive!/member` included); default `None`: `dst`. A missing file is an error. Compares a file with a copy saved before an action. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode both values before comparing (steps as in yaml.value_matches). |
-| decoded_key_path | `str \| None` | `None` | With `json` in `value_decode`: key path into the decoded value. |
+| decoded_key_path | `str \| None` | `None` | With `json` in `value_decode`: key path into the decoded value; it must select one value: none fails, several are an error. |
 
 **Outcomes:**
 - PASSED: `first <comparison_type> second + offset` holds

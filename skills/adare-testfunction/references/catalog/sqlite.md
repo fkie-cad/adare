@@ -10,9 +10,13 @@ tests how often a text, byte pattern or regex occurs in the free space of an SQL
 
 Pass when the occurrences of `pattern` in the free space of the SQLite database satisfy `comparison_type`.
 
-A corrupt header or a broken freelist / freeblock chain (a pointer out of range, a cycle, a freelist count that does not match the header) is an error: the free space could not be located.
+Free space is not "all stale bytes". Not covered by the free-space regions: the sampled keys in `sqlite_stat4` (until the next ANALYZE) and the segments of a full-text index (`<name>_data` of FTS5, `_segments` of FTS3/4; until a merge or optimize), which are live rows of ordinary b-trees that a query can read (`SELECT ... FROM sqlite_stat4`); the reserved bytes of each page, fragments of fewer than 4 bytes and bytes after the last complete page; and the `-wal` (`view: current` folds it in). Deleted index keys are covered: an index is a b-tree whose interior cells are index entries, and deleting one replaces it, so the old cell is free space. Table interior pages keep the rowids of deleted rows as dividers (no text; `secure_delete` does not remove them).
 
-**Use for:** asserting that a deleted record is still recoverable from the database file (`comparison_type: greater_equal`, `expected_count: 1`) while a query no longer returns it (sqlite.row_count with `expected_count: 0`), or that a delete really erased it (`expected_count: 0`, as with `PRAGMA secure_delete`). The file is parsed per the SQLite file format, without SQLite: freelist pages (pages no longer in use, including the overflow pages of a deleted large row), freeblocks (freed cells inside a b-tree page) and the unallocated space of each b-tree page. Occurrences are counted per region, so a match never spans two regions. Details list which pages and regions matched (absolute file offsets) and the size of each kind of free space. To search the whole file use binary.pattern_count; live rows are counted there too.
+To assert "gone from the evidence", use `region: whole_file`: the pattern is counted in every byte of the database file and of its `-wal` and `-journal` as seized, live rows, statistics and full-text segments included, each file on its own (a match never spans two files). `view` must be left at its default there. `0` means the text is nowhere in these files, in the encoding searched.
+
+A corrupt header or a broken freelist / freeblock / overflow chain (a pointer out of range, a cycle, a page claimed twice, a chain whose length does not match its value, a freelist count that does not match the header) is an error: the free space could not be located. `whole_file` parses nothing, so it has no such error.
+
+**Use for:** asserting that a deleted record is still recoverable from the database file (`comparison_type: greater_equal`, `expected_count: 1`) while a query no longer returns it (sqlite.row_count with `expected_count: 0`), or that a delete really erased it (`expected_count: 0`, as with `PRAGMA secure_delete`). The file is parsed per the SQLite file format, without SQLite: freelist pages (pages no longer in use, including the overflow pages of a deleted large row), freeblocks (freed cells inside a b-tree page), the unallocated space of each b-tree page and the overflow tail (the bytes after the value on the last overflow page of a chain in use, which keep what the page held when SQLite reused it). Regions never overlap and occurrences are counted per region, so a match never spans two regions. SQLite can leave a record in the file twice (the old cell in a page it rewrote and a copy in the page that took over the rows), which is then counted twice; and it overwrites freed data when it rewrites or merges pages, so a deleted record is not always recoverable. Details list which pages and regions matched (absolute file offsets) and the size of each kind of free space.
 
 asserts: count, absent, content · formats: sqlite · runs: guest agent, host test mode or hostside; dry-run on a local file · os: any
 
@@ -20,12 +24,11 @@ asserts: count, absent, content · formats: sqlite · runs: guest agent, host te
 
 **Does not support:**
 - Regex values (!re) (`regex_tag`): A `!re` or `!timestamp` pattern is an error; use `pattern_type: regex` with a plain string.
-- SQLite views of the write-ahead log (`sqlite_view`): `view` is `main_file` or `current` (the `-wal` checkpointed into a copy) only; no `wal_added` / `wal_removed` / `commit:N`.
+- SQLite views of the write-ahead log (`sqlite_view`): `view` is `main_file` or `current` (the `-wal` checkpointed into a copy) only; no `wal_added` / `wal_removed` / `commit:N`. With `region: whole_file` it has no meaning and `current` is an error.
 
 **Not for:**
 - whether a query still returns the row → `sqlite.row_count`
-- a pattern anywhere in the file, live rows included → `binary.pattern_count`
-- content of stale frames in the write-ahead log → `text.occurrence_count`
+- a byte range or offset of one file → `binary.pattern_count`
 
 | parameter | type | default | description |
 |---|---|---|---|
@@ -33,8 +36,8 @@ asserts: count, absent, content · formats: sqlite · runs: guest agent, host te
 | **pattern** | `str` |  | What to count; must not be empty. Its meaning depends on `pattern_type`. |
 | pattern_type | `str` | `'text'` | `text` (default): `pattern` encoded in `encoding`. `bytes`: ASCII characters stand for their byte, Python escapes (`\x00`) are decoded. `hex`: hex digits, whitespace allowed. `regex`: an ASCII regular expression over the raw bytes (empty matches are not counted). Invalid escapes, hex or regexes are an error. Allowed: `text`, `bytes`, `hex`, `regex`. |
 | encoding | `str` | `'utf-8'` | Encoding for `text` (default `utf-8`; `utf-16-le`, `utf-16-be` for databases with a UTF-16 text encoding). |
-| region | `str` | `'all'` | Which free space is searched: `all` (default), `freelist`, `freeblocks` or `unallocated`. Other values are an error. Allowed: `all`, `freelist`, `freeblocks`, `unallocated`. |
-| view | `str` | `'main_file'` | `main_file` (default): the main database file as it is, the `-wal` left out. `current`: the copy after `PRAGMA wal_checkpoint(TRUNCATE)`, i.e. with the `-wal` folded in as SQLite would on a checkpoint. Other values are an error. Allowed: `main_file`, `current`. |
+| region | `str` | `'all'` | Which free space is searched: `all` (default; every kind below but `whole_file`), `freelist`, `freeblocks`, `unallocated` or `overflow_tail`; or `whole_file`: not free space, but every byte of the database file, its `-wal` and its `-journal` (those that exist; none of them missing is an error, only the database itself must exist). Other values are an error. Allowed: `all`, `freelist`, `freeblocks`, `unallocated`, `overflow_tail`, `whole_file`. |
+| view | `str` | `'main_file'` | `main_file` (default): the main database file as it is, the `-wal` left out. `current`: the copy after `PRAGMA wal_checkpoint(TRUNCATE)`, i.e. with the `-wal` folded in as SQLite would on a checkpoint. Other values are an error, as is `current` with `region: whole_file` (that region searches the files as seized, and a checkpoint would overwrite stale pages). Allowed: `main_file`, `current`. |
 | expected_count | `int` | `1` | Non-negative integer to compare with (default 1); `0` asserts absence. |
 | comparison_type | `str` | `'equals'` | `equals` (default), `greater`, `less`, `greater_equal` or `less_equal`. Use `greater_equal` with `expected_count: 1` for "at least once". Allowed: `equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 
@@ -46,18 +49,21 @@ asserts: count, absent, content · formats: sqlite · runs: guest agent, host te
 - ERROR: a corrupt header, or a broken freelist or freeblock chain (a pointer out of range, a cycle, a freelist count that does not match the header): the free space could not be located
 - ERROR: `view: current` and SQLite cannot checkpoint the copy
 - ERROR: an empty `pattern`; invalid escapes, hex or regex; a `!re` / `!timestamp` pattern
-- ERROR: an unknown `region`, `view`, `pattern_type` or `encoding`; a negative or non-integer `expected_count`; an unknown `comparison_type`
+- ERROR: a broken overflow chain (a page out of range, on the freelist or claimed twice, a cycle, a chain shorter or longer than the value); not for `region: whole_file`
+- ERROR: an unknown `region`, `view`, `pattern_type` or `encoding`; `view: current` with `region: whole_file`; a negative or non-integer `expected_count`; an unknown `comparison_type`
 
 **Limits:**
-- The file is parsed per the SQLite file format, without SQLite: freelist pages (with the overflow pages of a deleted large row), freeblocks inside b-tree pages, and the unallocated space of each b-tree page. Live rows are never counted.
-- Occurrences are counted per region, so a match never spans two regions. The details list the matching pages and regions (absolute file offsets) and the size of each kind of free space.
+- The file is parsed per the SQLite file format, without SQLite: freelist pages (with the overflow pages of a deleted large row), freeblocks inside b-tree pages, the unallocated space of each b-tree page, and the overflow tail (the bytes after a large value on the last page of its overflow chain, which can hold old rows even with `secure_delete`). `all` is these four; live rows are not counted there.
+- Regions never overlap and occurrences are counted per region, so a match never spans two regions. The details list the matching pages and regions (absolute file offsets) and the size of each kind of free space.
+- Free space is not every byte of the file: `sqlite_stat4` samples (after `ANALYZE`), full-text index segments, the `-wal` / `-journal`, reserved page bytes and fragments under 4 bytes are outside it. `region: whole_file` counts every byte of the database and of its `-wal` and `-journal` (each file on its own, live rows included, nothing parsed), so "deleted and gone from the evidence" is `whole_file` with `expected_count: 0`; search each encoding the database uses.
+- SQLite can leave a record twice (a page split keeps the old cells as unallocated space) or overwrite freed data when it rewrites pages; prefer `comparison_type greater_equal` unless the number of copies is the point.
 - Freeing a cell overwrites its first 4 bytes (the freeblock header), and later writes reuse free space; search for a part of the deleted value that is long enough to be unique.
 - `PRAGMA secure_delete` (on in some builds) zeroes freed space, so `expected_count: 0` proves the delete erased it.
 - `pattern_type: regex` is an ASCII regular expression over the raw bytes; empty matches are not counted.
 
 **Use cases:**
 - A deleted record is still recoverable: `comparison_type: greater_equal` with `expected_count: 1` in the free space, while sqlite.row_count no longer returns the row.
-- A delete erased the data: `expected_count: 0`, as with `PRAGMA secure_delete` or after a `VACUUM`.
+- A delete erased the data: `expected_count: 0` with `region: whole_file`: the value is nowhere in the database, its `-wal` or `-journal` (free space alone misses `sqlite_stat4` and full-text indexes).
 
 **Examples:**
 
@@ -110,6 +116,46 @@ tests:
     dst: /home/user/app/notes.db
     pattern: deleted-note-title
     expected_count: 0
+```
+
+*gone from the whole evidence* → PASSED. `whole_file` counts every byte of the database and its sidecars; the secure delete left nothing anywhere.
+
+```yaml
+tests:
+- name: gone_from_the_whole_evidence
+  function: sqlite.free_space_pattern_count
+  parameter:
+    dst: /home/user/app/notes.db
+    pattern: deleted-note-title
+    region: whole_file
+    expected_count: 0
+```
+
+*a live row counts in the whole file* → PASSED
+
+```yaml
+tests:
+- name: a_live_row_counts_in_the_whole_file
+  function: sqlite.free_space_pattern_count
+  parameter:
+    dst: /home/user/app/notes.db
+    pattern: kept-note
+    region: whole_file
+    expected_count: 1
+    comparison_type: greater_equal
+```
+
+*current has no meaning for the whole file* → ERROR
+
+```yaml
+tests:
+- name: current_has_no_meaning_for_the_whole_file
+  function: sqlite.free_space_pattern_count
+  parameter:
+    dst: /home/user/app/notes.db
+    pattern: deleted-note-title
+    region: whole_file
+    view: current
 ```
 
 *recoverable data fails an erase check* → FAILED
@@ -166,7 +212,7 @@ asserts: exists, absent, value, count · formats: sqlite · runs: guest agent, h
 **Not for:**
 - only how many rows a query returns → `sqlite.row_count`
 - how many frames or transactions the write-ahead log holds → `sqlite.wal_frame_count`
-- a value in deleted records or free pages that no query returns → `sqlite.free_space_pattern_count`
+- a value in deleted records, free pages or anywhere in the file and its sidecars → `sqlite.free_space_pattern_count`
 - a query value compared with another query value, another view or another database → `sqlite.values_compare`
 
 | parameter | type | default | description |

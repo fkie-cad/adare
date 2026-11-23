@@ -154,7 +154,7 @@ Not supported by: `sqlite.free_space_pattern_count`
 
 ## Decoding a stored value (value_decode) (`value_decode`)
 
-`value_decode` decodes the value read from the file before it is compared: one step or a list applied in order, from `url`, `base64`, `hex`, `utf16` and `json`. After `json`, `decoded_key_path` (key path syntax) selects one value of the decoded document. A value a step cannot decode, or an unknown step, is an ERROR.
+`value_decode` decodes the value read from the file before it is compared: one step or a list applied in order, from `url`, `base64`, `hex`, `utf16` and `json`. After `json`, `decoded_key_path` (key path syntax) selects one value of the decoded document; selecting none is FAILED (as a key path that selects nothing), several an ERROR. A value a step cannot decode, or an unknown step, is an ERROR.
 
 ```
 value_decode: base64
@@ -195,5 +195,5 @@ Not supported by: `linux.process_running`
 - **No parsers for Windows artifacts such as prefetch, LNK, jump lists, shellbags or the recycle bin index files.** Instead: Read fixed fields with the binary functions (offsets, string tables), or write a collection with a parser.
 - **The csv functions read comma-separated files only; there is no delimiter parameter (semicolon or tab files read as one column).** Instead: Match whole lines with `text.line_count` (`regex_match`) or `standard.file_content_matches_regex`.
 - **values_compare compares numbers and times only, not two text values.** Instead: Test each value against the expected text with `value_matches`.
-- **Stale or uncommitted frames of an SQLite write-ahead log are not carved; free space is only searched in the main file (or the checkpointed `current` copy).** Instead: Search the raw bytes of the `-wal` with `text.occurrence_count` or `binary.pattern_count`.
+- **Stale or uncommitted frames of an SQLite write-ahead log are not parsed into rows; free space is only located in the main file (or the checkpointed `current` copy).** Instead: Count a value in the raw `-wal` and `-journal` with `sqlite.free_space_pattern_count` and `region: whole_file` (or `binary.pattern_count` on the `-wal`).
 - **Testfunctions read files and guest state, not memory dumps or network captures.** Instead: Analyse such evidence outside the playbook tests.

@@ -3,15 +3,29 @@
 A workbook is opened once per test (:class:`Workbook`) and every sheet the test needs is
 read from that one handle; opening it per sheet re-parses the whole archive each time.
 
+Also holds the checks the collection shares between its testfunctions (cell and row
+comparison, the closest-row report, the whole-workbook report), so the collection module
+stays a thin layer of parameter handling and error mapping.
+
 Ships with the agent's adarelib wheel (see :mod:`adarelib.testset.compare` for how
 collections and adarelib stay in step). Needs pandas and openpyxl, which only the excel
 collection imports; importable on Python 3.10.
 """
 
+import logging
+import re
 import zipfile
+from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from openpyxl.utils.exceptions import InvalidFileException
+
+from adarelib.event.event import TestResult
+from adarelib.testset.compare import compare_row_sequences, compare_row_sets, row_matches_pattern
+from adarelib.testset.ordering import OrderingError
+
+log = logging.getLogger(__name__)
 
 # What pandas/openpyxl raise for a file that is not a readable workbook (wrong
 # format, corrupt archive). The test cannot be evaluated, so these are errors;
@@ -153,3 +167,203 @@ def validate_columns(
             f"  Expected: {expected_normalized}",
         ]
     return False, error_details
+
+
+def unresolved_path_error(label: str, path: str, status: str) -> TestResult:
+    """ERROR for a glob that matched no file or several, listing the directory to help fix the path."""
+    try:
+        search_path = Path(path).parent if '/' in path or '\\' in path else Path('.')
+        available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
+        files_info = (
+            f"Available files in directory: {available_files}" if available_files else "No files found in directory"
+        )
+    except OSError as e:
+        files_info = f"Could not list directory contents: {e}"
+    return TestResult.error(
+        [
+            f"{label} with path {path} can't be used, because no unambiguous file could be identified "
+            f"(because {status}). {files_info}"
+        ]
+    )
+
+
+def compare_cell(ctx: Any, actual_value: str, expected_value, regex_match: bool, ordered, where: str) -> TestResult:
+    """The result of ``excel.cell_value_matches`` for the cell text ``actual_value`` at ``where``."""
+    if ordered is not None:
+        try:
+            holds, message = ordered.compare(actual_value, expected_value)
+        except OrderingError as e:
+            return TestResult.error([f'cell at {where}: {e}'])
+        return (
+            TestResult.success([f'cell at {where}: {message}'])
+            if holds
+            else TestResult.failed([f'cell at {where}: {message}'])
+        )
+    expected_str = str(expected_value) if expected_value is not None else ""
+
+    # Check for placeholders in expected value
+    if ctx.has_placeholders(expected_str):
+        placeholder_names = ctx.get_placeholders(expected_str)
+        if len(placeholder_names) != 1:
+            return TestResult.error(
+                [f'expected exactly one placeholder in expected_value, got {len(placeholder_names)}']
+            )
+        success, message = ctx.compare_with_placeholder(placeholder_names[0], actual_value)
+        if success:
+            return TestResult.success()
+        return TestResult.failed(
+            [
+                f'cell value mismatch at {where}',
+                f'actual: "{actual_value}"',
+                f'placeholder: {{{{{placeholder_names[0]}}}}}',
+                f'comparison: {message}',
+            ]
+        )
+
+    # Regex matching
+    if regex_match:
+        if re.compile(expected_str).search(actual_value):
+            return TestResult.success()
+        return TestResult.failed(
+            [f'cell value does not match regex at {where}', f'actual: "{actual_value}"', f'regex: {expected_str}']
+        )
+
+    # Exact string comparison
+    if actual_value == expected_str:
+        return TestResult.success()
+    return TestResult.failed(
+        [f'cell value mismatch at {where}', f'actual: "{actual_value}"', f'expected: "{expected_str}"']
+    )
+
+
+def find_matching_row(ctx: Any, rows: list[list[str]], entry: list[str]) -> TestResult:
+    """SUCCESS when a row of ``rows`` matches ``entry``; else FAILED listing the three closest rows."""
+    # Track best matching rows for detailed error reporting
+    match_results = []
+
+    for i, row_item in enumerate(rows):
+        is_match, failed_columns, column_count_match = row_matches_pattern(ctx, row_item, entry)
+        if is_match:
+            return TestResult.success()
+
+        # Store match details for error reporting
+        match_results.append(
+            {
+                'row_index': i,
+                'row': row_item,
+                'failed_columns': failed_columns,
+                'column_count_match': column_count_match,
+                'failure_count': len(failed_columns),
+            }
+        )
+
+    # Log sheet contents for debugging when test fails
+    log.info("Excel sheet contents for failed test contains_row:")
+    for i, row_item in enumerate(rows):
+        log.info(f"  Row {i}: {row_item}")
+    log.info(f"Expected entry pattern: {entry}")
+
+    # Find the best matching rows
+    if match_results:
+        # Sort by failure count (ascending), then by whether column count matches
+        best_matches = sorted(match_results, key=lambda x: (x['failure_count'], not x['column_count_match']))
+
+        # Build structured failure details
+        failure_details = [f'no matching row found for pattern: {entry}', f'analyzed {len(rows)} rows in Excel sheet']
+
+        # Add up to 3 best matching rows with detailed failures
+        failure_details.append('closest matches:')
+        for i, match in enumerate(best_matches[:3]):
+            failure_details.append(f'  [{i + 1}] row {match["row_index"]}: {match["row"]}')
+            failure_details.append(f'      failures: {", ".join(match["failed_columns"])}')
+
+        return TestResult.failed(failure_details)
+    return TestResult.failed([f'no matching row found for pattern: {entry}', 'no rows found in Excel sheet to analyze'])
+
+
+def compare_row_lists(
+    ctx: Any,
+    actual_rows: list[list[str]],
+    reference_rows: list[list[str]],
+    columns: list[int] | None,
+    ignore_order: bool,
+    allow_extra_rows: bool,
+    allow_missing_rows: bool,
+) -> TestResult:
+    """Compare two row lists as a multiset (``ignore_order``) or position by position."""
+    compare = compare_row_sets if ignore_order else compare_row_sequences
+    return compare(
+        test_instance=ctx,
+        actual_rows=actual_rows,
+        reference_rows=reference_rows,
+        columns=columns,
+        allow_extra=allow_extra_rows,
+        allow_missing=allow_missing_rows,
+        label='Excel',
+    )
+
+
+def sheet_set_differences(
+    sheet_mode: str,
+    actual_sheets: list[str],
+    reference_sheets: list[str],
+    specific_sheets: list[str] | None,
+    sheet_matches: list[tuple[str, str]],
+) -> tuple[list[str], list[str]]:
+    """``(missing, extra)`` sheet names of a workbook comparison in ``sheet_mode`` (see :func:`match_sheets`)."""
+    if sheet_mode == "by_name":
+        matched_names = {s for s, _ in sheet_matches}
+        return (
+            [s for s in reference_sheets if s not in matched_names],
+            [s for s in actual_sheets if s not in set(reference_sheets)],
+        )
+    if sheet_mode == "by_index":
+        return reference_sheets[len(actual_sheets) :], actual_sheets[len(reference_sheets) :]
+    if sheet_mode == "specific":
+        # extra sheets are not counted in specific mode
+        return [s for s in specific_sheets or [] if s not in actual_sheets], []
+    return [], []
+
+
+def compare_files_failure_details(
+    sheet_mode: str,
+    actual_sheets: list[str],
+    reference_sheets: list[str],
+    missing_sheets: list[str],
+    extra_sheets: list[str],
+    allow_missing_sheets: bool,
+    allow_extra_sheets: bool,
+    sheet_comparison_failures: list[dict],
+) -> list[str]:
+    """Report lines for a failed workbook comparison; empty when nothing failed.
+
+    ``sheet_comparison_failures`` holds one ``{'sheet': name, 'details': lines}`` per sheet pair with row differences.
+    """
+    sheet_failures = []
+    summary_parts = []
+    if missing_sheets and not allow_missing_sheets:
+        sheet_failures.append(f"Missing sheets (in reference but not in actual): {missing_sheets}")
+        summary_parts.append(f"{len(missing_sheets)} missing sheet(s)")
+    if extra_sheets and not allow_extra_sheets:
+        sheet_failures.append(f"Extra sheets (in actual but not in reference): {extra_sheets}")
+        summary_parts.append(f"{len(extra_sheets)} extra sheet(s)")
+    if sheet_comparison_failures:
+        summary_parts.append(f"{len(sheet_comparison_failures)} sheet(s) with row differences")
+    if not summary_parts:
+        return []
+
+    failure_details = [
+        "Excel file comparison failed: " + ", ".join(summary_parts),
+        f"Actual: {len(actual_sheets)} sheets, Reference: {len(reference_sheets)} sheets",
+        f"Sheet matching mode: {sheet_mode}",
+    ]
+    if sheet_failures:
+        failure_details.append("")
+        failure_details.extend(sheet_failures)
+    if sheet_comparison_failures:
+        failure_details.append("")
+        failure_details.append("Sheet comparison failures:")
+        for failure in sheet_comparison_failures:
+            failure_details.append("")
+            failure_details.extend(format_sheet_diff_report(failure['sheet'], failure['details']))
+    return failure_details

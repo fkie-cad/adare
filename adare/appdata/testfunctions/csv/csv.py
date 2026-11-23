@@ -8,7 +8,13 @@ from typing import Optional
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
-from adarelib.testset.compare import compare_row_sequences, compare_row_sets, extract_columns, row_matches_pattern
+from adarelib.testset.compare import (
+    compare_row_sequences,
+    compare_row_sets,
+    extract_columns,
+    row_matches_pattern,
+    rows_regex_problem,
+)
 from adarelib.testset.content import open_text
 from adarelib.testset.structured import compare_count, count_parameter_errors
 
@@ -68,6 +74,9 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None, encoding: str 
           dst: '{{ out_dir }}/timeline.csv'
           entry: [report.docx, !re '.*', Created]
     """
+    problem = rows_regex_problem(ctx, [entry])
+    if problem is not None:
+        return problem
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
         # List files in directory to help with debugging
@@ -233,6 +242,9 @@ def compare_rows(
     for i, row in enumerate(reference_rows):
         if not isinstance(row, list):
             return TestResult.error([f'reference_rows[{i}] must be a list, got {type(row).__name__}'])
+    problem = rows_regex_problem(ctx, reference_rows)
+    if problem is not None:
+        return problem
 
     try:
         # Increase CSV field size limit to handle large fields
@@ -464,6 +476,9 @@ def row_count(
         problems.append(f'entry must be a list (one item per column), got {entry!r}')
     if problems:
         return TestResult.error(problems)
+    problem = rows_regex_problem(ctx, [entry])
+    if problem is not None:
+        return problem
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
         return TestResult.error(

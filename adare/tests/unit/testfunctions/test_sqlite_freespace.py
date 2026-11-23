@@ -46,8 +46,8 @@ def _sha256(path):
 def _connect(path, secure_delete='OFF'):
     conn = sqlite3.connect(str(path), isolation_level=None)
     try:
+        conn.execute(f'PRAGMA page_size={PAGE}')  # first, like the adarelib helper (older SQLite may fix it otherwise)
         conn.execute('PRAGMA auto_vacuum=NONE')
-        conn.execute(f'PRAGMA page_size={PAGE}')
         conn.execute(f'PRAGMA secure_delete={secure_delete}')
         yield conn
     finally:
@@ -133,17 +133,31 @@ def test_pattern_types(tmp_path, pattern, pattern_type):
 
 
 def test_utf16_text(tmp_path):
+    """The deleted row is in the file twice, and both copies are free space.
+
+    20 rows of about 82 bytes (UTF-16) do not fit on one 1024-byte page, so SQLite splits the
+    root leaf: its cells move to new leaf pages, but the old cells stay behind in the unallocated
+    space of the root, which is now an interior page. The deleted row is a freeblock on the leaf
+    that took it over and a stale cell in the root's unallocated space. (The UTF-8 rows of the
+    other tests fit on one page, hence a single copy there.)
+    """
     db = tmp_path / 'state.db'
     with _connect(db) as conn:
         conn.execute("PRAGMA encoding='UTF-16le'")
         _fill(conn)
         conn.execute('DELETE FROM notes WHERE id = 8')
+    needle = SECRET.encode('utf-16-le')
 
     utf8 = _free(db, pattern=SECRET, expected_count=0)
-    utf16 = _free(db, pattern=SECRET, encoding='utf-16-le', comparison_type='greater_equal')
+    utf16 = _free(db, pattern=SECRET, encoding='utf-16-le', expected_count=2)
+    in_freeblock = _free(db, pattern=SECRET, encoding='utf-16-le', region='freeblocks', expected_count=1)
+    in_unallocated = _free(db, pattern=SECRET, encoding='utf-16-le', region='unallocated', expected_count=1)
 
     assert utf8.status == StatusEnum.SUCCESS, utf8.details
     assert utf16.status == StatusEnum.SUCCESS, utf16.details
+    assert in_freeblock.status == StatusEnum.SUCCESS, in_freeblock.details
+    assert in_unallocated.status == StatusEnum.SUCCESS, in_unallocated.details
+    assert db.read_bytes().count(needle) == 2  # no third copy anywhere: both are the free ones
 
 
 def test_view_current_checkpoints_a_copy(tmp_path):
@@ -171,6 +185,102 @@ def test_view_current_checkpoints_a_copy(tmp_path):
     assert any(d.startswith('view: current (the copy after PRAGMA wal_checkpoint(TRUNCATE)') for d in current.details)
     assert any(d.startswith('read snapshot: state.db-wal sha256=') for d in current.details)
     assert {p.name: _sha256(p) for p in evidence.iterdir()} == before
+
+
+# ---------------------------------------------------------------------------
+# region whole_file: the evidence as seized
+# ---------------------------------------------------------------------------
+
+
+def _wal_only_evidence(tmp_path):
+    """state.db and state.db-wal as seized: ONLY-IN-WAL-TEXT is in the -wal alone, note-008 is live."""
+    live = tmp_path / 'live' / 'state.db'
+    live.parent.mkdir()
+    evidence = tmp_path / 'evidence'
+    evidence.mkdir()
+    with _connect(live) as conn:
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA wal_autocheckpoint=0')
+        _fill(conn)
+        conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        conn.execute('INSERT INTO notes VALUES (500, ?)', ('ONLY-IN-WAL-TEXT',))
+        for name in ('state.db', 'state.db-wal'):
+            shutil.copyfile(live.parent / name, evidence / name)
+    return evidence / 'state.db'
+
+
+def test_whole_file_counts_text_that_is_only_in_the_wal(tmp_path):
+    db = _wal_only_evidence(tmp_path)
+    wal = Path(f'{db}-wal')
+    assert b'ONLY-IN-WAL-TEXT' not in db.read_bytes()
+
+    result = _free(db, region='whole_file', pattern='ONLY-IN-WAL-TEXT', expected_count=1)
+    free_space = _free(db, pattern='ONLY-IN-WAL-TEXT', expected_count=0)
+
+    assert result.status == StatusEnum.SUCCESS, result.details
+    assert f'state.db-wal: 1 occurrence(s) in {wal.stat().st_size} bytes, sha256={_sha256(wal)}' in result.details
+    assert f'state.db: 0 occurrence(s) in {db.stat().st_size} bytes, sha256={_sha256(db)}' in result.details
+    assert free_space.status == StatusEnum.SUCCESS, free_space.details  # not free space of the main file
+
+
+def test_whole_file_includes_live_rows_and_the_journal(tmp_path):
+    db = _db(tmp_path / 'state.db')
+    Path(f'{db}-journal').write_bytes(b'junk' + SECRET.encode() + b'junk')
+
+    result = _free(db, region='whole_file', pattern='note-009-', expected_count=1)
+    in_journal = _free(db, region='whole_file', pattern=SECRET, expected_count=2)  # freed cell + journal
+
+    assert result.status == StatusEnum.SUCCESS, result.details  # a live row, where free space finds none
+    assert any(d.startswith('state.db-journal: 1 occurrence(s) in 17 bytes, sha256=') for d in in_journal.details)
+    assert in_journal.status == StatusEnum.SUCCESS, in_journal.details
+    assert _free(db, pattern='note-009-', expected_count=0).status == StatusEnum.SUCCESS
+
+
+def test_whole_file_without_sidecars_reports_the_main_file_only(tmp_path):
+    db = _db(tmp_path / 'state.db')
+
+    result = _free(db, region='whole_file', pattern=SECRET, comparison_type='greater_equal')
+
+    assert result.status == StatusEnum.SUCCESS, result.details
+    assert '1 file(s); region whole_file' in result.details[0]
+    assert not any('-wal:' in d for d in result.details)
+
+
+def test_whole_file_failed_when_the_count_differs(tmp_path):
+    db = _db(tmp_path / 'state.db')
+
+    result = _free(db, region='whole_file', pattern='not-in-there', expected_count=1)
+
+    assert result.status == StatusEnum.FAILED, result.details
+
+
+def test_whole_file_does_not_count_a_match_across_two_files(tmp_path):
+    db = tmp_path / 'plain.db'  # nothing is parsed: it need not be a database
+    db.write_bytes(b'xxxxAB')
+    Path(f'{db}-wal').write_bytes(b'CDyyyy')
+
+    across = _free(db, region='whole_file', pattern='ABCD', expected_count=0)
+    each = _free(db, region='whole_file', pattern='(AB|CD)', pattern_type='regex', expected_count=2)
+
+    assert across.status == StatusEnum.SUCCESS, across.details
+    assert each.status == StatusEnum.SUCCESS, each.details
+
+
+def test_whole_file_error_messages_name_the_conflict_with_view_current(tmp_path):
+    db = _db(tmp_path / 'state.db')
+
+    result = _free(db, region='whole_file', view='current', pattern=SECRET)
+
+    assert result.status == StatusEnum.ERROR, result.details
+    assert 'cannot be combined with region whole_file' in result.details[0]
+    assert _free(db, region='whole_file', view='main_file', pattern=SECRET).status == StatusEnum.SUCCESS
+
+
+def test_whole_file_of_a_missing_database_is_an_error(tmp_path):
+    result = _free(tmp_path / 'missing.db', region='whole_file', pattern=SECRET)
+
+    assert result.status == StatusEnum.ERROR, result.details
+    assert 'does not exist' in result.details[0]
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +341,7 @@ def test_uncheckpointable_copy_is_an_error_in_view_current(tmp_path):
     'params',
     [
         {'region': 'pages'},
+        {'region': 'whole_file', 'view': 'current'},
         {'view': 'wal_added'},
         {'view': 'commit:1'},
         {'pattern_type': 'glob'},

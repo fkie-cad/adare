@@ -9,23 +9,38 @@ Deleting a row does not erase its bytes (unless ``PRAGMA secure_delete`` is on);
 * **freeblocks**: the chain of freed cells inside a b-tree page's cell content area (each
   starts with a 4-byte header: offset of the next freeblock, size);
 * **unallocated** space of a b-tree page: the gap between the end of the cell pointer array
-  and the start of the cell content area.
+  and the start of the cell content area;
+* the **overflow tail**: a value too large for its b-tree cell continues on a chain of
+  overflow pages (4-byte number of the next page, then up to usable size - 4 bytes of the
+  value); the last page of the chain is rarely full, and the bytes after the value keep what
+  the page held before. That is where a page SQLite freed and took again as an overflow page
+  within one transaction leaves the old rows (even ``secure_delete`` leaves them, since the
+  page was not wiped, only reused). The region is ``[4 + remainder, usable size)`` of the last
+  page; the reserved bytes are not part of it, nor is the payload.
 
 Fragments of fewer than 4 bytes inside a page are not reported. The reserved bytes at the
 end of each page (header offset 20) are never part of a region.
 
 Regions are ``(page, start, end, kind)`` with ``start`` / ``end`` **absolute offsets in the
 file** (``end`` exclusive), ``page`` 1-based and ``kind`` one of :data:`REGION_KINDS`.
+Regions are sorted by offset and never overlap, so no byte of the file is counted twice. A text
+that SQLite left twice in the file (the old cell in a page it rewrote and a copy in the page that
+took over the rows) is found twice, once per copy; callers search each region on its own, so a
+match never spans two regions, even adjacent ones.
 
 Which pages are b-tree pages is decided by their page type byte (0x02, 0x05, 0x0a, 0x0d at
 offset 0, offset 100 on page 1), not by walking the b-trees from their roots; freelist
-pages, pointer-map pages (auto-vacuum databases) and the lock-byte page are skipped.
-Overflow pages start with the 4-byte number of the next overflow page, whose first byte is
-0 in any database below 2**25 pages, so they are not taken for b-tree pages.
+pages, pointer-map pages (auto-vacuum databases) and the lock-byte page are skipped. The
+cells of those pages (table leaf 0x0d, index leaf 0x0a and index interior 0x02 cells can
+overflow) name the overflow chains, which are walked once each. An overflow page starts with
+the 4-byte number of the next page, whose first byte is 0 in a database below 2**24 pages,
+so it is not taken for a b-tree page; in a larger one a page that a chain claims is
+nevertheless an overflow page, and what its first byte suggested is discarded.
 
 The parser never trusts the file: every pointer is range-checked and every chain is
-cycle-guarded. A file that is not an SQLite database, a header that cannot be right or a
-broken chain raises :class:`SqliteFreeSpaceError`; nothing else (no ``IndexError`` or
+cycle-guarded (a page claimed twice, by a cycle or by two chains, is an error, as is a chain
+whose length does not match the size of the value). A file that is not an SQLite database, a
+header that cannot be right or a broken chain raises :class:`SqliteFreeSpaceError`; nothing else (no ``IndexError`` or
 ``struct.error``) escapes for malformed input.
 
 Entry points: :func:`parse_free_space` (bytes), :func:`read_free_space` (an open binary
@@ -52,7 +67,12 @@ INTERIOR_PAGE_TYPES = (0x02, 0x05)
 LEAF_PAGE_TYPES = (0x0A, 0x0D)
 BTREE_PAGE_TYPES = INTERIOR_PAGE_TYPES + LEAF_PAGE_TYPES
 
-REGION_KINDS = ('freelist', 'freeblock', 'unallocated')
+REGION_KINDS = ('freelist', 'freeblock', 'unallocated', 'overflow_tail')
+
+OVERFLOW_HEADER_SIZE = 4  # the number of the next overflow page
+# a page that a chain claims was taken for a b-tree page by its first byte: parse again without it;
+# only a database of 2**24 pages or more (or a crafted file) needs this at all
+MAX_PARSE_PASSES = 4
 
 
 class SqliteFreeSpaceError(ValueError):
@@ -82,6 +102,7 @@ class FreeSpace:
     page_count: int  # complete pages in the file
     freelist_pages: int  # trunk + leaf pages on the freelist (= header offset 36)
     regions: tuple[FreeRegion, ...]  # in file order of their pages; empty regions are left out
+    overflow_pages: int = 0  # pages of the overflow chains in use
 
     def of_kind(self, *kinds: str) -> list[FreeRegion]:
         """The regions of the given kinds (all regions when none are given)."""
@@ -215,8 +236,82 @@ def _is_pointer_map_page(header: _Header, page: int, lock_byte_page: int) -> boo
     return map_page == page
 
 
-def _btree_regions(pages: _Pages, header: _Header, page: int) -> list[FreeRegion]:
-    """Freeblocks and unallocated space of b-tree page ``page`` (empty when it is no b-tree page).
+@dataclass(frozen=True)
+class _OverflowClaim:
+    """A cell whose value continues on an overflow chain."""
+
+    page: int  # the b-tree page holding the cell
+    first: int  # the first overflow page (0: the cell names none)
+    remaining: int  # bytes of the value on the chain
+
+
+@dataclass(frozen=True)
+class _BtreePage:
+    regions: list[FreeRegion]
+    claims: list[_OverflowClaim]
+
+
+def _varint(data: bytes, pos: int, limit: int, what: str) -> tuple[int, int]:
+    """The varint at ``data[pos:limit]`` and the position after it."""
+    value = 0
+    for i in range(9):
+        if pos >= limit:
+            raise SqliteFreeSpaceError(f'{what}: a varint runs past the end of the page')
+        byte = data[pos]
+        pos += 1
+        if i == 8:
+            return (value << 8) | byte, pos
+        value = (value << 7) | (byte & 0x7F)
+        if not byte & 0x80:
+            return value, pos
+    raise AssertionError('unreachable')  # pragma: no cover
+
+
+def _overflow_claims(
+    header: _Header,
+    page: int,
+    page_type: int,
+    page_data: bytes,
+    pointers_start: int,
+    cell_count: int,
+    content_start: int,
+) -> list[_OverflowClaim]:
+    """The cells of a b-tree page whose value does not fit in the cell (SQLite file format, 'Cell Format').
+
+    :raises SqliteFreeSpaceError: a cell pointer outside the cell content area or a cell that runs off the page
+    """
+    usable = header.usable_size
+    if page_type == 0x0D:  # table leaf: payload size, rowid, payload
+        max_local = usable - 35
+        skip_child = 0
+    elif page_type in (0x0A, 0x02):  # index leaf / interior (interior: a 4-byte left child first)
+        max_local = (usable - 12) * 64 // 255 - 23
+        skip_child = 4 if page_type == 0x02 else 0
+    else:  # table interior cells (child, rowid) never overflow
+        return []
+    min_local = (usable - 12) * 32 // 255 - 23
+    claims = []
+    for i in range(cell_count):
+        cell = _u16(page_data, pointers_start + 2 * i)
+        what = f'cell {i} of page {page}'
+        if cell < content_start or cell >= usable:
+            raise SqliteFreeSpaceError(f'corrupt b-tree page {page}: {what} starts at {cell}, outside the cell content')
+        payload, pos = _varint(page_data, cell + skip_child, usable, what)
+        if page_type == 0x0D:
+            _, pos = _varint(page_data, pos, usable, what)  # the rowid
+        if payload <= max_local:
+            continue
+        local = min_local + (payload - min_local) % (usable - OVERFLOW_HEADER_SIZE)
+        if local > max_local:
+            local = min_local
+        if pos + local + 4 > usable:
+            raise SqliteFreeSpaceError(f'corrupt b-tree page {page}: {what} ({local} local bytes) runs off the page')
+        claims.append(_OverflowClaim(page, _u32(page_data, pos + local), payload - local))
+    return claims
+
+
+def _parse_btree_page(pages: _Pages, header: _Header, page: int) -> _BtreePage | None:
+    """Freeblocks, unallocated space and overflow cells of b-tree page ``page`` (None when it is no b-tree page).
 
     :raises SqliteFreeSpaceError: page 1 is no b-tree page, or its pointers are impossible
     """
@@ -226,7 +321,7 @@ def _btree_regions(pages: _Pages, header: _Header, page: int) -> list[FreeRegion
     if page_type not in BTREE_PAGE_TYPES:
         if page == 1:
             raise SqliteFreeSpaceError(f'page 1 is not a b-tree page (type 0x{page_type:02x})')
-        return []
+        return None
     header_size = 12 if page_type in INTERIOR_PAGE_TYPES else 8
     btree_header = pages.read(start + hdr, header_size, f'page {page} b-tree header')
     first_freeblock = _u16(btree_header, 1)
@@ -241,6 +336,14 @@ def _btree_regions(pages: _Pages, header: _Header, page: int) -> list[FreeRegion
     regions = [FreeRegion(page, start + pointers_end, start + content_start, 'unallocated')]
 
     page_data = None
+    if cell_count and page_type != 0x05:
+        page_data = pages.read(start, header.usable_size, f'page {page}')
+    claims = (
+        _overflow_claims(header, page, page_type, page_data, hdr + header_size, cell_count, content_start)
+        if page_data is not None
+        else []
+    )
+
     block = first_freeblock
     if block and block < content_start:
         raise SqliteFreeSpaceError(
@@ -265,7 +368,112 @@ def _btree_regions(pages: _Pages, header: _Header, page: int) -> list[FreeRegion
             )
         regions.append(FreeRegion(page, start + block, start + block + size, 'freeblock'))
         block = next_block
-    return regions
+    return _BtreePage(regions, claims)
+
+
+def _walk_overflow_chain(
+    pages: _Pages, header: _Header, claim: _OverflowClaim, taken: set[int], not_overflow: set[int]
+) -> list[FreeRegion]:
+    """Claim the pages of one overflow chain in ``taken``; the region after the value on its last page.
+
+    :raises SqliteFreeSpaceError: a page number out of range or of a page that cannot be an
+        overflow page, a page claimed twice (a cycle, or two cells sharing a page), a chain that
+        ends before or goes on after the value's last byte
+    """
+    payload_per_page = header.usable_size - OVERFLOW_HEADER_SIZE
+    remaining = claim.remaining
+    page = claim.first
+    where = f'overflow chain of a cell on page {claim.page}'
+    while True:
+        if page == 0:
+            raise SqliteFreeSpaceError(f'broken {where}: it ends with {remaining} bytes of the value missing')
+        if page < 2 or page > header.page_count or page in not_overflow:
+            raise SqliteFreeSpaceError(f'broken {where}: page {page} is no page that can hold overflow data')
+        if page in taken:
+            raise SqliteFreeSpaceError(f'broken {where}: page {page} is claimed twice (a cycle or a shared page)')
+        taken.add(page)
+        start = _page_offset(header, page)
+        following = _u32(pages.read(start, OVERFLOW_HEADER_SIZE, f'overflow page {page}'), 0)
+        used = min(remaining, payload_per_page)
+        remaining -= used
+        if remaining:
+            page = following
+            continue
+        if following:
+            raise SqliteFreeSpaceError(
+                f'broken {where}: page {page} holds the end of the value but names page {following} next'
+            )
+        if used == payload_per_page:
+            return []
+        return [FreeRegion(page, start + OVERFLOW_HEADER_SIZE + used, start + header.usable_size, 'overflow_tail')]
+
+
+def _overflow_regions(
+    pages: _Pages, header: _Header, parsed: dict[int, _BtreePage | SqliteFreeSpaceError], not_overflow: set[int]
+) -> tuple[set[int], list[FreeRegion], list[SqliteFreeSpaceError]]:
+    """Walk the chains of the b-tree pages in ``parsed``; each page is visited once.
+
+    :return: the overflow pages claimed, the tail regions and the errors of broken chains
+    """
+    taken: set[int] = set()
+    tails: list[FreeRegion] = []
+    errors: list[SqliteFreeSpaceError] = []
+    for found in parsed.values():
+        if isinstance(found, SqliteFreeSpaceError):
+            continue
+        for claim in found.claims:
+            try:
+                tails += _walk_overflow_chain(pages, header, claim, taken, not_overflow)
+            except SqliteFreeSpaceError as e:
+                errors.append(e)
+    return taken, tails, errors
+
+
+def _parse_btree_pages(
+    pages: _Pages, header: _Header, on_freelist: set[int], lock_byte_page: int
+) -> tuple[dict[int, _BtreePage | SqliteFreeSpaceError], set[int]]:
+    """The b-tree pages (by their type byte) and the pages that no overflow chain may name."""
+    # pages by their type byte; an unreadable b-tree page is kept as its error, because it may
+    # turn out to be an overflow page (see below)
+    parsed: dict[int, _BtreePage | SqliteFreeSpaceError] = {}
+    not_overflow = set(on_freelist)  # pages that no chain may name
+    for page in range(1, header.page_count + 1):
+        if page == lock_byte_page or _is_pointer_map_page(header, page, lock_byte_page):
+            not_overflow.add(page)
+        if page in not_overflow:
+            continue
+        try:
+            found = _parse_btree_page(pages, header, page)
+        except SqliteFreeSpaceError as e:
+            found = e
+        if found is not None:
+            parsed[page] = found
+    return parsed, not_overflow
+
+
+def _resolve_overflow(
+    pages: _Pages, header: _Header, parsed: dict[int, _BtreePage | SqliteFreeSpaceError], not_overflow: set[int]
+) -> tuple[set[int], list[FreeRegion], list[SqliteFreeSpaceError]]:
+    """The overflow pages, tail regions and chain errors; ``parsed`` loses the pages that chains claim."""
+    # A page that a chain claims is an overflow page whatever its first byte says, so the cells
+    # and regions read from it are dropped and the chains are walked again without them.
+    dropped: set[int] = set()
+    for _ in range(MAX_PARSE_PASSES):
+        overflow, tails, chain_errors = _overflow_regions(pages, header, parsed, not_overflow)
+        misread = overflow & parsed.keys()
+        if not misread:
+            break
+        dropped |= misread
+        for page in misread:
+            del parsed[page]
+    else:
+        raise SqliteFreeSpaceError('b-tree pages that overflow chains claim: the pages cannot be told apart')
+    if dropped - overflow:
+        # the page that claimed it was an overflow page itself: nothing left that names it
+        raise SqliteFreeSpaceError(
+            f'page {min(dropped - overflow)} is claimed as an overflow page by no b-tree page in use'
+        )
+    return overflow, tails, chain_errors
 
 
 def read_free_space(handle: BinaryIO, size: int) -> FreeSpace:
@@ -286,11 +494,16 @@ def read_free_space(handle: BinaryIO, size: int) -> FreeSpace:
     on_freelist, freelist_regions = _walk_freelist(pages, header)
     lock_byte_page = LOCK_BYTE_OFFSET // header.page_size + 1
 
-    regions = list(freelist_regions)
-    for page in range(1, header.page_count + 1):
-        if page in on_freelist or page == lock_byte_page or _is_pointer_map_page(header, page, lock_byte_page):
-            continue
-        regions += _btree_regions(pages, header, page)
+    parsed, not_overflow = _parse_btree_pages(pages, header, on_freelist, lock_byte_page)
+    overflow, tails, chain_errors = _resolve_overflow(pages, header, parsed, not_overflow)
+    for found in parsed.values():
+        if isinstance(found, SqliteFreeSpaceError):
+            raise found
+    if chain_errors:
+        raise chain_errors[0]
+    regions = list(freelist_regions) + tails
+    for found in parsed.values():
+        regions += found.regions
     regions.sort(key=lambda r: (r.start, r.end))
     return FreeSpace(
         page_size=header.page_size,
@@ -298,6 +511,7 @@ def read_free_space(handle: BinaryIO, size: int) -> FreeSpace:
         page_count=header.page_count,
         freelist_pages=len(on_freelist),
         regions=tuple(r for r in regions if r.end > r.start),
+        overflow_pages=len(overflow),
     )
 
 

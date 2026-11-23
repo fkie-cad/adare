@@ -839,7 +839,7 @@ asserts: exists · formats: excel · runs: guest agent, host test mode or hostsi
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error. |
 | **sheet** | `str` |  | Exact, case-sensitive sheet name, or a regex if `regex_match`. A `!re` tag is matched against each sheet name with `re.match` (anchored at the start; add `$` to anchor the end); an invalid pattern is an error. |
-| regex_match | `bool` | `False` | Treat `sheet` as a Python regex searched in each sheet name (`re.search`, unanchored; `^...$` for the whole name); an invalid regex is an error. |
+| regex_match | `bool` | `False` | Treat `sheet` as a Python regex searched in each sheet name (`re.search`, unanchored; `^...$` for the whole name); an invalid regex is an error, even when the workbook has no sheet. |
 
 **Outcomes:**
 - PASSED: a sheet is named `sheet` (exact, case-sensitive) or, with `regex_match` or a `!re` tag, a sheet name matches the regex

@@ -16,8 +16,14 @@ or hex text, as UTF-16 bytes, or as a JSON document in a string. Value testfunct
 ``url``, ``base64`` and ``hex`` produce bytes. A result that is still bytes after the last step
 becomes UTF-8 text, or lowercase hex when it is no valid UTF-8.
 
-Every problem raises :class:`ValueDecodeError` naming the step; callers report it as ERROR (the
-value could not be read as the test said, so nothing was learnt about it).
+A step that cannot decode its input raises :class:`ValueDecodeError` naming the step (invalid
+base64, hex, JSON or percent-encoding, a value of the wrong type, a ``decoded_key_path`` that
+selects several values); callers report it as ERROR (the value could not be read as the test
+said, so nothing was learnt about it). The one exception is a ``json`` step whose
+``decoded_key_path`` selects nothing: the value decoded fine and the key is simply not in it, so
+it raises the subclass :class:`DecodedKeyPathMissing`, which callers report as FAILED, like a
+key path that selects nothing in the file itself. With several values (a wildcard), a value
+without the key is a non-match of that value, not a failure of the whole test.
 
 Standard library only (plus adarelib), importable on Python 3.10.
 """
@@ -39,6 +45,14 @@ _SHOWN = 80
 
 class ValueDecodeError(ValueError):
     """A ``value_decode`` parameter or a decode step that failed."""
+
+
+class DecodedKeyPathMissing(ValueDecodeError):
+    """The ``json`` step decoded the value, but ``decoded_key_path`` selects nothing in it (FAILED, not ERROR).
+
+    A subclass, so a caller that only knows :class:`ValueDecodeError` still reports an ERROR;
+    callers catch this one first.
+    """
 
 
 def _shown(value: Any) -> str:
@@ -86,7 +100,7 @@ def _json(value: Any, key_path: str | None) -> Any:
     parsed = json.loads(_text(value))
     values = resolve_key_path(parsed, key_path or '')
     if not values:
-        raise ValueDecodeError(f'decoded_key_path {key_path!r} selects nothing in {_shown(parsed)}')
+        raise DecodedKeyPathMissing(f'decoded_key_path {key_path!r} selects nothing in {_shown(parsed)}')
     if len(values) > 1:
         raise ValueDecodeError(
             f'decoded_key_path {key_path!r} selects {len(values)} values; it must select exactly one'
@@ -120,12 +134,15 @@ class ValueDecoder:
     def __call__(self, value: Any, as_text: bool = False) -> Any:
         """``value`` decoded by every step; ``as_text``: a non-string result as its JSON text.
 
+        :raises DecodedKeyPathMissing: ``decoded_key_path`` selects nothing in the decoded JSON
         :raises ValueDecodeError: a step that cannot decode the value
         """
         current = value
         for step in self.steps:
             try:
                 current = _STEPS[step](current, self.key_path)
+            except DecodedKeyPathMissing as e:
+                raise DecodedKeyPathMissing(f'value_decode step {step!r}: {e}') from e
             except ValueDecodeError as e:
                 raise ValueDecodeError(f'value_decode step {step!r}: {e}') from e
             except ValueError as e:  # binascii.Error, UnicodeDecodeError, JSONDecodeError

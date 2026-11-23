@@ -11,6 +11,9 @@ Result rules (the same for every format):
   invalid file, bad parameters -> ERROR
 * the file was read and the key path / value / count does not hold -> FAILED
 
+An invalid regex in ``expected_value`` (``regex_match``, a ``!re`` tag or a regex placeholder) is
+an ERROR too, checked before the file is read, so it never turns into "key path does not exist".
+
 Key paths use :func:`adarelib.testset.compare.parse_key_path`. Loaded data is normalized
 before comparison: dates and times become ISO 8601 strings, binary data a hex string, tuples
 lists and non-string keys their ``str()``.
@@ -27,7 +30,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from adarelib.event.event import TestResult
-from adarelib.testset.compare import compare_with_single_placeholder, resolve_key_path
+from adarelib.testset.compare import compare_with_single_placeholder, regex_expected_problem, resolve_key_path
 from adarelib.testset.ordering import OrderingError
 
 log = logging.getLogger(__name__)
@@ -229,17 +232,20 @@ def value_matches(
     ``ordered_parameters`` (``comparison_type``, ``value_type``, ``tolerance``, time parameters;
     see :mod:`adarelib.testset.valuecompare`) switch to an ordered comparison when one is set.
     ``value_decode`` / ``decoded_key_path`` (:mod:`adarelib.testset.valuedecode`) decode each
-    value before it is compared.
+    value before it is compared; a decode step that fails is an ERROR, a ``decoded_key_path``
+    that selects nothing in a decoded value makes that value a non-match (FAILED).
     """
     if wildcard_mode not in WILDCARD_MODES:
         return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
     from adarelib.testset.valuecompare import ordered_setup  # imports this module
-    from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
+    from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, decoder_setup
 
     decoder, problem = decoder_setup(value_decode, decoded_key_path)
     if problem is not None:
         return problem
     ordered, expected_value, problem = ordered_setup(ctx, expected_value, regex_match, **ordered_parameters)
+    if problem is None and ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
     if problem is not None:
         return problem
     data, error = load_data(ctx, dst, fmt)
@@ -250,13 +256,19 @@ def value_matches(
         return TestResult.failed([f'key path "{key_path}" does not exist'])
     candidates = _candidates(values)
     expected = normalize(expected_value)
+    results = []
     try:
-        if decoder is not None:
-            candidates = [decoder(v) for v in candidates]
-        if ordered is not None:
-            results = [(v, *ordered.compare(v, expected)) for v in candidates]
-        else:
-            results = [(v, *compare_value(ctx, v, expected, regex_match)) for v in candidates]
+        for v in candidates:
+            if decoder is not None:
+                try:
+                    v = decoder(v)
+                except DecodedKeyPathMissing as e:  # decoded fine, the key is not in it: no match
+                    results.append((v, False, str(e)))
+                    continue
+            if ordered is not None:
+                results.append((v, *ordered.compare(v, expected)))
+            else:
+                results.append((v, *compare_value(ctx, v, expected, regex_match)))
     except (re.error, OrderingError, ValueDecodeError) as e:
         return TestResult.error([str(e)])
     if not results:
@@ -290,6 +302,10 @@ def value_count(
     problems = count_parameter_errors(expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
+    if expected_value is not None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     data, error = load_data(ctx, dst, fmt)
     if error is not None:
         return error

@@ -43,7 +43,7 @@ asserts: value, order · formats: xml · runs: guest agent, host test mode or ho
 | timestamp_unit | `str \| None` | `None` | Unit of that count: `s` (default), `ms`, `us`, `ns` or `100ns`. Allowed: `s`, `ms`, `us`, `ns`, `100ns`. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (`+02:00`); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: `url` (percent-decoding), `base64`, `hex`, `utf16` (bytes as UTF-16 text), `json` (parse, then take `decoded_key_path`). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path as in json.value_matches); it must select one value. Required with `json`, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path as in json.value_matches); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with `json`, an error without it. |
 
 **Outcomes:**
 - PASSED: `attribute` of the first selected element equals or matches `expected_value`
@@ -341,7 +341,7 @@ asserts: value, order · formats: xml · runs: guest agent, host test mode or ho
 | timestamp_unit | `str \| None` | `None` | Unit of that count: `s` (default), `ms`, `us`, `ns` or `100ns`. Allowed: `s`, `ms`, `us`, `ns`, `100ns`. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (`+02:00`); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: `url` (percent-decoding), `base64`, `hex`, `utf16` (bytes as UTF-16 text), `json` (parse, then take `decoded_key_path`). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path as in json.value_matches); it must select one value. Required with `json`, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path as in json.value_matches); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with `json`, an error without it. |
 
 **Outcomes:**
 - PASSED: the text of the selected element (several: `any` one, or `all`) equals or matches `expected_value`
@@ -610,7 +610,7 @@ asserts: compare, order · formats: xml · runs: guest agent, host test mode or 
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in both XPaths (`{ns: 'http://...'}` + `//ns:item`); `{uri}tag` also works without it. |
 | other_dst | `str \| None` | `None` | Guest path of a second XML file to read `other_xpath` from (same rules as `dst`, `archive!/member` included); default `None`: `dst`. A missing file is an error. Compares a file with a copy saved before an action. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode both values before comparing (steps as in xml.element_text_matches). |
-| decoded_key_path | `str \| None` | `None` | With `json` in `value_decode`: key path into the decoded value. |
+| decoded_key_path | `str \| None` | `None` | With `json` in `value_decode`: key path into the decoded value; it must select one value: none fails, several are an error. |
 
 **Outcomes:**
 - PASSED: `first <comparison_type> second + offset` holds

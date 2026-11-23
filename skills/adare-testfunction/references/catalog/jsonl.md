@@ -26,7 +26,7 @@ asserts: count, absent · formats: jsonl · runs: guest agent, host test mode or
 | **dst** | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file has 0 lines (passes `expected_count: 0`). |
 | conditions | `dict[str, str \| int \| float \| bool \| None] \| None` | `None` | Mapping `key_path -> expected value` (all must hold; for multi-value paths one matching element suffices). `None`/empty counts every valid JSON line. |
 | expected_count | `int \| dict[str, int] \| None` | `None` | Non-negative `int` compared with `comparison_type`, `{min: N, max: M}` for a range (either bound optional: min defaults to 0, max to unbounded), or `None` for "at least 1". Anything else (a negative number, a boolean, other keys, min > max) is an error. |
-| regex_match | `bool` | `False` | Treat string expected values as regexes searched (`re.search`) in `str(value)`; the value `"*"` then means "key exists". Without it, values are compared with type-sensitive `==`; `!re`/`!timestamp` tags always work. |
+| regex_match | `bool` | `False` | Treat string expected values as regexes searched (`re.search`) in `str(value)`; the value `"*"` then means "key exists". Without it, values are compared with type-sensitive `==`; `!re`/`!timestamp` tags always work. An invalid regex is an error even when no line has the key. |
 | skip_malformed | `bool` | `True` | `True` (default) ignores lines that are not valid JSON; `False` makes the first malformed line an error. |
 | comparison_type | `str` | `'equals'` | `equals` (default), `greater`, `less`, `greater_equal` or `less_equal`, applied to an `int` `expected_count`. With the range form or `None` only `equals` is allowed; other values are an error. Allowed: `equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 | encoding | `str \| None` | `None` | `None` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
@@ -196,7 +196,7 @@ asserts: exists, value · formats: jsonl · runs: guest agent, host test mode or
 | **dst** | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails. |
 | conditions | `dict[str, str \| int \| float \| bool \| None]` | `None` | Required mapping `key_path -> expected value`; a line matches when every condition holds. If a path yields several values (wildcard or JSON array), one matching element suffices. Missing keys fail the line. |
 | wildcard_mode | `str` | `'any'` | `any` (default) or `all` (every valid line must match; no valid lines fails). Other values are an error. Allowed: `any`, `all`. |
-| regex_match | `bool` | `False` | Treat string expected values as regexes searched (`re.search`) in `str(value)`; the value `"*"` then means "key exists". Without it, values are compared with type-sensitive `==`; `!re`/`!timestamp` tags always work. |
+| regex_match | `bool` | `False` | Treat string expected values as regexes searched (`re.search`) in `str(value)`; the value `"*"` then means "key exists". Without it, values are compared with type-sensitive `==`; `!re`/`!timestamp` tags always work. An invalid regex is an error even when no line has the key. |
 | skip_malformed | `bool` | `True` | `True` (default) ignores lines that are not valid JSON; `False` makes the first malformed line an error. |
 | encoding | `str \| None` | `None` | `None` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
 
@@ -337,7 +337,7 @@ asserts: sequence, value · formats: jsonl · runs: guest agent, host test mode 
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path, an archive member (`logs.tar.gz!/events.jsonl`) is read like a file; a missing file is an error. |
 | **conditions** | `list` |  | Non-empty list, in the expected order, of mappings `key_path -> expected value`; a record meets one when every condition holds. If a path yields several values (wildcard or JSON array), one matching element suffices; missing keys fail the record. An empty list or an entry that is not a non-empty mapping is an error. |
-| regex_match | `bool` | `False` | Treat string expected values as regexes searched (`re.search`) in `str(value)`; the value `"*"` then means "key exists". Without it, values are compared with type-sensitive `==`; `!re`/`!timestamp` tags always work. |
+| regex_match | `bool` | `False` | Treat string expected values as regexes searched (`re.search`) in `str(value)`; the value `"*"` then means "key exists". Without it, values are compared with type-sensitive `==`; `!re`/`!timestamp` tags always work. An invalid regex is an error even when no line has the key. |
 | skip_malformed | `bool` | `True` | `True` (default) ignores lines that are not valid JSON; `False` makes the first malformed line an error. |
 | encoding | `str \| None` | `None` | `None` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
 
@@ -453,7 +453,7 @@ asserts: exists, value, order · formats: jsonl · runs: guest agent, host test 
 | **dst** | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails. |
 | **key_path** | `str` | `''` | Dot path inside each line's object, e.g. `event.type`; `*` expands object values, `name[*]` array elements, `name[n]` one element (`-1` = last). For multi-value paths one matching element suffices. |
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Value to find; see `regex_match` for how it is compared. |
-| regex_match | `bool` | `False` | Treat string expected values as regexes searched (`re.search`) in `str(value)`; the value `"*"` then means "key exists". Without it, values are compared with type-sensitive `==`; `!re`/`!timestamp` tags always work. |
+| regex_match | `bool` | `False` | Treat string expected values as regexes searched (`re.search`) in `str(value)`; the value `"*"` then means "key exists". Without it, values are compared with type-sensitive `==`; `!re`/`!timestamp` tags always work. An invalid regex is an error even when no line has the key. |
 | skip_malformed | `bool` | `True` | `True` (default) ignores lines that are not valid JSON; `False` makes the first malformed line an error. |
 | encoding | `str \| None` | `None` | `None` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
 | comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); `!re` / `regex_match` are then errors, a lone `{{ name }}` is the saved variable; a value that is no number or timestamp is an error. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
@@ -464,7 +464,7 @@ asserts: exists, value, order · formats: jsonl · runs: guest agent, host test 
 | timestamp_unit | `str \| None` | `None` | Unit of that count: `s` (default), `ms`, `us`, `ns` or `100ns`. Allowed: `s`, `ms`, `us`, `ns`, `100ns`. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (`+02:00`); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: `url` (percent-decoding), `base64`, `hex`, `utf16` (bytes as UTF-16 text), `json` (parse, then take `decoded_key_path`). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path, numeric indexes allowed); it must select one value. Required with `json`, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path, numeric indexes allowed); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with `json`, an error without it. |
 
 **Outcomes:**
 - PASSED: at least one valid line has a value at `key_path` that matches `expected_value`

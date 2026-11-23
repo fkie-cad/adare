@@ -204,7 +204,7 @@ asserts: count, absent · formats: ini · runs: guest agent, host test mode or h
 | **key** | `str` |  | Key name; the first `=` on a line splits key and value. |
 | **expected_count** | `int` |  | Required non-negative integer to compare against; anything else is an error. |
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Count only occurrences whose raw value equals/matches this (same rules as ini.value_matches); `None` (default) counts every occurrence. |
-| regex_match | `bool` | `False` | Search `expected_value` as a Python regex (`re.search`, unanchored). |
+| regex_match | `bool` | `False` | Search `expected_value` as a Python regex (`re.search`, unanchored). An invalid regex is an error even when the key is absent. |
 | comparison_type | `str` | `'equals'` | `equals` (default), `greater`, `less`, `greater_equal` or `less_equal`; other values are an error. Allowed: `equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 | case_sensitive | `bool` | `True` | `False` compares section and key names case-insensitively. |
 | encoding | `str` | `None` | Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8). |
@@ -317,7 +317,7 @@ asserts: value, order · formats: ini · runs: guest agent, host test mode or ho
 | **section** | `str` |  | Section name without brackets; `''` = keys before the first header. |
 | **key** | `str` |  | Key name; the first `=` on a line splits key and value. |
 | **expected_value** | `str \| int \| float \| bool` |  | Compared with the raw value text (stripped; quotes and inline comments are kept, `a = "x" ; note` has the value `"x" ; note`). A YAML number or boolean is compared as its text (`8080`, `true`/`false`). A `!re`/`!timestamp` tag or `{{placeholder}}` is matched by type. |
-| regex_match | `bool` | `False` | Search `expected_value` as a Python regex (`re.search`, unanchored). An invalid regex is an error. |
+| regex_match | `bool` | `False` | Search `expected_value` as a Python regex (`re.search`, unanchored). An invalid regex is an error even when the key is absent. |
 | case_sensitive | `bool` | `True` | `False` compares section and key names case-insensitively; values are always compared as given. |
 | encoding | `str` | `None` | Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8). |
 | wildcard_mode | `str` | `'any'` | With several occurrences, `any` (default): one must match; `all`: every one must match. Other values are an error. Allowed: `any`, `all`. |
@@ -329,7 +329,7 @@ asserts: value, order · formats: ini · runs: guest agent, host test mode or ho
 | timestamp_unit | `str \| None` | `None` | Unit of that count: `s` (default), `ms`, `us`, `ns` or `100ns`. Allowed: `s`, `ms`, `us`, `ns`, `100ns`. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (`+02:00`); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: `url` (percent-decoding), `base64`, `hex`, `utf16` (bytes as UTF-16 text), `json` (parse, then take `decoded_key_path`). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path as in json.value_matches); it must select one value. Required with `json`, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path as in json.value_matches); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with `json`, an error without it. |
 
 **Outcomes:**
 - PASSED: the value of `key` (several occurrences: `any` one, or `all`) equals or matches `expected_value`

@@ -6,6 +6,7 @@ Runs on the guests' Python 3.10 too (``make test-adarelib-guest``).
 """
 
 import io
+import random
 import sqlite3
 import struct
 
@@ -29,8 +30,8 @@ def _db(path, secure_delete='OFF', page_size=PAGE, auto_vacuum='NONE', rows=20, 
     """notes(id, body) with ``rows`` small rows (and one row spilling to overflow pages)."""
     conn = sqlite3.connect(str(path), isolation_level=None)
     try:
+        conn.execute(f'PRAGMA page_size={page_size}')  # before auto_vacuum: that creates the file at the default size
         conn.execute(f'PRAGMA auto_vacuum={auto_vacuum}')
-        conn.execute(f'PRAGMA page_size={page_size}')
         conn.execute(f'PRAGMA secure_delete={secure_delete}')
         conn.execute('CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)')
         for i in range(1, rows + 1):
@@ -194,6 +195,146 @@ def test_file_object_and_bytes_agree(tmp_path):
 
     assert from_file == parse_free_space(data)
     assert first == data[from_file.regions[0].start : from_file.regions[0].end]
+
+
+# ---------------------------------------------------------------------------
+# what SQLite leaves in the file: copies, overwritten cells
+
+
+def _occurrences(data, needle):
+    offsets, at = [], data.find(needle)
+    while at != -1:
+        offsets.append(at)
+        at = data.find(needle, at + 1)
+    return offsets
+
+
+def _region_at(space, offset, length):
+    return next((r for r in space.regions if r.start <= offset and offset + length <= r.end), None)
+
+
+def test_utf16_row_deleted_after_a_page_split_is_in_the_file_twice(tmp_path):
+    """20 rows of 82 bytes do not fit on one 1024-byte page, so the root leaf is split.
+
+    The root page becomes an interior page, but SQLite does not erase the leaf cells it
+    moved out: the old cells stay in its unallocated space. The deleted row is therefore
+    in the file twice, as a freeblock on the leaf that took it over and as a stale cell in
+    the root's unallocated space. Both are free space; the parser finds each copy once.
+    """
+    db = tmp_path / 'a.db'
+    conn = sqlite3.connect(str(db), isolation_level=None)
+    conn.execute(f'PRAGMA page_size={PAGE}')
+    conn.execute("PRAGMA encoding='UTF-16le'")
+    conn.execute('CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)')
+    for i in range(1, 21):
+        conn.execute('INSERT INTO notes VALUES (?, ?)', (i, f'note-{i:03d}-' + 'z' * 30))
+    conn.execute('DELETE FROM notes WHERE id = 8')
+    conn.close()
+    needle = 'note-008-'.encode('utf-16-le')
+    data = db.read_bytes()
+
+    space = parse_free_space(data)
+
+    offsets = _occurrences(data, needle)
+    assert len(offsets) == 2
+    kinds = sorted(_region_at(space, o, len(needle)).kind for o in offsets)
+    assert kinds == ['freeblock', 'unallocated']
+    stale = next(o for o in offsets if _region_at(space, o, len(needle)).kind == 'unallocated')
+    assert data[(stale // PAGE) * PAGE] == 0x05  # in the page that is now the interior root
+    assert _found(db, needle) == 2
+    # the unmoved live neighbour has the stale copy too: free space also holds live data's old copies
+    assert _found(db, 'note-009-'.encode('utf-16-le')) == 1
+
+
+def test_a_large_delete_can_overwrite_the_stale_copy_of_an_earlier_delete(tmp_path):
+    """Deleting the large row empties its leaf, SQLite merges the tree back into the root page.
+
+    Rewriting the root overwrites the stale cells an earlier delete had left there: the
+    count drops from 2 to 1. The freeblock copy on the leaf, which is now a freelist page,
+    survives, and everything still in the file is still reported.
+    """
+    db = _db(tmp_path / 'a.db', big_row=True)
+    _delete(db, 'id = 8')
+    before = _found(db, b'note-008-')
+    _delete(db, 'id = 1000')
+    data = db.read_bytes()
+    space = parse_free_space(data)
+
+    after = _found(db, b'note-008-')
+
+    assert before == 2
+    assert after == 1
+    assert len(_occurrences(data, b'note-008-')) == after
+    assert _region_at(space, _occurrences(data, b'note-008-')[0], 9).kind == 'freelist'
+
+
+def _marker_db(path, rnd, page_size, encoding, auto_vacuum):
+    """Rows with unique markers, some spilling to overflow pages, deleted in two transactions.
+
+    Returns the markers (in the file's encoding) of the deleted rows; they occur nowhere else.
+    There is no index: an index's interior pages keep the divider keys of deleted rows as live
+    cells, which are not free space.
+    """
+    codec = {'UTF-8': 'utf-8', 'UTF-16le': 'utf-16-le', 'UTF-16be': 'utf-16-be'}[encoding]
+    conn = sqlite3.connect(str(path), isolation_level=None)
+    try:
+        conn.execute(f'PRAGMA page_size={page_size}')
+        conn.execute(f'PRAGMA auto_vacuum={auto_vacuum}')
+        conn.execute(f"PRAGMA encoding='{encoding}'")
+        conn.execute('PRAGMA secure_delete=OFF')
+        conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY, body TEXT)')
+        # an index b-tree whose big keys overflow in leaf and interior cells (no marker in them)
+        conn.execute('CREATE TABLE k (key TEXT PRIMARY KEY) WITHOUT ROWID')
+        conn.execute('BEGIN')
+        for i in range(rnd.randint(20, 60)):
+            fill = 'Q' * rnd.randint(page_size, 3 * page_size) if rnd.random() < 0.15 else 'q' * rnd.randint(5, 60)
+            conn.execute('INSERT INTO t VALUES (?, ?)', (i, f'MK{i:04d}-{fill}'))
+            kfill = 'K' * rnd.randint(page_size // 2, 2 * page_size) if rnd.random() < 0.4 else 'k' * rnd.randint(1, 30)
+            conn.execute('INSERT INTO k VALUES (?)', (f'{i:04d}-{kfill}',))
+        conn.execute('COMMIT')
+        ids = [row[0] for row in conn.execute('SELECT id FROM t')]
+        deleted = set()
+        for _ in range(rnd.randint(1, 3)):
+            conn.execute('BEGIN')
+            for i in rnd.sample(ids, rnd.randint(1, len(ids) // 2)):
+                conn.execute('DELETE FROM t WHERE id = ?', (i,))
+                conn.execute('DELETE FROM k WHERE key LIKE ?', (f'{i:04d}-%',))
+                deleted.add(i)
+            conn.execute('COMMIT')
+    finally:
+        conn.close()
+    return [f'MK{i:04d}-'.encode(codec) for i in sorted(deleted)]
+
+
+@pytest.mark.parametrize('seed', range(6))
+@pytest.mark.parametrize('auto_vacuum', ['NONE', 'INCREMENTAL', 'FULL'])
+@pytest.mark.parametrize('encoding', ['UTF-8', 'UTF-16le', 'UTF-16be'])
+@pytest.mark.parametrize('page_size', [512, 1024, 4096])
+def test_regions_are_sorted_disjoint_inside_their_page_and_miss_no_deleted_data(
+    tmp_path, page_size, encoding, auto_vacuum, seed
+):
+    db = tmp_path / 'a.db'
+    markers = _marker_db(
+        db, random.Random(f'{page_size}-{encoding}-{auto_vacuum}-{seed}'), page_size, encoding, auto_vacuum
+    )
+    data = db.read_bytes()
+
+    space = parse_free_space(data)
+
+    assert space.page_size == page_size
+    assert space.regions
+    assert set(space.of_kind('overflow_tail')) <= set(space.regions)
+    for r in space.regions:
+        assert 0 <= (r.page - 1) * page_size <= r.start < r.end <= r.page * page_size <= len(data)
+        assert r.end <= (r.page - 1) * page_size + space.usable_size
+        assert r.kind in REGION_KINDS
+    for before, after in zip(space.regions, space.regions[1:], strict=False):
+        assert before.start < after.start
+        assert before.end <= after.start, f'{before} overlaps {after}'
+    # whatever SQLite left of a deleted row is in a region: the parser misses no recoverable bytes
+    for marker in markers:
+        for offset in _occurrences(data, marker):
+            assert _region_at(space, offset, len(marker)) is not None, f'{marker!r} at {offset} is in no region'
 
 
 # ---------------------------------------------------------------------------

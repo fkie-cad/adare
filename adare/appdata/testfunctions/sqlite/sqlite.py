@@ -9,6 +9,7 @@ from adarelib.constants import StatusEnum
 from adarelib.testset import binary
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
+from adarelib.testset.compare import regex_expected_problem
 from adarelib.event.event import TestResult
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.sqlite_freespace import REGION_KINDS, FreeSpace, SqliteFreeSpaceError, read_free_space
@@ -49,7 +50,10 @@ FREE_SPACE_REGIONS = {
     'freelist': ('freelist',),
     'freeblocks': ('freeblock',),
     'unallocated': ('unallocated',),
+    'overflow_tail': ('overflow_tail',),
+    'whole_file': (),  # not free space: every byte of the database file and its -wal / -journal
 }
+WHOLE_FILE_REGION = 'whole_file'
 FREE_SPACE_VIEWS = ('main_file', 'current')
 # matching regions named in the details; the rest is summarised
 MAX_MATCH_DETAILS = 20
@@ -240,6 +244,11 @@ def query_result(
         problems += count_parameter_errors(expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
+    if expected_result is not None:
+        # a regex placeholder in expected_result is checked before a count mismatch can hide it
+        regex_problem = regex_expected_problem(ctx, [str(expected_result)], many_placeholders=True)
+        if regex_problem is not None:
+            return regex_problem
 
     result, snapshot_details, error = _run_query(ctx, dst, query, view)
     if error is not None:
@@ -624,9 +633,73 @@ def _free_space_details(space: FreeSpace, matches: list[tuple]) -> list[str]:
     summary = (
         f'free space: freelist {space.freelist_pages} page(s) ({space.total("freelist")} bytes), '
         f'{len(freeblocks)} freeblock(s) ({space.total("freeblock")} bytes), '
-        f'unallocated {space.total("unallocated")} bytes; {space.page_count} page(s) of {space.page_size} bytes'
+        f'unallocated {space.total("unallocated")} bytes, '
+        f'overflow tail {space.total("overflow_tail")} bytes of {space.overflow_pages} overflow page(s); '
+        f'{space.page_count} page(s) of {space.page_size} bytes'
     )
     return [f"matches: {'; '.join(shown) if shown else 'none'}", summary]
+
+
+def _free_space_parameter_errors(ctx: TestContext, pattern, region, view, expected_count, comparison_type) -> list[str]:
+    """Why the parameters of free_space_pattern_count cannot be used; empty when they can."""
+    problems = count_parameter_errors(expected_count, comparison_type)
+    if region not in FREE_SPACE_REGIONS:
+        problems.append(f"invalid region {region!r} (allowed: {', '.join(FREE_SPACE_REGIONS)})")
+    if view not in FREE_SPACE_VIEWS:
+        problems.append(f"invalid view {view!r} (allowed: {', '.join(FREE_SPACE_VIEWS)})")
+    elif region == WHOLE_FILE_REGION and view != 'main_file':
+        problems.append(
+            f'view {view!r} cannot be combined with region whole_file: it searches the files as seized '
+            f'(the -wal separately), a checkpointed copy would have overwritten stale pages'
+        )
+    if isinstance(pattern, str) and ctx.has_placeholders(pattern):
+        problems.append(f'pattern {pattern!r} holds a !re or !timestamp placeholder; use pattern_type regex')
+    return problems
+
+
+def _whole_file_count(snapshot: Snapshot, compiled) -> tuple[int, list[str]]:
+    """Occurrences of the pattern in each copied file (database, -wal, -journal), each file on its own.
+
+    A match never spans two files. The files are searched as seized: nothing is parsed or
+    checkpointed, and a database that is no valid SQLite file is searched just the same.
+
+    :raises OSError: a copy cannot be read
+    """
+    total = 0
+    lines = []
+    for suffix in ('',) + SIDECAR_SUFFIXES:
+        path = snapshot.db_copy + suffix
+        if not os.path.isfile(path):
+            continue
+        with open(path, 'rb') as handle:
+            data = handle.read()
+        count = binary.count_pattern(data, compiled)
+        total += count
+        lines.append(f'{snapshot.db_name}{suffix}: {count} occurrence(s) in {len(data)} bytes, sha256={sha256(path)}')
+    return total, lines
+
+
+def _whole_file_result(
+    dst_resolved: str, pattern: str, pattern_type: str, compiled, expected_count: int, comparison_type: str
+) -> TestResult:
+    """``region: whole_file``: the pattern anywhere in the database file or its -wal / -journal."""
+    with tempfile.TemporaryDirectory(prefix='adare_sqlite_free_') as workdir:
+        try:
+            snapshot = take_snapshot(dst_resolved, workdir)
+            actual, per_file = _whole_file_count(snapshot, compiled)
+        except OSError as e:
+            return TestResult.error([f'could not read the database {dst_resolved} and its sidecars: {e}'])
+        snapshot_details = snapshot.details('read snapshot')
+    ok, message = compare_count(actual, expected_count, comparison_type)
+    details = [
+        f'{actual} occurrence(s) of {pattern_type} {pattern!r} in the whole evidence '
+        f'({len(per_file)} file(s); region whole_file)',
+        message,
+        *per_file,
+        'files searched as seized, each on its own (nothing parsed, no checkpoint)',
+        *snapshot_details,
+    ]
+    return TestResult.success(details) if ok else TestResult.failed(details)
 
 
 @testfunction(
@@ -652,15 +725,36 @@ def free_space_pattern_count(
     returns it (sqlite.row_count with ``expected_count: 0``), or that a delete really erased
     it (``expected_count: 0``, as with ``PRAGMA secure_delete``). The file is parsed per the
     SQLite file format, without SQLite: freelist pages (pages no longer in use, including the
-    overflow pages of a deleted large row), freeblocks (freed cells inside a b-tree page)
-    and the unallocated space of each b-tree page. Occurrences are counted per region, so a
-    match never spans two regions. Details list which pages and regions matched (absolute
-    file offsets) and the size of each kind of free space. To search the whole file use
-    binary.pattern_count; live rows are counted there too.
+    overflow pages of a deleted large row), freeblocks (freed cells inside a b-tree page),
+    the unallocated space of each b-tree page and the overflow tail (the bytes after the
+    value on the last overflow page of a chain in use, which keep what the page held when
+    SQLite reused it). Regions never overlap and occurrences are counted per region, so a
+    match never spans two regions. SQLite can leave a record in the file twice (the old cell
+    in a page it rewrote and a copy in the page that took over the rows), which is then
+    counted twice; and it overwrites freed data when it rewrites or merges pages, so a deleted
+    record is not always recoverable. Details list which pages and regions matched (absolute
+    file offsets) and the size of each kind of free space.
 
-    A corrupt header or a broken freelist / freeblock chain (a pointer out of range, a
-    cycle, a freelist count that does not match the header) is an error: the free space
-    could not be located.
+    Free space is not "all stale bytes". Not covered by the free-space regions: the sampled
+    keys in ``sqlite_stat4`` (until the next ANALYZE) and the segments of a full-text index
+    (``<name>_data`` of FTS5, ``_segments`` of FTS3/4; until a merge or optimize), which are
+    live rows of ordinary b-trees that a query can read (``SELECT ... FROM sqlite_stat4``);
+    the reserved bytes of each page, fragments of fewer than 4 bytes and bytes after the last
+    complete page; and the ``-wal`` (``view: current`` folds it in). Deleted index keys are
+    covered: an index is a b-tree whose interior cells are index entries, and deleting one
+    replaces it, so the old cell is free space. Table interior pages keep the rowids of
+    deleted rows as dividers (no text; ``secure_delete`` does not remove them).
+
+    To assert "gone from the evidence", use ``region: whole_file``: the pattern is counted
+    in every byte of the database file and of its ``-wal`` and ``-journal`` as seized, live
+    rows, statistics and full-text segments included, each file on its own (a match never
+    spans two files). ``view`` must be left at its default there. ``0`` means the text is
+    nowhere in these files, in the encoding searched.
+
+    A corrupt header or a broken freelist / freeblock / overflow chain (a pointer out of
+    range, a cycle, a page claimed twice, a chain whose length does not match its value, a
+    freelist count that does not match the header) is an error: the free space could not be
+    located. ``whole_file`` parses nothing, so it has no such error.
 
     Args:
         dst: Guest path to the database; a glob must match exactly one file (otherwise an
@@ -674,11 +768,16 @@ def free_space_pattern_count(
             regexes are an error.
         encoding: Encoding for ``text`` (default ``utf-8``; ``utf-16-le``, ``utf-16-be`` for
             databases with a UTF-16 text encoding).
-        region: Which free space is searched: ``all`` (default), ``freelist``, ``freeblocks``
-            or ``unallocated``. Other values are an error.
+        region: Which free space is searched: ``all`` (default; every kind below but
+            ``whole_file``), ``freelist``, ``freeblocks``, ``unallocated`` or ``overflow_tail``;
+            or ``whole_file``: not free space, but every byte of the database file, its ``-wal``
+            and its ``-journal`` (those that exist; none of them missing is an error, only the
+            database itself must exist). Other values are an error.
         view: ``main_file`` (default): the main database file as it is, the ``-wal`` left
             out. ``current``: the copy after ``PRAGMA wal_checkpoint(TRUNCATE)``, i.e. with the
-            ``-wal`` folded in as SQLite would on a checkpoint. Other values are an error.
+            ``-wal`` folded in as SQLite would on a checkpoint. Other values are an error, as is
+            ``current`` with ``region: whole_file`` (that region searches the files as seized,
+            and a checkpoint would overwrite stale pages).
         expected_count: Non-negative integer to compare with (default 1); ``0`` asserts
             absence.
         comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
@@ -692,13 +791,7 @@ def free_space_pattern_count(
           expected_count: 1
           comparison_type: greater_equal
     """
-    problems = count_parameter_errors(expected_count, comparison_type)
-    if region not in FREE_SPACE_REGIONS:
-        problems.append(f"invalid region {region!r} (allowed: {', '.join(FREE_SPACE_REGIONS)})")
-    if view not in FREE_SPACE_VIEWS:
-        problems.append(f"invalid view {view!r} (allowed: {', '.join(FREE_SPACE_VIEWS)})")
-    if isinstance(pattern, str) and ctx.has_placeholders(pattern):
-        problems.append(f'pattern {pattern!r} holds a !re or !timestamp placeholder; use pattern_type regex')
+    problems = _free_space_parameter_errors(ctx, pattern, region, view, expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
     try:
@@ -712,6 +805,9 @@ def free_space_pattern_count(
         return error
     name = os.path.basename(dst_resolved)
     kinds = FREE_SPACE_REGIONS[region]
+
+    if region == WHOLE_FILE_REGION:
+        return _whole_file_result(dst_resolved, pattern, pattern_type, compiled, expected_count, comparison_type)
 
     with tempfile.TemporaryDirectory(prefix='adare_sqlite_free_') as workdir:
         try:
