@@ -1,7 +1,7 @@
 """Implicit controls for negative tests: was the act behind an absence actually done?
 
 A test for an absent artifact (``*_does_not_exist``, ``visual.not_exists``, ``count_max``
-with max 0, a count of zero (``expected_count: 0``, ``{max: 0}``), anything with
+with max 0, ``visual.count_equals`` with n 0, a count of zero (``expected_count: 0``, ``{max: 0}``), anything with
 ``expect_to_fail``, or a test function declaring
 ``negative = True``) passes just as well when the GUI action that should have produced
 the absence never took effect. So a *passing* negative test becomes **INCONCLUSIVE** when
@@ -81,6 +81,9 @@ def is_negative_test(test_def: dict, test_class: type | None = None) -> bool:
         return True
     if short == 'count_max' and _is_zero(parameter.get('max')):
         return True
+    if function == 'visual.count_equals' and _is_zero(parameter.get('n')):
+        # an exact count of zero asserts absence; with expect_to_fail it asserts presence
+        return not test_def.get('expect_to_fail')
     if isinstance(parameter, dict) and _counts_zero(parameter):
         # a count of zero asserts absence; with expect_to_fail it asserts presence
         return not test_def.get('expect_to_fail')

@@ -712,3 +712,69 @@ class TestRegistryValueMatches:
             )
             result = test.test()
             assert_test_success(result)
+
+
+class TestRegistryTypeNames:
+    """value_type uses canonical registry type names; legacy winreg alias names stay accepted."""
+
+    @staticmethod
+    def _match(reg_type, data, value_type):
+        mock_key = MagicMock()
+        with (
+            patch('platform.system', return_value='Windows'),
+            patch.object(windows_module, 'WINREG_AVAILABLE', True),
+            patch.object(windows_module, 'winreg', MockWinreg),
+            patch.object(MockWinreg, 'OpenKey', MagicMock(return_value=mock_key), create=True),
+            patch.object(MockWinreg, 'QueryValueEx', MagicMock(return_value=(data, reg_type)), create=True),
+            patch.object(MockWinreg, 'CloseKey', MagicMock(), create=True),
+        ):
+            test = RegistryValueMatches(
+                name="t",
+                parameter=RegistryValueMatchesParameter(
+                    key_path=r"HKLM\Software\Test", value_name="V", expected_value=data, value_type=value_type
+                ),
+            )
+            return test.test()
+
+    @pytest.mark.parametrize("value_type", ["REG_DWORD", "reg_dword", "REG_DWORD_LITTLE_ENDIAN"])
+    def test_dword_matches_canonical_and_legacy_name(self, value_type):
+        assert_test_success(self._match(4, 1, value_type))
+
+    @pytest.mark.parametrize("value_type", ["REG_QWORD", "REG_QWORD_LITTLE_ENDIAN"])
+    def test_qword_matches_canonical_and_legacy_name(self, value_type):
+        assert_test_success(self._match(11, 2**40, value_type))
+
+    def test_dword_is_reported_as_reg_dword(self):
+        result = self._match(4, 1, None)
+        assert "(REG_DWORD)" in result.details[0]
+        assert "LITTLE_ENDIAN" not in result.details[0]
+
+    def test_qword_is_reported_as_reg_qword_not_unknown(self):
+        result = self._match(11, 2**40, None)
+        assert "(REG_QWORD)" in result.details[0]
+        assert "UNKNOWN" not in result.details[0]
+
+    def test_mismatch_message_uses_canonical_names(self):
+        result = self._match(11, 5, "REG_DWORD")
+        assert_test_failed(result)
+        assert "Expected: REG_DWORD, Got: REG_QWORD" in result.details[0]
+
+    @pytest.mark.parametrize(
+        "reg_type,name",
+        [
+            (0, "REG_NONE"),
+            (1, "REG_SZ"),
+            (2, "REG_EXPAND_SZ"),
+            (3, "REG_BINARY"),
+            (4, "REG_DWORD"),
+            (5, "REG_DWORD_BIG_ENDIAN"),
+            (6, "REG_LINK"),
+            (7, "REG_MULTI_SZ"),
+            (8, "REG_RESOURCE_LIST"),
+            (9, "REG_FULL_RESOURCE_DESCRIPTOR"),
+            (10, "REG_RESOURCE_REQUIREMENTS_LIST"),
+            (11, "REG_QWORD"),
+        ],
+    )
+    def test_canonical_name_set(self, reg_type, name):
+        assert windows_module._format_registry_type(reg_type) == name
