@@ -162,7 +162,9 @@ Saved variables
 
 An ``expected_value`` that is exactly one placeholder, ``"{{ name }}"``, is the value saved in the variable
 during the run: a number or text (``save_variable``, a ``command`` with ``capture``) or a point in time
-(``save_timestamp``, read with its ``format`` and ``localtime``). ``values_compare`` takes a saved number
+(``save_timestamp``, or a ``!timestamp`` variable without tolerance). A saved point in time is compared as
+that moment: ``timestamp_epoch``, ``timestamp_unit`` and ``time_format`` describe only the value in the file,
+so a field in milliseconds or a FILETIME is compared with the saved time correctly. ``values_compare`` takes a saved number
 as ``offset`` the same way, and ``binary.struct_value_matches`` with an ordered ``comparison_type`` or
 ``tolerance``:
 
@@ -190,9 +192,11 @@ as ``offset`` the same way, and ``binary.struct_value_matches`` with an ordered 
        function: json.value_matches
        parameter:
          dst: /data/app/state.json
-         key_path: lastSaved
+         key_path: lastSaved          # milliseconds since 1970
          expected_value: "{{ started }}"
          comparison_type: greater_equal
+         timestamp_epoch: 1970
+         timestamp_unit: ms
 
 A variable not set before the test, a ``!re`` variable, a ``!timestamp`` with ``tolerance`` or an interval
 (``after``/``before``; it compares on its own, without these parameters) and text around the placeholder

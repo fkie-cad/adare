@@ -112,6 +112,8 @@ GUEST_FILES = {
 PLAYBOOK = """
 variables:
   build: "2.4"
+  cutoff: !timestamp {timestamp: '2024-01-02T03:00:00Z'}
+  late_cutoff: !timestamp {timestamp: '2024-01-02T03:10:00Z'}
 actions: []
 tests:
   - name: json_count_regex
@@ -218,6 +220,24 @@ tests:
       comparison_type: greater
       timestamp_epoch: 1970
       timestamp_unit: ms
+  - name: declared_timestamp_ordered
+    function: json.value_matches
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[0].ts
+      expected_value: "{{ cutoff }}"
+      comparison_type: greater
+      timestamp_epoch: 1601
+      timestamp_unit: 100ns
+  - name: declared_timestamp_ordered_later
+    function: json.value_matches
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[0].ts
+      expected_value: "{{ late_cutoff }}"
+      comparison_type: greater
+      timestamp_epoch: 1601
+      timestamp_unit: 100ns
   - name: values_compare_other_dst
     function: json.values_compare
     parameter:
@@ -362,6 +382,8 @@ def _status(result):
         ('archive_member_missing', StatusEnum.ERROR),
         ('missing_file', StatusEnum.ERROR),
         ('missing_archive', StatusEnum.ERROR),
+        ('declared_timestamp_ordered', StatusEnum.SUCCESS),
+        ('declared_timestamp_ordered_later', StatusEnum.FAILED),
         ('values_compare_other_dst', StatusEnum.SUCCESS),
         ('values_compare_other_archive_member', StatusEnum.SUCCESS),
         ('sqlite_wal_added', StatusEnum.SUCCESS),
@@ -504,10 +526,6 @@ def test_saved_variable_reaches_an_ordered_comparison(chain):
     assert _status(chain('saved_variable_ordered')) == StatusEnum.ERROR
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='the runtime context fills save_timestamp in as Unix seconds, read with the field epoch/unit (open)',
-)
 def test_saved_timestamp_reaches_an_ordered_comparison(chain, monkeypatch):
     """A save_timestamp variable arrives as a placeholder with timestamp metadata and is compared in order."""
     seen = {}

@@ -54,6 +54,8 @@ def _unmet_conditions(ctx, data, conditions: dict, regex_match: bool, first_only
         if unmet and first_only:
             break
     return unmet
+
+
 def _decoded(decoder, value):
     """``value`` decoded by ``value_decode`` (unchanged without a decoder)."""
     return value if decoder is None else decoder(value)

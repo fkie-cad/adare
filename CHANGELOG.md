@@ -189,6 +189,11 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   from another file or archive member, e.g. a copy a `command` action made before the action
   under test. Host mode pulls `other_dst` like `dst` (sidecars, archives, globs); testfunction
   classes declare such parameters in `host_mode_path_params`.
+- **Saved variables in ordered comparisons** (adare, adarelib; additive): an `expected_value`
+  of exactly `"{{ name }}"` may be a variable saved during the run. A `save_timestamp` (or a
+  `!timestamp` variable without tolerance) is compared as that moment, so `timestamp_epoch`,
+  `timestamp_unit` and `time_format` describe only the value in the file. A `!re` variable, a
+  timestamp with tolerance or an interval, or text around the placeholder is ERROR.
 - **`value_decode`** (adarelib; additive) on the value testfunctions (not excel, image) and on
   `values_compare`: a chain of `url`, `base64`, `hex`, `utf16` and `json` (with
   `decoded_key_path`) applied to the value read from the file before it is compared. A value

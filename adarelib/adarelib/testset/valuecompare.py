@@ -45,6 +45,12 @@ ORDERED_PARAMETERS = (
 )
 
 
+def is_ordered(parameters: dict[str, Any]) -> bool:
+    """Whether a test's ``parameters`` ask for an ordered comparison (any of them not at its default)."""
+    defaults = {'comparison_type': 'equals', 'value_type': 'auto'}
+    return any(parameters.get(name, defaults.get(name)) != defaults.get(name) for name in ORDERED_PARAMETERS)
+
+
 @dataclass(frozen=True)
 class OrderedComparison:
     """The parameters of one ordered comparison (all validated)."""
