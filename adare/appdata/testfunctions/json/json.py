@@ -383,7 +383,7 @@ def values_compare(
 ):
     """Pass when the value at ``key_path`` compares to the value at ``other_key_path`` (+ ``offset``).
 
-    Use for: relations inside one file: a modification time later than the creation time,
+    Use for: relations inside one file: a last-saved value later than the first-opened one,
     two timestamps within a few seconds of each other, a counter one above another
     (``comparison_type: equals`` with ``offset: 1``). To compare one value with a constant
     use json.value_matches with ``comparison_type``.

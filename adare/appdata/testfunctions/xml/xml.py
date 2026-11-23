@@ -801,8 +801,8 @@ def values_compare(
 ):
     """Pass when the value selected by ``xpath`` compares to the one selected by ``other_xpath`` (+ ``offset``).
 
-    Use for: relations inside one XML file: a modification time later than the creation
-    time (two attributes, or two elements), two timestamps within a few seconds of each other,
+    Use for: relations inside one XML file: a last-saved value later than the first-opened
+    one (two attributes, or two elements), two timestamps within a few seconds of each other,
     a counter one above another (``comparison_type: equals`` with ``offset: 1``). To compare
     one value with a constant use xml.element_text_matches or xml.attribute_matches with
     ``comparison_type``.

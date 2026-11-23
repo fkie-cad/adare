@@ -5,7 +5,7 @@ TOML
    :class: status-tested
 
 :Status: :status-tested:`● Tested`
-:Functions: 3
+:Functions: 4
 :Category: TOML Data
 
 The **TOML** testset reads TOML files (``tomllib``, or ``tomli`` on Python 3.10) and checks keys, values and counts by key path.
@@ -41,3 +41,4 @@ Test Functions
    contains_key
    value_matches
    value_count
+   values_compare

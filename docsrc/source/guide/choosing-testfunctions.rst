@@ -103,6 +103,12 @@ there), ``value_matches`` (a value) and ``value_count`` (how many values, ``0`` 
    * - A key was written, whatever its value
      - ``<format>.contains_key``; INI section: ``ini.section_exists``
      -
+   * - A value is above/below a number, later/earlier than a time, or within a tolerance
+     - ``<format>.value_matches`` with ``comparison_type`` / ``tolerance``
+     - ``regex_match`` on digits: compares text, not numbers
+   * - Two values of one file: A earlier than B, A within 5 s of B, A = B + 1
+     - ``<format>.values_compare`` (JSON, YAML, TOML, plist, XML)
+     - two ``value_matches`` tests: cannot relate the values to each other
    * - How many entries, or a key/value is absent
      - ``<format>.value_count`` (``expected_count: 0``)
      - ``expect_to_fail`` on ``value_matches``: also passes when *another* value is there
@@ -253,6 +259,10 @@ hand; ``after``/``before`` take the times measured with ``save_timestamp`` aroun
 
 Supported epochs and units, and a table of common formats: "Numeric timestamps" in
 :doc:`/reference/actions`.
+
+To compare a stored time with a fixed time or with another value of the same file, the value
+functions take ``comparison_type``, ``timestamp_epoch`` and ``timestamp_unit`` directly; see
+:ref:`ordered-comparison`.
 
 Checking that something is absent
 ---------------------------------

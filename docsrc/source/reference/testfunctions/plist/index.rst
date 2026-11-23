@@ -5,7 +5,7 @@ Property list (plist)
    :class: status-tested
 
 :Status: :status-tested:`● Tested`
-:Functions: 3
+:Functions: 4
 :Category: Property List Data
 
 The **plist** testset reads property lists, XML or binary (detected from the content), and checks keys, values and counts by key path.
@@ -41,3 +41,4 @@ Test Functions
    contains_key
    value_matches
    value_count
+   values_compare
