@@ -26,7 +26,7 @@
     "list-item": 4,
     "misc": 43,
     "name-defined": 2,
-    "no-any-return": 247,
+    "no-any-return": 244,
     "no-redef": 7,
     "no-untyped-def": 27,
     "operator": 17,
@@ -35,7 +35,7 @@
     "return-value": 36,
     "str-bytes-safe": 2,
     "type-var": 2,
-    "union-attr": 194,
+    "union-attr": 192,
     "unused-coroutine": 1,
     "valid-type": 36,
     "var-annotated": 47

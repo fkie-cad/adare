@@ -6,6 +6,7 @@ import jinja2
 import pytest
 
 from adare.backend.experiment.variable_resolver import VariableResolver
+from adare.exceptions import TemplateResolutionError
 from adare.types.playbook import ActionTestAction, ClickAction, CommandAction, PullAction, Target
 from adarelib.common.variables import TimestampMetadata, Variable, VariableRegistry, VariableType
 from adarelib.testset.yaml.customtags import YamlRegexString, YamlTimestamp
@@ -101,13 +102,29 @@ class TestYamlTags:
         out = _resolver().process_data({'parameter': {'entry': [YamlTimestamp(timestamp='{{ t }}')]}}, {'t': T})
         assert out['parameter']['entry'] == [str(T)]
 
-    def test_template_set_later_in_the_run_is_kept(self):
+    def test_template_never_set_in_the_run_is_an_error_naming_the_variable(self):
+        # tests are resolved with the runtime context, after the actions: a variable still unset is a mistake
+        with pytest.raises(TemplateResolutionError, match="'later' is undefined"):
+            _resolver().process_data(
+                {'parameter': {'entry': [YamlTimestamp(timestamp='{{ later }}', tolerance=5)]}}, {'x': 1}
+            )
+
+    @pytest.mark.parametrize('context', [{}, None])
+    def test_unset_timestamp_variable_with_empty_context_is_an_error(self, context):
+        # an empty context must not hand the raw '{{ later }}' to the test
+        with pytest.raises(TemplateResolutionError, match="'later' is undefined"):
+            _resolver().process_data(
+                {'parameter': {'entry': [YamlTimestamp(timestamp='{{ later }}', tolerance=5)]}}, context
+            )
+
+    def test_unset_timestamp_variable_without_tolerance_is_an_error(self):
+        with pytest.raises(TemplateResolutionError, match="'later' is undefined"):
+            _resolver().process_data({'parameter': {'entry': [YamlTimestamp(timestamp='{{ later }}')]}}, {})
+
+    def test_timestamp_variable_set_to_empty_is_not_replaced_by_the_template(self):
         resolver = _resolver()
-        out = resolver.process_data(
-            {'parameter': {'entry': [YamlTimestamp(timestamp='{{ later }}', tolerance=5)]}}, {'x': 1}
-        )
-        assert out['parameter']['entry'] == ['{{ later_resolved }}']
-        assert resolver.get_placeholder_metadata()['later_resolved']['resolved_value'] == '{{ later }}'
+        resolver.process_data({'parameter': {'entry': [YamlTimestamp(timestamp='{{ t }}', tolerance=5)]}}, {'t': ''})
+        assert resolver.get_placeholder_metadata()['t_resolved']['resolved_value'] == ''
 
     def test_single_timestamp_tag_in_mapping(self):
         resolver = _resolver()

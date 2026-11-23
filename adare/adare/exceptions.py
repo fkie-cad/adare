@@ -145,6 +145,13 @@ class TestfunctionUploadError(LoggedErrorException):
     """Testfunctions could not be uploaded to the guest (missing file, path outside the state dir, ...)."""
 
 
+class TemplateResolutionError(LoggedErrorException):
+    """A test's templates could not be resolved (bad filter argument, undefined variable, ...).
+
+    The test cannot be evaluated: it is reported as ERROR, never run against the unrendered text.
+    """
+
+
 class EnvironmentVMNotFoundError(LoggedErrorException):
     pass
 

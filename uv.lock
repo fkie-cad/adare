@@ -55,7 +55,7 @@ wheels = [
 
 [[package]]
 name = "adare"
-version = "0.2.0"
+version = "0.1.2"
 source = { editable = "adare" }
 dependencies = [
     { name = "adarelib" },
@@ -253,7 +253,7 @@ test = [{ name = "pytest", specifier = ">=8.0.0" }]
 
 [[package]]
 name = "adaredepend"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "adare" },

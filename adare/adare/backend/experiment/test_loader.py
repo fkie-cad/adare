@@ -13,7 +13,7 @@ from typing import Any
 import jinja2
 import yaml
 
-from adare.exceptions import TestfunctionUploadError
+from adare.exceptions import TemplateResolutionError, TestfunctionUploadError
 from adarelib.testset.renames import rename_problems
 
 log = logging.getLogger(__name__)
@@ -256,43 +256,6 @@ class TestLoader:
             return [attrs.asdict(t) if attrs.has(type(t)) else dict(t) for t in tests]
         return []
 
-    async def resolve_test_locally(self, test_name: str) -> dict[str, Any] | None:
-        """Load and resolve a specific test locally with variable substitution."""
-        try:
-            # Load tests from the playbook (staged file or in-memory playbook)
-            tests_data = self._load_playbook_tests()
-            if not tests_data:
-                return None
-
-            # Get execution context for test resolution
-            if self.variable_resolver:
-                formatted_context = self.variable_resolver.get_formatted_context(for_tests=True)
-            else:
-                formatted_context = {}
-
-            log.debug(f"Resolving test '{test_name}' with execution context keys: {list(formatted_context.keys())}")
-            log.debug(f"Execution context values: {formatted_context}")
-
-            # Find the test by name
-            for test in tests_data:
-                if test.get('name') == test_name:
-                    log.debug(f"Found test '{test_name}' raw data: {test}")
-                    # Apply variable substitution to all string values in the test
-                    resolved_test = self._resolve_test_content(test)
-
-                    # Metadata is now handled by the unified resolver in _resolve_test_content
-
-                    log.debug(f"Resolved test '{test_name}' data: {resolved_test}")
-                    return resolved_test
-
-            return None
-        except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError) as e:
-            log.error(f"Failed to resolve test '{test_name}' locally: {e}")
-            return None
-        except (OSError, yaml.YAMLError, ValueError, TypeError, KeyError, jinja2.TemplateError) as e:
-            log.error(f"Unexpected error resolving test '{test_name}' locally: {e}", exc_info=True)
-            return None
-
     async def resolve_test_with_runtime_context(
         self, test_name: str, runtime_execution_context: dict[str, Any]
     ) -> dict[str, Any] | None:
@@ -353,75 +316,11 @@ class TestLoader:
         except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError) as e:
             log.error(f"Failed to resolve test '{test_name}' with runtime context: {e}")
             return None
-        except (OSError, yaml.YAMLError, ValueError, TypeError, KeyError, jinja2.TemplateError) as e:
+        except (OSError, yaml.YAMLError) as e:
             log.error(f"Unexpected error resolving test '{test_name}' with runtime context: {e}", exc_info=True)
             return None
-
-    def _resolve_test_content(self, test_data: dict[str, Any]) -> dict[str, Any]:
-        """Enhanced test content resolution using unified variable resolver with lazy loading."""
-        if not self.variable_resolver:
-            log.warning("No variable resolver available, returning test data as-is")
-            return test_data
-
-        variable_registry = getattr(self.playbook, 'variables', None) if hasattr(self, 'playbook') else None
-
-        # Extract variables that are actually referenced in this test
-        referenced_variables = set()
-        if variable_registry:
-            referenced_variables = variable_registry.extract_referenced_variables(test_data)
-            log.debug(f"Test '{test_data.get('name', 'unknown')}' references variables: {referenced_variables}")
-
-        # Create enhanced resolver with Jinja environment
-        jinja_env = self._create_jinja_environment()
-
-        # Use lazy context - only process variables that are actually referenced
-        if variable_registry and referenced_variables:
-            template_context = variable_registry.to_execution_context_lazy(referenced_variables, for_tests=True)
-            log.debug(f"Using lazy context with {len(template_context)} variables")
-        else:
-            # Fallback to empty context if no variables referenced
-            template_context = {}
-            log.debug("No variables referenced, using empty context")
-
-        # Single call handles everything - YAML tags AND Jinja templates
-        resolver = self.variable_resolver.__class__(variable_registry=variable_registry, jinja_env=jinja_env)
-
-        resolved_test = resolver.process_data(test_data, template_context)
-
-        # Add metadata to resolved test (now only contains metadata for referenced variables)
-        metadata = resolver.get_placeholder_metadata()
-        if metadata:
-            resolved_test['_VARIABLE_METADATA'] = metadata
-            log.info(f"Added lazy variable metadata: {list(metadata.keys())}")
-
-        log.debug("Lazy resolver completed processing")
-
-        return resolved_test
-
-    def _create_jinja_environment(self):
-        """Create Jinja environment with all necessary filters."""
-        # Get filters from variable registry if available
-        filters = {}
-        if hasattr(self.playbook, 'variables') and self.playbook.variables:
-            from adarelib.common.variables import TimestampMetadata
-
-            metadata = TimestampMetadata()  # Create temp metadata object
-            filters.update(metadata.get_jinja_filters(self.playbook.variables))
-
-        env = jinja2.Environment()
-        env.filters.update(filters)
-        log.debug(f"Created Jinja environment with filters: {list(filters.keys())}")
-        return env
-
-    def _resolve_test_content_recursive(self, test_data: Any) -> Any:
-        """Recursively apply variable substitution without re-processing YAML custom tags."""
-        if isinstance(test_data, dict):
-            return {key: self._resolve_test_content_recursive(value) for key, value in test_data.items()}
-        if isinstance(test_data, list):
-            return [self._resolve_test_content_recursive(item) for item in test_data]
-        if isinstance(test_data, str):
-            return self._replace_variables_for_tests(test_data)
-        return test_data
+        except (ValueError, TypeError, KeyError, jinja2.TemplateError) as e:
+            raise TemplateResolutionError(log, f"Cannot resolve test '{test_name}': {type(e).__name__}: {e}") from e
 
     def _extract_used_testfunction_names(self) -> set[str]:
         """Extract all testfunction names used in the current playbook."""
@@ -502,50 +401,6 @@ class TestLoader:
             raise TestfunctionUploadError(
                 log, f"Cannot map the playbook's testfunctions to their files ({type(e).__name__}: {e})"
             ) from e
-
-    def _replace_variables_for_tests(self, text: str) -> str:
-        """Replace variables in test content using test-aware context with smart resolution."""
-        if not text or '{{' not in text:
-            return text
-
-        # Skip processing our variable resolver placeholders - they should stay as placeholders
-        if '_resolved' in text and '{{' in text and '}}' in text:
-            # Check if this looks like one of our placeholders (regex_N_resolved, timestamp_N_resolved, etc.)
-            import re
-
-            if re.match(r'^\{\{\s*(regex|timestamp)_\d+_resolved\s*\}\}$', text.strip()):
-                log.debug(f"Skipping variable replacement for placeholder: '{text}'")
-                return text
-
-        try:
-            if not self.variable_resolver:
-                log.warning(f"No variable resolver available for test template: '{text}'")
-                return text
-
-            # Use test-aware context that creates placeholders for variables with test-specific filters
-            formatted_context = self.variable_resolver.get_formatted_context(for_tests=True)
-
-            log.debug(f"Processing test template: '{text}' with context keys: {list(formatted_context.keys())}")
-            template = jinja2.Template(text)
-
-            # Add custom filters for metadata capture
-            custom_filters = (
-                self.variable_resolver.get_custom_filters()
-                if hasattr(self.variable_resolver, 'get_custom_filters')
-                else {}
-            )
-            template.environment.filters.update(custom_filters)
-
-            result = template.render(formatted_context)
-            log.debug(f"Test template result: '{result}'")
-
-            return result
-        except (ValueError, TypeError, KeyError) as e:
-            log.warning(f"Failed to replace variables in test text '{text}': {e}")
-            return text
-        except (jinja2.TemplateError, AttributeError) as e:
-            log.warning(f"Unexpected error replacing variables in test text '{text}': {e}", exc_info=True)
-            return text
 
     def _is_test_action_result(self, action_result) -> bool:
         """Check if an action result corresponds to a test execution."""

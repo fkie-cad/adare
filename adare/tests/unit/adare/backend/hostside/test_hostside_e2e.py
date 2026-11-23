@@ -33,7 +33,7 @@ import pytest
 from adare.backend.experiment import test_loader
 from adare.backend.experiment.execution import base as execution_base
 from adare.backend.experiment.execution import test_actions
-from adare.backend.experiment.variable_resolver import VariableResolver
+from adare.backend.experiment.variable_resolver import VariableResolver, create_jinja_environment
 from adare.backend.hostside.guestfs import GuestFileNotFound, GuestFS, PatchedGuestFS, StagedOp
 from adare.backend.hostside.testing import GuestFSFileProxy, HostsideTestExecutor
 from adare.types.playbook import ActionTestAction, parse_playbook
@@ -333,10 +333,10 @@ def chain(tmp_path, monkeypatch, collection):
     playbook = parse_playbook(experiment_dir / 'playbook.yml')
 
     # as PlaybookController._initialize_modules: automatic variables merged into the user's, and
-    # a Jinja environment with the registry's filters (the controller's _create_jinja_environment)
+    # a Jinja environment with the registry's filters (the controller's create_jinja_environment)
     automatic = AutomaticVariables.get_automatic_variables('linux', 'user')
     playbook.variables = AutomaticVariables.merge_with_user_variables(automatic, playbook.variables)
-    jinja_env = test_loader.TestLoader(experiment_dir, tmp_path, playbook=playbook)._create_jinja_environment()
+    jinja_env = create_jinja_environment(playbook.variables)
     resolver = VariableResolver(variable_registry=playbook.variables, jinja_env=jinja_env)
     loader = test_loader.TestLoader(experiment_dir, tmp_path, playbook=playbook, variable_resolver=resolver)
 
@@ -523,7 +523,9 @@ def test_saved_variable_reaches_an_ordered_comparison(chain):
     """save_variable / capture values are filled in before the test runs; unset is an ERROR."""
     assert _status(chain('saved_variable_ordered', {'ms_before': UNIX_S * 1000 - 1})) == StatusEnum.SUCCESS
     assert _status(chain('saved_variable_ordered', {'ms_before': UNIX_S * 1000})) == StatusEnum.FAILED
-    assert _status(chain('saved_variable_ordered')) == StatusEnum.ERROR
+    unset = chain('saved_variable_ordered')  # never saved: the template cannot be rendered, the test is ERROR
+    assert unset.data['test_status'] == 'ERROR'
+    assert 'ms_before' in unset.data['result']['details'][0]
 
 
 def test_saved_timestamp_reaches_an_ordered_comparison(chain, monkeypatch):
