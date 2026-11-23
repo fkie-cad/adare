@@ -207,6 +207,9 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   (`secure_delete` off). `view: main_file` or `current` (the `-wal` checkpointed into a copy).
   A corrupt header or a broken freelist or freeblock chain is ERROR. Parser:
   `adarelib.testset.sqlite_freespace` (standard library only).
+  Free space does not cover live data that still holds deleted values (`sqlite_stat4`
+  samples, full-text index segments) or the unused tail of a reused overflow page; the
+  reference page says how to check a whole file (with its `-wal`) instead.
 - **SQLite `view: commit:N`** (adare, adarelib; additive) on `query_result`, `row_count` and
   `values_compare`: the database as it was after the N-th transaction in the `-wal`
   (negative N counts from the end, `commit:0` is the main file). N out of range is ERROR.
@@ -278,6 +281,13 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   paths (browser profiles, office suites, registry keys); a unit test keeps it that way.
 
 ### Fixed
+- An invalid regular expression (`regex_match`, a `!re` tag or a regex placeholder) is an
+  ERROR in every collection, checked before the file is read. Before, a key, element, row or
+  line that was not found gave FAILED first and hid it (structured formats, json, ini, xml,
+  excel, csv, image, binary pairs, jsonl, `standard.file_content_equals`,
+  `sqlite.query_result`). Shared check: `adarelib.testset.compare.regex_expected_problem`.
+- `value_decode`: a `decoded_key_path` that selects nothing in the decoded value is FAILED
+  (like a key path that selects nothing), not ERROR. A step that fails to decode stays ERROR.
 - Archive members (adarelib): a zip whose member name is flagged UTF-8 but is not valid UTF-8,
   or (Python 3.10 guests) an empty member name, crashed the testfunction; both are now an
   archive ERROR. Found by the new seeded fuzz tests of the guest-side parsers.

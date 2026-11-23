@@ -419,7 +419,7 @@ tests if a sheet exists in an Excel file
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error. |
 | **sheet** | `str` |  | Exact, case-sensitive sheet name, or a regex if ``regex_match``. |
-| regex_match | `bool` | `False` | Treat ``sheet`` as a Python regex searched in each sheet name (``re.search``, unanchored; ``^...$`` for the whole name); an invalid regex is an error. |
+| regex_match | `bool` | `False` | Treat ``sheet`` as a Python regex searched in each sheet name (``re.search``, unanchored; ``^...$`` for the whole name); an invalid regex is an error, even when the workbook has no sheet. |
 
 ```yaml
 tests:
@@ -659,7 +659,7 @@ tests the number of occurrences of an INI key (optionally with a matching value)
 | **key** | `str` |  | Key name; the first ``=`` on a line splits key and value. |
 | **expected_count** | `int` |  | Required non-negative integer to compare against; anything else is an error. |
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Count only occurrences whose raw value equals/matches this (same rules as ini.value_matches); ``None`` (default) counts every occurrence. |
-| regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). |
+| regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). An invalid regex is an error even when the key is absent. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
 | case_sensitive | `bool` | `True` | ``False`` compares section and key names case-insensitively. |
 | encoding | `str` | `None` | Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8). |
@@ -689,7 +689,7 @@ tests if an INI value equals or matches an expected value (regex and placeholder
 | **section** | `str` |  | Section name without brackets; ``''`` = keys before the first header. |
 | **key** | `str` |  | Key name; the first ``=`` on a line splits key and value. |
 | **expected_value** | `str \| int \| float \| bool` |  | Compared with the raw value text (stripped; quotes and inline comments are kept, ``a = "x" ; note`` has the value ``"x" ; note``). A YAML number or boolean is compared as its text (``8080``, ``true``/``false``). A ``!re``/``!timestamp`` tag or ``{{placeholder}}`` is matched by type. |
-| regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). An invalid regex is an error. |
+| regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). An invalid regex is an error even when the key is absent. |
 | case_sensitive | `bool` | `True` | ``False`` compares section and key names case-insensitively; values are always compared as given. |
 | encoding | `str` | `None` | Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8). |
 | wildcard_mode | `str` | `'any'` | With several occurrences, ``any`` (default): one must match; ``all``: every one must match. Other values are an error. |
@@ -701,7 +701,7 @@ tests if an INI value equals or matches an expected value (regex and placeholder
 | timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16`` (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (dot path as in json.value_matches); it must select one value. Required with ``json``, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (dot path as in json.value_matches); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with ``json``, an error without it. |
 
 ```yaml
 tests:
@@ -816,7 +816,7 @@ tests if JSON value at key path matches expected value using placeholders (suppo
 | timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16`` (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (syntax as in ``key_path``); it must select one value. Required with ``json``, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (syntax as in ``key_path``); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with ``json``, an error without it. |
 
 ```yaml
 tests:
@@ -852,7 +852,7 @@ compares two values of one JSON file (or of two files) as numbers or timestamps 
 | encoding | `str \| None` | `None` | ``None`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. Unknown names are an error. |
 | other_dst | `str \| None` | `None` | Guest path of a second file to read ``other_key_path`` from (same rules as ``dst``, ``archive!/member`` included); default ``None``: ``dst``. A missing file is an error. Compares a file with a copy saved before an action. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode both values before comparing (steps as in json.value_matches). |
-| decoded_key_path | `str \| None` | `None` | With ``json`` in ``value_decode``: key path into the decoded value. |
+| decoded_key_path | `str \| None` | `None` | With ``json`` in ``value_decode``: key path into the decoded value; it must select one value: none fails, several are an error. |
 
 ```yaml
 tests:
@@ -879,7 +879,7 @@ counts lines in JSONL file matching conditions and validates against expected co
 | dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file has 0 lines (passes ``expected_count: 0``). |
 | conditions | `dict[str, str \| int \| float \| bool \| None] \| None` | `None` | Mapping ``key_path -> expected value`` (all must hold; for multi-value paths one matching element suffices). ``None``/empty counts every valid JSON line. |
 | expected_count | `int \| dict[str, int] \| None` | `None` | Non-negative ``int`` compared with ``comparison_type``, ``{min: N, max: M}`` for a range (either bound optional: min defaults to 0, max to unbounded), or ``None`` for "at least 1". Anything else (a negative number, a boolean, other keys, min > max) is an error. |
-| regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
+| regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. An invalid regex is an error even when no line has the key. |
 | skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``, applied to an ``int`` ``expected_count``. With the range form or ``None`` only ``equals`` is allowed; other values are an error. |
 | encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
@@ -905,7 +905,7 @@ tests if lines in JSONL file match specified conditions (supports any/all modes)
 | dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails. |
 | conditions | `dict[str, str \| int \| float \| bool \| None]` | `None` | Required mapping ``key_path -> expected value``; a line matches when every condition holds. If a path yields several values (wildcard or JSON array), one matching element suffices. Missing keys fail the line. |
 | wildcard_mode | `str` | `'any'` | ``any`` (default) or ``all`` (every valid line must match; no valid lines fails). Other values are an error. |
-| regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
+| regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. An invalid regex is an error even when no line has the key. |
 | skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
 | encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
 
@@ -929,7 +929,7 @@ tests that JSONL records meeting each of several condition sets occur in the giv
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path, an archive member (``logs.tar.gz!/events.jsonl``) is read like a file; a missing file is an error. |
 | **conditions** | `list` |  | Non-empty list, in the expected order, of mappings ``key_path -> expected value``; a record meets one when every condition holds. If a path yields several values (wildcard or JSON array), one matching element suffices; missing keys fail the record. An empty list or an entry that is not a non-empty mapping is an error. |
-| regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
+| regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. An invalid regex is an error even when no line has the key. |
 | skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
 | encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
 
@@ -955,7 +955,7 @@ tests if specified key path with expected value exists in any line of JSONL file
 | dst | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails. |
 | key_path | `str` | `''` | Dot path inside each line's object, e.g. ``event.type``; ``*`` expands object values, ``name[*]`` array elements. No numeric indexes. For multi-value paths one matching element suffices. |
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Value to find; see ``regex_match`` for how it is compared. |
-| regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
+| regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. An invalid regex is an error even when no line has the key. |
 | skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
 | encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter below, compares the value with ``expected_value`` as a number or point in time (ordered mode; ``less`` = earlier); ``!re`` / ``regex_match`` are then errors, a lone ``{{ name }}`` is the saved variable; a value that is no number or timestamp is an error. |
@@ -966,7 +966,7 @@ tests if specified key path with expected value exists in any line of JSONL file
 | timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16`` (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (dot path, numeric indexes allowed); it must select one value. Required with ``json``, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (dot path, numeric indexes allowed); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with ``json``, an error without it. |
 
 ```yaml
 tests:
@@ -1142,7 +1142,7 @@ tests if the property list value at a key path matches the expected value (dates
 | timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16`` (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (syntax as in ``key_path``); it must select one value. Required with ``json``, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (syntax as in ``key_path``); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with ``json``, an error without it. |
 
 ```yaml
 tests:
@@ -1177,7 +1177,7 @@ compares two values of one property list file (or of two files) as numbers or ti
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 | other_dst | `str \| None` | `None` | Guest path of a second file to read ``other_key_path`` from (same rules as ``dst``, ``archive!/member`` included); default ``None``: ``dst``. A missing file is an error. Compares a file with a copy saved before an action. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode both values before comparing (steps as in plist.value_matches). |
-| decoded_key_path | `str \| None` | `None` | With ``json`` in ``value_decode``: key path into the decoded value. |
+| decoded_key_path | `str \| None` | `None` | With ``json`` in ``value_decode``: key path into the decoded value; it must select one value: none fails, several are an error. |
 
 ```yaml
 tests:
@@ -1195,7 +1195,7 @@ tests:
 
 tests how often a text, byte pattern or regex occurs in the free space of an SQLite database (deleted, recoverable data)
 
-**Use for:** asserting that a deleted record is still recoverable from the database file (``comparison_type: greater_equal``, ``expected_count: 1``) while a query no longer returns it (sqlite.row_count with ``expected_count: 0``), or that a delete really erased it (``expected_count: 0``, as with ``PRAGMA secure_delete``). The file is parsed per the SQLite file format, without SQLite: freelist pages (pages no longer in use, including the overflow pages of a deleted large row), freeblocks (freed cells inside a b-tree page) and the unallocated space of each b-tree page. Occurrences are counted per region, so a match never spans two regions. Details list which pages and regions matched (absolute file offsets) and the size of each kind of free space. To search the whole file use binary.pattern_count; live rows are counted there too.
+**Use for:** asserting that a deleted record is still recoverable from the database file (``comparison_type: greater_equal``, ``expected_count: 1``) while a query no longer returns it (sqlite.row_count with ``expected_count: 0``), or that a delete really erased it (``expected_count: 0``, as with ``PRAGMA secure_delete``). The file is parsed per the SQLite file format, without SQLite: freelist pages (pages no longer in use, including the overflow pages of a deleted large row), freeblocks (freed cells inside a b-tree page) and the unallocated space of each b-tree page. Regions never overlap and occurrences are counted per region, so a match never spans two regions. SQLite can leave a record in the file twice (the old cell in a page it rewrote and a copy in the page that took over the rows), which is then counted twice; and it overwrites freed data when it rewrites or merges pages, so a deleted record is not always recoverable. Details list which pages and regions matched (absolute file offsets) and the size of each kind of free space. To search the whole file use binary.pattern_count; live rows are counted there too.
 
 *FILE_CONTENT*, os: any
 
@@ -1430,7 +1430,7 @@ tests if file content equals the given content
 | parameter | type | default | description |
 |---|---|---|---|
 | dst | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file is an error; a failure includes a unified diff. |
-| content | `str` | `''` | Expected text. Both sides are ``strip()``-ed; inner whitespace must match (line endings are normalised to ``\n`` by text-mode reading). ``!re``/``!timestamp`` tags inside the value become placeholders matched by type; the literal text around them must match exactly. |
+| content | `str` | `''` | Expected text. Both sides are ``strip()``-ed; inner whitespace must match (line endings are normalised to ``\n`` by text-mode reading). ``!re``/``!timestamp`` tags inside the value become placeholders matched by type; the literal text around them must match exactly. An invalid ``!re`` regex is an error even when the text around it does not match. |
 | encoding | `str` | `'utf-8'` | Python codec used to decode the file (strict). ``BOM`` detects UTF-8/16/32 from the byte-order mark and errors if there is none. |
 | strip_bom | `bool` | `False` | Remove a leading U+FEFF from the decoded text before comparing. |
 
@@ -1788,7 +1788,7 @@ tests if the TOML value at a key path matches the expected value (dates/times as
 | timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16`` (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (syntax as in ``key_path``); it must select one value. Required with ``json``, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (syntax as in ``key_path``); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with ``json``, an error without it. |
 
 ```yaml
 tests:
@@ -1823,7 +1823,7 @@ compares two values of one TOML file (or of two files) as numbers or timestamps 
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 | other_dst | `str \| None` | `None` | Guest path of a second file to read ``other_key_path`` from (same rules as ``dst``, ``archive!/member`` included); default ``None``: ``dst``. A missing file is an error. Compares a file with a copy saved before an action. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode both values before comparing (steps as in toml.value_matches). |
-| decoded_key_path | `str \| None` | `None` | With ``json`` in ``value_decode``: key path into the decoded value. |
+| decoded_key_path | `str \| None` | `None` | With ``json`` in ``value_decode``: key path into the decoded value; it must select one value: none fails, several are an error. |
 
 ```yaml
 tests:
@@ -2019,7 +2019,7 @@ tests if XML element attribute matches expected value with regex and timestamp t
 | timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16`` (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (dot path as in json.value_matches); it must select one value. Required with ``json``, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (dot path as in json.value_matches); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with ``json``, an error without it. |
 
 ```yaml
 tests:
@@ -2106,7 +2106,7 @@ tests if XML element text content matches expected value with placeholder suppor
 | timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16`` (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (dot path as in json.value_matches); it must select one value. Required with ``json``, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (dot path as in json.value_matches); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with ``json``, an error without it. |
 
 ```yaml
 tests:
@@ -2166,7 +2166,7 @@ compares two values (element text or attribute) of one XML file (or of two files
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in both XPaths (``{ns: 'http://...'}`` + ``//ns:item``); ``{uri}tag`` also works without it. |
 | other_dst | `str \| None` | `None` | Guest path of a second XML file to read ``other_xpath`` from (same rules as ``dst``, ``archive!/member`` included); default ``None``: ``dst``. A missing file is an error. Compares a file with a copy saved before an action. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode both values before comparing (steps as in xml.element_text_matches). |
-| decoded_key_path | `str \| None` | `None` | With ``json`` in ``value_decode``: key path into the decoded value. |
+| decoded_key_path | `str \| None` | `None` | With ``json`` in ``value_decode``: key path into the decoded value; it must select one value: none fails, several are an error. |
 
 ```yaml
 tests:
@@ -2278,7 +2278,7 @@ tests if the YAML value at a key path matches the expected value (supports wildc
 | timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16`` (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
-| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (syntax as in ``key_path``); it must select one value. Required with ``json``, an error without it. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value ``json`` decoded (syntax as in ``key_path``); it must select one value: none fails (the value decoded, the key is not in it), several are an error. Required with ``json``, an error without it. |
 
 ```yaml
 tests:
@@ -2313,7 +2313,7 @@ compares two values of one YAML file (or of two files) as numbers or timestamps 
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 | other_dst | `str \| None` | `None` | Guest path of a second file to read ``other_key_path`` from (same rules as ``dst``, ``archive!/member`` included); default ``None``: ``dst``. A missing file is an error. Compares a file with a copy saved before an action. |
 | value_decode | `list[str] \| str \| None` | `None` | Decode both values before comparing (steps as in yaml.value_matches). |
-| decoded_key_path | `str \| None` | `None` | With ``json`` in ``value_decode``: key path into the decoded value. |
+| decoded_key_path | `str \| None` | `None` | With ``json`` in ``value_decode``: key path into the decoded value; it must select one value: none fails, several are an error. |
 
 ```yaml
 tests:
