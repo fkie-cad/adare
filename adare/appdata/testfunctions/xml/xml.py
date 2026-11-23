@@ -33,7 +33,7 @@ from typing import Optional
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
-from adarelib.testset.compare import compare_with_single_placeholder
+from adarelib.testset.compare import compare_with_single_placeholder, regex_expected_problem
 from adarelib.testset.structured import StructuredFormat, compare_count, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.valuecompare import ordered_setup, structured_values_compare
@@ -437,6 +437,10 @@ def element_text_matches(
     )
     if problem is not None:
         return problem
+    if ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
         return TestResult.error([f'XML file {dst} not found ({status})'])
@@ -568,6 +572,10 @@ def attribute_matches(
     )
     if problem is not None:
         return problem
+    if ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
         return TestResult.error([f'XML file {dst} not found ({status})'])

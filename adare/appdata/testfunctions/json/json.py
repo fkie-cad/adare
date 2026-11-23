@@ -5,7 +5,7 @@ import json
 from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
-from adarelib.testset.compare import get_nested_value
+from adarelib.testset.compare import get_nested_value, regex_expected_problem
 from adarelib.testset.content import decode_text
 from adarelib.testset.structured import StructuredFormat, compare_value, load_data
 from adarelib.testset.structured import value_count as _structured_value_count
@@ -246,6 +246,10 @@ def value_matches(
     )
     if problem is not None:
         return problem
+    if ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     data, error = load_data(ctx, dst, _json_format(encoding))
     if error is not None:
         return error
@@ -304,6 +308,9 @@ def array_contains(
           array_path: recent_files
           expected_value: /home/user/Documents/report.odt
     """
+    problem = regex_expected_problem(ctx, [expected_value])
+    if problem is not None:
+        return problem
     data, error = load_data(ctx, dst, _json_format(encoding))
     if error is not None:
         return error

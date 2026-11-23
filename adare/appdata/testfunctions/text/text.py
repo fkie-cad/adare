@@ -366,7 +366,10 @@ def _line_matcher(pattern: str, regex: bool, case_sensitive: bool):
     :raises re.error: invalid regex
     """
     if regex:
-        compiled = re.compile(pattern, 0 if case_sensitive else re.IGNORECASE)
+        try:
+            compiled = re.compile(pattern, 0 if case_sensitive else re.IGNORECASE)
+        except re.error as e:
+            raise re.error(f'invalid regex pattern {pattern!r}: {e}') from e
         return lambda line: compiled.search(line) is not None
     if case_sensitive:
         return lambda line: pattern in line
@@ -459,7 +462,7 @@ def lines_in_order(
     except (LookupError, TypeError) as e:
         return TestResult.error([f'invalid encoding {encoding!r}: {e}'])
     except re.error as e:
-        return TestResult.error([f'invalid regex in patterns: {e}'])
+        return TestResult.error([str(e)])
     path, status = ctx.resolve_globfilepath(dst)
     data, error = _read(path, dst, status)
     if error is not None:

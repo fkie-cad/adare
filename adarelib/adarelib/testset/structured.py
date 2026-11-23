@@ -11,6 +11,9 @@ Result rules (the same for every format):
   invalid file, bad parameters -> ERROR
 * the file was read and the key path / value / count does not hold -> FAILED
 
+An invalid regex in ``expected_value`` (``regex_match``, a ``!re`` tag or a regex placeholder) is
+an ERROR too, checked before the file is read, so it never turns into "key path does not exist".
+
 Key paths use :func:`adarelib.testset.compare.parse_key_path`. Loaded data is normalized
 before comparison: dates and times become ISO 8601 strings, binary data a hex string, tuples
 lists and non-string keys their ``str()``.
@@ -27,7 +30,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from adarelib.event.event import TestResult
-from adarelib.testset.compare import compare_with_single_placeholder, resolve_key_path
+from adarelib.testset.compare import compare_with_single_placeholder, regex_expected_problem, resolve_key_path
 from adarelib.testset.ordering import OrderingError
 
 log = logging.getLogger(__name__)
@@ -241,6 +244,8 @@ def value_matches(
     if problem is not None:
         return problem
     ordered, expected_value, problem = ordered_setup(ctx, expected_value, regex_match, **ordered_parameters)
+    if problem is None and ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
     if problem is not None:
         return problem
     data, error = load_data(ctx, dst, fmt)
@@ -297,6 +302,10 @@ def value_count(
     problems = count_parameter_errors(expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
+    if expected_value is not None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     data, error = load_data(ctx, dst, fmt)
     if error is not None:
         return error

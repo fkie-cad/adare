@@ -7,6 +7,7 @@ from adarelib.event.event import TestResult
 from adarelib.testset import binary
 from adarelib.testset.api import TestContext, testfunction
 from adarelib.testset.basictest import HostModeCategory
+from adarelib.testset.compare import regex_expected_problem
 from adarelib.testset.content import FileTooLargeError
 from adarelib.testset.ordering import OrderingError, TimeFormat, compare, parameter_errors
 from adarelib.testset.structured import WILDCARD_MODES, compare_count, compare_value, count_parameter_errors, text
@@ -410,6 +411,9 @@ def pair_value_matches(
         problems.append(f"invalid wildcard_mode {wildcard_mode!r} (allowed: {', '.join(WILDCARD_MODES)})")
     if problems:
         return TestResult.error(problems)
+    problem = regex_expected_problem(ctx, [expected_value], regex_match)
+    if problem is not None:
+        return problem
 
     def body(data: binary.BinaryFile) -> TestResult:
         raw_values, where = _table_values(data, parsed, key, encoding)
@@ -483,6 +487,9 @@ def pair_count(
     problems += count_parameter_errors(expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
+    problem = regex_expected_problem(ctx, [expected_value], regex_match)
+    if problem is not None:
+        return problem
 
     def body(data: binary.BinaryFile) -> TestResult:
         raw_values, where = _table_values(data, parsed, key, encoding)
