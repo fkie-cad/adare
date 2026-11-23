@@ -157,8 +157,6 @@ class TestToolsMixin:
 
     def _execute_resolved_test_data(self, resolved_test_data: dict[str, Any]) -> dict[str, Any]:
         """Execute a test using pre-resolved test data."""
-        log.info(f"CLAUDE: Starting test execution with resolved_test_data: {resolved_test_data}")
-
         try:
             # Validate resolved_test_data is not None
             if resolved_test_data is None:
@@ -283,8 +281,6 @@ class TestToolsMixin:
                     parameter_instance = parameter_class(**processed_test_data['parameter'])
 
                 variable_metadata = processed_test_data.get('_VARIABLE_METADATA', {})
-                log.info(f"CLAUDE: Creating test instance with variable_metadata: {variable_metadata}")
-
                 test_instance = test_class(
                     name=test_name,
                     parameter=parameter_instance,
