@@ -93,30 +93,16 @@ class TimestampMetadata:
             check_timezone(tz_name)  # before storing it, so a bad zone can't break later resolutions
             source_var = self._find_variable_by_value(variable_registry, value, VariableType.TIMESTAMP)
             if source_var:
-                # Update the variable's metadata
                 if not source_var.structured_metadata:
                     source_var.structured_metadata = TimestampMetadata()
                 source_var.structured_metadata.timezone = tz_name
                 source_var.metadata['timezone'] = tz_name
                 log.debug(f"Captured timezone filter '{tz_name}' for variable")
 
-            # Return the original value for continued processing
-            return value
+            return value  # the original value, for continued processing
 
-        def format_filter(value, format_str):
-            """Set timestamp format and capture metadata."""
-            check_timestamp_format(format_str)
-            source_var = self._find_variable_by_value(variable_registry, value, VariableType.TIMESTAMP)
-            if source_var:
-                # Update the variable's metadata
-                if not source_var.structured_metadata:
-                    source_var.structured_metadata = TimestampMetadata()
-                source_var.structured_metadata.format_str = format_str
-                source_var.metadata['format'] = format_str
-                log.debug(f"Captured format filter '{format_str}' for variable")
-
-            # Return the original value for continued processing
-            return value
+        def format_filter(value, *args, **kwargs):
+            return self._format(variable_registry, value, args, kwargs)
 
         def tolerance_filter(value, upper, lower=None):
             """Set timestamp tolerance and return placeholder for test-specific processing."""
@@ -126,7 +112,6 @@ class TimestampMetadata:
             # Find the variable this filter is being applied to
             source_var = self._find_variable_by_value(variable_registry, value, VariableType.TIMESTAMP)
             if source_var:
-                # Update the variable's metadata
                 if not source_var.structured_metadata:
                     source_var.structured_metadata = TimestampMetadata()
                 source_var.structured_metadata.tolerance_upper = upper
@@ -169,7 +154,6 @@ class TimestampMetadata:
             # Find the variable this filter is being applied to
             source_var = self._find_variable_by_value(variable_registry, value, VariableType.TIMESTAMP)
             if source_var:
-                # Update the variable's metadata
                 if not source_var.structured_metadata:
                     source_var.structured_metadata = TimestampMetadata()
                 source_var.structured_metadata.localtime = True
@@ -185,6 +169,22 @@ class TimestampMetadata:
             'tolerance': tolerance_filter,
             'localtime': localtime_filter,
         }
+
+    def _format(self, variable_registry: VariableRegistry, value: Any, args: tuple, kwargs: dict) -> Any:
+        """The ``format`` filter: on a timestamp variable with one format string it captures that format
+        (the value is formatted when the variable is resolved); any other call is Jinja's built-in ``format``."""
+        source_var = None
+        if len(args) == 1 and not kwargs:  # the timestamp form; other call shapes cannot be one
+            source_var = self._find_variable_by_value(variable_registry, value, VariableType.TIMESTAMP)
+        if source_var is None:
+            from jinja2.filters import do_format  # here: filters only run inside Jinja, which adarelib does not require
+
+            return do_format(value, *args, **kwargs)
+        check_timestamp_format(args[0])
+        if not source_var.structured_metadata:
+            source_var.structured_metadata = TimestampMetadata()
+        source_var.structured_metadata.format_str = source_var.metadata['format'] = args[0]
+        return value
 
     def _find_variable_by_value(
         self, variable_registry: VariableRegistry, value: Any, var_type: VariableType
