@@ -14,6 +14,7 @@ from adare.config import DEFAULT_RESOLUTION_WH
 from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.models import QEMUVMConfig
+from adare.hypervisor.qemu.socket_paths import check_socket_paths, qemu_runtime_dir_path
 from adare.hypervisor.qemu.utilities.disk_utils import resolve_boot_mode
 
 if TYPE_CHECKING:
@@ -44,7 +45,7 @@ def get_qemu_disk_dir() -> Path:
 
 def get_qemu_runtime_dir() -> Path:
     """Directory holding runtime sockets/pids (QMP/QGA/pid): ~/.adare/qemu/run."""
-    runtime_dir = QEMU_STATE_DIR / 'run'
+    runtime_dir = qemu_runtime_dir_path()
     runtime_dir.mkdir(parents=True, exist_ok=True)
     return runtime_dir
 
@@ -342,10 +343,9 @@ class ConfigurationMixin(_Host):
         qga_socket = str(runtime_dir / f"{self.vm_name}.qga")
         pid_file = str(runtime_dir / f"{self.vm_name}.pid")
 
-        # Validate socket path lengths (Unix sockets have ~108 character limit)
-        for name, path in [("QMP", qmp_socket), ("Guest Agent", qga_socket)]:
-            if len(path) > 107:
-                raise ValueError(f"{name} socket path too long ({len(path)} > 107 chars): {path}")
+        # Unix socket paths are limited (103 characters on macOS, 107 on Linux); runs normally
+        # fail this check earlier, at run preparation (check_run_socket_paths).
+        check_socket_paths(self.vm_name, runtime_dir)
 
         # Determine boot mode: environment YAML override, else architecture-aware auto-detection
         current_arch = getattr(self, 'architecture', 'x86_64')
