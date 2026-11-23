@@ -68,6 +68,10 @@ class OffsetError(ValueError):
     """An offset that cannot be resolved in this file (outside it, pattern not found, ...)."""
 
 
+class NonFiniteValueError(ValueError):
+    """A float read from the file is NaN or infinite, so it cannot be compared."""
+
+
 # ---------------------------------------------------------------------------
 # Offset expressions: parsing
 # ---------------------------------------------------------------------------
@@ -410,14 +414,14 @@ def read_value(data: BinaryFile, offset: int, fmt: ValueFormat, encoding: str = 
 
     :raises OffsetError: the value is not inside the file, or a cstring has no terminator
     :raises UnicodeDecodeError: the string is not valid in ``encoding``
-    :raises ValueError: a NaN/infinite float
+    :raises NonFiniteValueError: a NaN/infinite float
     """
     if fmt.kind == 'int':
         return struct.unpack(INT_TYPES[fmt.name], data.read_at(offset, fmt.length))[0]
     if fmt.kind == 'float':
         value = struct.unpack(FLOAT_TYPES[fmt.name], data.read_at(offset, fmt.length))[0]
         if not math.isfinite(value):
-            raise ValueError(f'{fmt.name} at offset {offset} is {value}, not a finite number')
+            raise NonFiniteValueError(f'{fmt.name} at offset {offset} is {value}, not a finite number')
         return value
     if fmt.kind == 'bytes':
         return data.read_at(offset, fmt.length).hex()

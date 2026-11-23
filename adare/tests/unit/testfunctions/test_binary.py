@@ -504,3 +504,16 @@ def test_missing_file_and_directory_are_errors(tmp_path, kind, params):
     _assert(missing, StatusEnum.ERROR)
     assert 'does not exist' in missing.details[0]
     _assert(_run(kind, tmp_path, **params), StatusEnum.ERROR)
+
+
+@pytest.mark.parametrize('raw', [struct.pack('>d', float('nan')), struct.pack('>d', float('inf'))], ids=['nan', 'inf'])
+def test_non_finite_float_value_is_a_clean_error(tmp_path, raw):
+    # found by test_parser_fuzz_functions.py: a NaN crashed into the decorator's catch-all
+    path = tmp_path / 'entry.bin'
+    path.write_bytes(raw)
+
+    result = _run('struct', path, offset=0, value_format='f64be', expected_value=0)
+
+    _assert(result, StatusEnum.ERROR)
+    assert 'not a finite number' in result.details[0]
+    assert not any(str(d).startswith('Error in testfunction') for d in result.details), result.details
