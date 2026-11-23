@@ -38,6 +38,13 @@ FILE_COLLECTIONS = (
 
 _DUMMIES = {str: 'x', int: 1, float: 1.0, bool: False, list: [], dict: {}}
 
+# Required parameters whose type dummy fails the function's own checks before dst is read.
+VALID_PARAMS = {
+    # round 2: lines_in_order
+    'text.lines_in_order': {'patterns': ['x']},
+    'jsonl.lines_in_order': {'conditions': [{'x': 1}]},
+}
+
 
 def _dummy(field):
     tp = field.type
@@ -56,17 +63,18 @@ def _file_testfunctions():
             # file tests resolve dst themselves or through adarelib.testset.structured
             if not any(marker in source for marker in ('resolve_globfilepath', 'structured.', 'load_data(')):
                 continue
-            yield pytest.param(obj, id=f'{collection}.{name}')
+            yield pytest.param(obj, VALID_PARAMS.get(f'{collection}.{name}', {}), id=f'{collection}.{name}')
 
 
-@pytest.mark.parametrize('testfunction', list(_file_testfunctions()))
-def test_unexpected_exception_is_an_error(testfunction, monkeypatch):
+@pytest.mark.parametrize(('testfunction', 'valid_params'), list(_file_testfunctions()))
+def test_unexpected_exception_is_an_error(testfunction, valid_params, monkeypatch):
     def broken(self, *args, **kwargs):
         raise RuntimeError('boom')
 
     monkeypatch.setattr(TestContext, 'resolve_globfilepath', broken)
     param_cls = testfunction._parameter_class
     params = {f.name: _dummy(f) for f in attrs.fields(param_cls) if f.default is attrs.NOTHING}
+    params.update(valid_params)
     test = testfunction._test_class(name='t', parameter=param_cls(**params))
 
     result = test.test()

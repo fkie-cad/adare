@@ -358,3 +358,130 @@ def line_count(
     ok, message = compare_count(matching, expected_count, comparison_type)
     details = [f'{matching} of {len(lines)} line(s) {what}', message]
     return TestResult.success(details) if ok else TestResult.failed(details)
+
+
+def _line_matcher(pattern: str, regex: bool, case_sensitive: bool):
+    """A predicate ``line -> bool`` for one pattern of lines_in_order.
+
+    :raises re.error: invalid regex
+    """
+    if regex:
+        compiled = re.compile(pattern, 0 if case_sensitive else re.IGNORECASE)
+        return lambda line: compiled.search(line) is not None
+    if case_sensitive:
+        return lambda line: pattern in line
+    folded = pattern.casefold()
+    return lambda line: folded in line.casefold()
+
+
+def _order_parameter_errors(ctx: TestContext, patterns, regex, case_sensitive) -> list[str]:
+    """Problems with the parameters of lines_in_order (an ERROR, the file is never read)."""
+    if not isinstance(patterns, list) or not patterns:
+        return [f'patterns must be a non-empty list of strings, got {patterns!r}']
+    problems = []
+    for i, pattern in enumerate(patterns, 1):
+        if not isinstance(pattern, str) or not pattern:
+            problems.append(f'pattern {i} must be a non-empty string, got {pattern!r}')
+        else:
+            problems += _placeholder_problems(ctx, pattern, 'regex: true with a plain pattern')
+    for name, value in (('regex', regex), ('case_sensitive', case_sensitive)):
+        if not isinstance(value, bool):
+            problems.append(f'{name} must be true or false, got {value!r}')
+    return problems
+
+
+def _first_after(lines: list[str], matches, after: int) -> int | None:
+    """Index of the first line after index ``after`` that ``matches``, or None."""
+    for index in range(after + 1, len(lines)):
+        if matches(lines[index]):
+            return index
+    return None
+
+
+@testfunction(
+    name='lines_in_order',
+    description='tests that lines matching each of several patterns occur in the given order',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def lines_in_order(
+    ctx: TestContext,
+    dst: str,
+    patterns: list,
+    regex: bool = False,
+    case_sensitive: bool = True,
+    encoding: str | None = 'utf-8',
+):
+    """Pass when each of ``patterns`` matches a line of text file ``dst`` after the line of the pattern before it.
+
+    Use for: the order of events in a log (a service started, then a file was opened, then
+    deleted); a sequence of steps in a history or journal file. Lines between the matched
+    ones are ignored. For how often one pattern occurs use text.line_count; for JSON Lines
+    records use jsonl.lines_in_order.
+
+    Each pattern takes the earliest line after the line of the previous pattern, so two
+    patterns never match the same line; when that fails, no other choice of lines would
+    pass either. Details list the matched line numbers (counted from 1); a FAILED result
+    names the first pattern without a later line and, if it occurs only before, those
+    earlier line numbers.
+
+    Args:
+        dst: Guest path to the text file; a glob must match exactly one path, an archive
+            member (``logs.tar.gz!/service.log``) is read like a file. A missing file or
+            content not valid in the encoding is an error. Lines end at ``\\n``, ``\\r\\n``
+            or ``\\r``.
+        patterns: Non-empty list of non-empty strings, in the expected order. Each is a
+            substring a line must contain, or with ``regex`` a regex searched in each line
+            (``re.search``). An empty list, a non-string, an invalid regex, or a ``!re`` /
+            ``{{placeholder}}`` value is an error: write regexes as plain strings with ``regex``.
+        regex: Treat every pattern as a regex.
+        case_sensitive: ``True`` (default) matches case exactly; ``False`` compares substrings
+            after casefolding, or compiles the regexes with ``re.IGNORECASE``.
+        encoding: Text encoding, default ``utf-8``; ``None`` also detects BOM-less UTF-16.
+            A BOM always wins. Unknown names are an error.
+
+    Example:
+        function: text.lines_in_order
+        parameter:
+          dst: /var/log/app/service.log
+          patterns:
+            - 'service started'
+            - 'opened .*report\\.txt'
+            - 'deleted .*report\\.txt'
+          regex: true
+    """
+    problems = _order_parameter_errors(ctx, patterns, regex, case_sensitive)
+    if problems:
+        return TestResult.error(problems)
+    try:
+        if encoding is not None:
+            codecs.lookup(encoding)
+        matchers = [_line_matcher(p, regex, case_sensitive) for p in patterns]
+    except (LookupError, TypeError) as e:
+        return TestResult.error([f'invalid encoding {encoding!r}: {e}'])
+    except re.error as e:
+        return TestResult.error([f'invalid regex in patterns: {e}'])
+    path, status = ctx.resolve_globfilepath(dst)
+    data, error = _read(path, dst, status)
+    if error is not None:
+        return error
+    try:
+        lines = _split_lines(decode_text(data, encoding))
+    except UnicodeDecodeError as e:
+        return TestResult.execution_error(e, f'Cannot decode {dst} as {encoding or "UTF-8/UTF-16"}')
+
+    matched: list[str] = []
+    previous = -1
+    for number, (pattern, matches) in enumerate(zip(patterns, matchers, strict=True), 1):
+        index = _first_after(lines, matches, previous)
+        if index is None:
+            earlier = [i + 1 for i in range(previous + 1) if matches(lines[i])]
+            where = f'after line {previous + 1}' if previous >= 0 else 'in the file'
+            message = f'pattern {number} {pattern!r} matches no line {where} ({len(lines)} line(s))'
+            if earlier:
+                shown = ', '.join(str(n) for n in earlier[:10]) + (', ...' if len(earlier) > 10 else '')
+                message += f'; it occurs only earlier, on line(s) {shown}: out of order'
+            return TestResult.failed([message, *matched])
+        matched.append(f'pattern {number} {pattern!r} matched line {index + 1}')
+        previous = index
+    lines_found = ', '.join(m.rsplit(' ', 1)[1] for m in matched)
+    return TestResult.success([f'{len(patterns)} pattern(s) matched in order on lines {lines_found}', *matched])

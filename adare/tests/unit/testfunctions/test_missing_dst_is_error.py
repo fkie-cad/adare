@@ -80,6 +80,9 @@ CASES = {
     'binary.pattern_count': {'pattern': 'a', 'expected_count': 0},
     'binary.pair_value_matches': {'key': 'a', 'expected_value': 'b'},
     'binary.pair_count': {'key': 'a', 'expected_count': 0},
+    # round 2: lines_in_order
+    'text.lines_in_order': {'patterns': ['a']},
+    'jsonl.lines_in_order': {'conditions': [{'a': 1}]},
 }
 TWO_PATHS = {'csv.compare_files', 'excel.compare_sheets', 'excel.compare_files'}
 
