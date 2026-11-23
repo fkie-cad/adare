@@ -98,6 +98,7 @@ class SessionManagementMixin:
                     vm_memory=request.vm_memory,
                     vm_cpus=request.vm_cpus,
                     debug_screenshots=request.debug_screenshots,
+                    run_postsetup=request.run_postsetup,
                     console_ulid=request.console_ulid,
                     shared_directories=request.shared_directories,
                 )

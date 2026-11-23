@@ -69,6 +69,7 @@ class DevModeSessionManager:
         debug_screenshots: bool = False,
         console_ulid: str | None = None,
         shared_directories: dict[str, dict[str, Path]] | None = None,
+        run_postsetup: bool = True,
     ) -> str:
         """
         Create and start a new dev mode session.
@@ -82,6 +83,7 @@ class DevModeSessionManager:
             debug_screenshots: Save debug screenshots during execution
             console_ulid: Optional flow console ULID for event integration
             shared_directories: Optional Dict of shared directories {name: {'host': Path, 'vm': Path}}
+            run_postsetup: Run the environment's post-setup steps once the agent is connected
 
         Returns:
             Session ID (ULID string)
@@ -103,6 +105,7 @@ class DevModeSessionManager:
             debug_screenshots=debug_screenshots,
             console_ulid=console_ulid,
             shared_directories=shared_directories,
+            run_postsetup=run_postsetup,
         )
 
         result = await session.start()

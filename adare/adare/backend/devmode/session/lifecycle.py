@@ -46,6 +46,8 @@ class DevModeLifecycleMixin:
         _cleanup_snapshots
     """
 
+    run_postsetup: bool = True  # set by DevModeSessionCore.__init__; False skips the environment's post-setup steps
+
     async def start(self) -> Result[None]:
         """
         Start dev mode session by initializing VM and controllers.
@@ -69,6 +71,7 @@ class DevModeLifecycleMixin:
             # Import required modules
             from adare.backend.experiment.run import (
                 step_connect_websocket,
+                step_execute_installations,
                 step_initialize,
                 step_install_and_run_websocket_server,
                 step_prepare_run_environment,
@@ -195,6 +198,14 @@ class DevModeLifecycleMixin:
                 # 11. Connect to WebSocket
                 await step_connect_websocket(self.experiment_ctx)
                 log.info("Connected to WebSocket")
+
+                # 11b. The environment's post-setup steps, as an experiment run does. A failing step
+                # ends start() with PostSetupStepError (session start fails with its message);
+                # the log goes to <session run dir>/logs/postsetup.log.
+                if self.run_postsetup:
+                    await step_execute_installations(self.experiment_ctx, stage_ulid=stage_ulid)
+                else:
+                    log.info("Skipping post-setup steps (--no-postsetup)")
 
             # 12. PlaybookController is now lazily initialized in _ensure_playbook_controller()
             # This avoids crashes when experiment context is incomplete during simple start

@@ -1031,7 +1031,7 @@ class QEMUVM(
             inject_user_path: If True, inject user's PATH (Windows)
             redirect_stdout: Path to file for stdout redirection (QEMU-specific)
             redirect_stderr: Path to file for stderr redirection (QEMU-specific)
-            **kwargs: Additional arguments
+            **kwargs: Additional arguments (timeout: seconds to wait, default 300)
 
         Returns:
             CommandResult with returncode, stdout, stderr
@@ -1050,8 +1050,8 @@ class QEMUVM(
             inject_user_path=inject_user_path,
             redirect_stdout=redirect_stdout,
             redirect_stderr=redirect_stderr,
+            timeout=kwargs.get('timeout', 300),
         )
-
         return CommandResult(returncode=returncode, stdout=stdout, stderr=stderr)
 
     async def wait_until_fully_booted(

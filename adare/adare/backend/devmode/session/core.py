@@ -91,6 +91,7 @@ class DevModeSessionCore:
         console_ulid: str | None = None,
         experiment_name: str | None = None,
         shared_directories: dict[str, dict[str, Path]] | None = None,
+        run_postsetup: bool = True,
     ):
         """
         Initialize dev mode session (does not start VM).
@@ -106,6 +107,7 @@ class DevModeSessionCore:
             console_ulid: Optional flow console ULID for event integration
             experiment_name: Optional name of the experiment (None for bare session)
             shared_directories: Optional Dict of shared directories {name: {'host': Path, 'vm': Path}}
+            run_postsetup: Run the environment's post-setup steps in start() (False: ``--no-postsetup``)
         """
         self.session_id = session_id
         self.project_path = project_path
@@ -117,6 +119,7 @@ class DevModeSessionCore:
         self.console_ulid = console_ulid
         self.experiment_name = experiment_name
         self.shared_directories = shared_directories or {}
+        self.run_postsetup = run_postsetup
 
         # Core components (initialized in start())
         self.experiment_ctx: ExperimentRunCtx | None = None

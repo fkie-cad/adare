@@ -881,108 +881,28 @@ async def connect_websocket(context, stage_ctx):
 
 
 async def execute_installations_via_websocket(context, stage_ctx):
-    """Execute environment installations via WebSocket client.
+    """Run the environment's post-setup steps through the WebSocket agent.
+
+    A failed step raises ``PostSetupStepError`` (unless it is ``allow_failure``); see
+    :mod:`adare.backend.experiment.postsetup` for the rules.
 
     Args:
         context: ExperimentRunCtx
         stage_ctx: StageCtxManager context for progress reporting
     """
-    import adare.backend.environment.database as environment_database
+    from adare.backend.experiment.postsetup import WebsocketStepExecutor, run_environment_postsetup
 
-    installations = environment_database.get_environment_installations(context.environment_ulid)
-
-    if not installations:
-        log.info("No installations to execute")
-        return
-
-    log.info(f"Executing {len(installations)} installation(s) from environment")
-
-    for idx, installation in enumerate(installations, 1):
-        installation_name = installation.name if hasattr(installation, 'name') else f"Installation {idx}"
-        installation_cmd = installation.command if hasattr(installation, 'command') else str(installation)
-        installation_desc = installation.description if hasattr(installation, 'description') else ""
-
-        stage_ctx.stage.sub_msg = f"[{idx}/{len(installations)}] {installation_name}"
-        stage_ctx.set_status(stage_ctx.stage.status)
-
-        log.info(f"Executing installation [{idx}/{len(installations)}]: {installation_name}")
-        if installation_desc:
-            log.info(f"Description: {installation_desc}")
-        log.info(f"Command: {installation_cmd}")
-
-        try:
-            result = await context.client.execute_shell(
-                installation_cmd,
-                shell=True,
-                timeout=600,  # 10 minute timeout for installations
-            )
-
-            if result.get('returncode') == 0:
-                log.info(f"Installation '{installation_name}' completed successfully")
-                if result.get('stdout'):
-                    log.debug(f"Installation output: {result['stdout']}")
-            else:
-                log.error(f"Installation '{installation_name}' failed with return code {result.get('returncode')}")
-                if result.get('stderr'):
-                    log.error(f"Installation error: {result['stderr']}")
-                if result.get('stdout'):
-                    log.error(f"Installation output: {result['stdout']}")
-                log.warning("Continuing with remaining installations despite failure")
-
-        except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
-            log.error(f"Failed to execute installation '{installation_name}': {e}", exc_info=True)
-            log.warning("Continuing with remaining installations despite error")
-
-    log.info("All installations completed")
+    executor = WebsocketStepExecutor(context.client, context.guest_platform)
+    await run_environment_postsetup(context, stage_ctx, executor)
 
 
 async def execute_installations_via_qga(context, stage_ctx):
-    """Execute environment installations via QGA guest-exec (no WebSocket needed).
+    """Run the environment's post-setup steps through QGA guest-exec (no WebSocket needed).
 
     Args:
         context: ExperimentRunCtx
         stage_ctx: StageCtxManager context for progress reporting
     """
-    import adare.backend.environment.database as environment_database
+    from adare.backend.experiment.postsetup import QgaStepExecutor, run_environment_postsetup
 
-    installations = environment_database.get_environment_installations(context.environment_ulid)
-
-    if not installations:
-        log.info("No installations to execute")
-        return
-
-    log.info(f"Executing {len(installations)} installation(s) via QGA guest-exec")
-
-    for idx, installation in enumerate(installations, 1):
-        installation_name = installation.name if hasattr(installation, 'name') else f"Installation {idx}"
-        installation_cmd = installation.command if hasattr(installation, 'command') else str(installation)
-        installation_desc = installation.description if hasattr(installation, 'description') else ""
-
-        stage_ctx.stage.sub_msg = f"[{idx}/{len(installations)}] {installation_name}"
-        stage_ctx.set_status(stage_ctx.stage.status)
-
-        log.info(f"Executing installation [{idx}/{len(installations)}]: {installation_name}")
-        if installation_desc:
-            log.info(f"Description: {installation_desc}")
-        log.info(f"Command: {installation_cmd}")
-
-        try:
-            result = await context.vm.run_command(installation_cmd, silent=False)
-
-            if result.returncode == 0:
-                log.info(f"Installation '{installation_name}' completed successfully")
-                if result.stdout:
-                    log.debug(f"Installation output: {result.stdout}")
-            else:
-                log.error(f"Installation '{installation_name}' failed with return code {result.returncode}")
-                if result.stderr:
-                    log.error(f"Installation error: {result.stderr}")
-                if result.stdout:
-                    log.error(f"Installation output: {result.stdout}")
-                log.warning("Continuing with remaining installations despite failure")
-
-        except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
-            log.error(f"Failed to execute installation '{installation_name}': {e}", exc_info=True)
-            log.warning("Continuing with remaining installations despite error")
-
-    log.info("All installations completed")
+    await run_environment_postsetup(context, stage_ctx, QgaStepExecutor(context.vm))

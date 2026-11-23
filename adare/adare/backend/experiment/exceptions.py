@@ -180,6 +180,18 @@ class VMSetupError(ExperimentException):
         super().__init__(log, msg)
 
 
+class PostSetupStepError(ExperimentException):
+    """An environment post-setup step failed and the step is not ``allow_failure``.
+
+    ``message`` names the step, how it ended (exit code, timeout or transport error),
+    the duration and the tail of its stderr (stdout when stderr is empty).
+    """
+
+    def __init__(self, log: logging.Logger, message: str, step_name: str = '', possible_solutions: list | None = None):
+        self.step_name = step_name
+        super().__init__(log, message, possible_solutions or [])
+
+
 class AdareVMProcessDiedError(ExperimentException):
     """Raised when adarevm process dies immediately after launch."""
 

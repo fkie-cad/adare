@@ -35,6 +35,11 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--shared-dir', multiple=True, help='Shared directories in format HOST_PATH:VM_PATH')
     @click.option('--debug-screenshots', is_flag=True, help='Save screenshots for debugging')
     @click.option(
+        '--no-postsetup',
+        is_flag=True,
+        help="Skip the environment's post-setup steps (they run by default, as in an experiment run)",
+    )
+    @click.option(
         '--reuse',
         is_flag=True,
         help='Attach to the most-recent running session for this project instead of booting a new VM',
@@ -46,7 +51,18 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         'VirtualSpice once it is up. Needs VirtualSpice running (adare ui start).',
     )
     def start(
-        environment, project, name, gui_mode, test_mode, vm_memory, vm_cpus, shared_dir, debug_screenshots, reuse, watch
+        environment,
+        project,
+        name,
+        gui_mode,
+        test_mode,
+        vm_memory,
+        vm_cpus,
+        shared_dir,
+        debug_screenshots,
+        no_postsetup,
+        reuse,
+        watch,
     ):
         """Start a new dev mode session."""
         from adare.cli.dev import exec_dev_start
@@ -61,6 +77,7 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             vm_cpus=vm_cpus,
             shared_dir=shared_dir,
             debug_screenshots=debug_screenshots,
+            no_postsetup=no_postsetup,
             reuse=reuse,
             watch=watch,
         )
