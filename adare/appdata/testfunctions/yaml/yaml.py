@@ -4,7 +4,7 @@
 import yaml
 
 # internal imports
-from adarelib.testset import structured
+from adarelib.testset import structured, valuecompare
 from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 
@@ -68,6 +68,13 @@ def value_matches(
     expected_value: str | int | float | bool | None,
     regex_match: bool = False,
     wildcard_mode: str = 'any',
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
 ):
     """Pass when the YAML value at ``key_path`` in ``dst`` equals (or matches) ``expected_value``.
 
@@ -77,6 +84,10 @@ def value_matches(
     ``false``/``no``/``off`` are booleans); dates and timestamps become ISO 8601 strings
     (``2024-01-15``, ``2024-01-15T10:30:00``, ``+00:00`` for a ``Z`` zone), ``!!binary`` a
     lowercase hex string.
+
+    With ``comparison_type`` (``greater``, ``less``, ...), ``tolerance`` or the time
+    parameters the value is compared as a number or timestamp; to compare two values of one
+    file use yaml.values_compare.
 
     Args:
         dst: Guest path to the YAML file; a glob must match exactly one path. Several
@@ -91,6 +102,18 @@ def value_matches(
             unanchored) in ``str(value)``. An invalid regex is an error.
         wildcard_mode: ``any`` (default): one value must match; ``all``: every value must
             match. Other values are an error.
+        comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
+            ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
+            below, compares the value with ``expected_value`` as a number or point in time
+            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
+            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+        value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
+            ``number`` or ``timestamp``.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
 
     Example:
         function: yaml.value_matches
@@ -100,7 +123,22 @@ def value_matches(
           expected_value: 8080
           wildcard_mode: all
     """
-    return structured.value_matches(ctx, dst, key_path, expected_value, YAML, regex_match, wildcard_mode)
+    return structured.value_matches(
+        ctx,
+        dst,
+        key_path,
+        expected_value,
+        YAML,
+        regex_match,
+        wildcard_mode,
+        comparison_type=comparison_type,
+        value_type=value_type,
+        tolerance=tolerance,
+        time_format=time_format,
+        timestamp_epoch=timestamp_epoch,
+        timestamp_unit=timestamp_unit,
+        utc_offset=utc_offset,
+    )
 
 
 @testfunction(
@@ -146,4 +184,75 @@ def value_count(
     """
     return structured.value_count(
         ctx, dst, key_path, expected_count, YAML, expected_value, regex_match, comparison_type
+    )
+
+
+@testfunction(
+    name='values_compare',
+    description='compares two values of one YAML file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def values_compare(
+    ctx,
+    dst: str,
+    key_path: str,
+    other_key_path: str,
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    offset: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
+):
+    """Pass when the value at ``key_path`` compares to the value at ``other_key_path`` (+ ``offset``).
+
+    Use for: relations inside one file: a last-saved value later than the first-opened one,
+    two timestamps within a few seconds of each other, a counter one above another
+    (``comparison_type: equals`` with ``offset: 1``). To compare one value with a constant
+    use yaml.value_matches with ``comparison_type``.
+
+    Args:
+        dst: Guest path to the YAML file; a glob must match exactly one path. Several
+            documents form a top-level list. A missing or invalid file is an error.
+        key_path: Dot path of the first value (syntax as in yaml.contains_key). It must select
+            exactly one value (a one-element array counts as its element): nothing fails,
+            several values are an error.
+        other_key_path: Dot path of the second value; same rules.
+        comparison_type: How the first value relates to the second: ``equals`` (default),
+            ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``
+            (``less`` = earlier for timestamps). Other values are an error.
+        value_type: ``auto`` (default; numbers if both are numbers, else timestamps),
+            ``number`` or ``timestamp``. A value that is no number or timestamp is an error.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        offset: Added to the second value before comparing (seconds for timestamps, may be
+            negative): ``first <comparison_type> second + offset``.
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+
+    Example:
+        function: yaml.values_compare
+        parameter:
+          dst: /home/user/.config/app/state.yaml
+          key_path: session.closed
+          other_key_path: session.opened
+          comparison_type: greater
+    """
+    return valuecompare.structured_values_compare(
+        ctx,
+        dst,
+        key_path,
+        other_key_path,
+        YAML,
+        comparison_type,
+        value_type,
+        tolerance,
+        offset,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
     )

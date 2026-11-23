@@ -560,3 +560,31 @@ def test_corrupt_exif_is_an_error_not_absence(tmp_path, how):
     path = _corrupt_exif(tmp_path / 'bad_exif.jpg', how)
     result = _run(image.exif_value_count._test_class, dst=path, tag='Make', expected_count=0)
     _assert(result, StatusEnum.ERROR)
+
+
+# --- ordered comparisons -------------------------------------------------------------------
+
+
+def test_exif_value_matches_ordered(jpeg):
+    _assert(
+        _run(ExifValueMatches, dst=jpeg, tag='ISOSpeedRatings', expected_value=100, comparison_type='greater'),
+        StatusEnum.SUCCESS,
+    )
+    _assert(_run(ExifValueMatches, dst=jpeg, tag='FNumber', expected_value=2.5, tolerance=0.5), StatusEnum.SUCCESS)
+    taken = {'dst': jpeg, 'tag': 'DateTimeOriginal', 'time_format': '%Y:%m:%d %H:%M:%S'}
+    _assert(
+        _run(ExifValueMatches, **taken, expected_value='2024:05:01 11:59:00', comparison_type='greater'),
+        StatusEnum.SUCCESS,
+    )
+    _assert(
+        _run(ExifValueMatches, **taken, expected_value='2024:05:01 12:00:01', comparison_type='greater'),
+        StatusEnum.FAILED,
+    )
+
+
+def test_exif_value_matches_ordered_errors(jpeg):
+    _assert(_run(ExifValueMatches, dst=jpeg, tag='Make', expected_value=1, comparison_type='greater'), StatusEnum.ERROR)
+    _assert(
+        _run(ExifValueMatches, dst=jpeg, tag='ISOSpeedRatings', expected_value='{{iso}}', comparison_type='greater'),
+        StatusEnum.ERROR,
+    )

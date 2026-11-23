@@ -9,6 +9,8 @@ from adarelib.testset.compare import get_nested_value
 from adarelib.testset.content import decode_text
 from adarelib.testset.structured import StructuredFormat, compare_value, load_data
 from adarelib.testset.structured import value_count as _structured_value_count
+from adarelib.testset.ordering import OrderingError
+from adarelib.testset.valuecompare import ordered_setup, structured_values_compare
 
 # configure logging
 import logging
@@ -28,7 +30,14 @@ def _json_format(encoding: str | None) -> StructuredFormat:
     return StructuredFormat(label='JSON', load=lambda path: _load_json(path, encoding), errors=(json.JSONDecodeError,))
 
 
-def _handle_wildcard_matching(ctx, values, expected_value, wildcard_mode, key_path, regex_match=False):
+def _compare(ctx, value, expected_value, regex_match, ordered):
+    """``ordered.compare`` in ordered mode, else equality / ``!re`` / placeholders / regex."""
+    if ordered is not None:
+        return ordered.compare(value, expected_value)
+    return compare_value(ctx, value, expected_value, regex_match=regex_match)
+
+
+def _handle_wildcard_matching(ctx, values, expected_value, wildcard_mode, key_path, regex_match=False, ordered=None):
     """Handle matching logic for wildcard results with 'any' or 'all' modes"""
     if not values:
         return TestResult.failed([f'no values found for wildcard path "{key_path}"'])
@@ -42,7 +51,7 @@ def _handle_wildcard_matching(ctx, values, expected_value, wildcard_mode, key_pa
 
     # Check each value against expected using unified comparison method
     for i, value in enumerate(values):
-        is_match, message = compare_value(ctx, value, expected_value, regex_match=regex_match)
+        is_match, message = _compare(ctx, value, expected_value, regex_match, ordered)
         if is_match:
             matches.append((i, value, message))
         else:
@@ -139,6 +148,13 @@ def value_matches(
     regex_match: bool = False,
     wildcard_mode: str = "any",
     encoding: str | None = None,
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
 ):
     """Pass when the JSON value at ``key_path`` in ``dst`` equals (or matches) ``expected_value``.
 
@@ -146,6 +162,10 @@ def value_matches(
     or a JSON array value, whose elements are then compared one by one) ``wildcard_mode``
     decides; a one-element array is unwrapped. Whole arrays cannot be compared. To assert
     that no value matches use json.value_count with ``expected_count: 0``.
+
+    With ``comparison_type`` (``greater``, ``less``, ...), ``tolerance`` or the time
+    parameters the value is compared as a number or timestamp; to compare two values of one
+    file use json.values_compare.
 
     Args:
         dst: Guest path to the JSON file; a glob must match exactly one path. A missing file or
@@ -165,6 +185,18 @@ def value_matches(
             match. Other values are an error.
         encoding: ``None`` (default) detects UTF-8/16/32 with or without BOM; a name
             (``latin-1``) decodes BOM-less files with it. Unknown names are an error.
+        comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
+            ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
+            below, compares the value with ``expected_value`` as a number or point in time
+            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
+            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+        value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
+            ``number`` or ``timestamp``.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
 
     Example:
         function: json.value_matches
@@ -175,6 +207,20 @@ def value_matches(
     """
     if wildcard_mode not in ('any', 'all'):
         return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
+    ordered, problem = ordered_setup(
+        ctx,
+        expected_value,
+        regex_match,
+        comparison_type,
+        value_type,
+        tolerance,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
+    )
+    if problem is not None:
+        return problem
     data, error = load_data(ctx, dst, _json_format(encoding))
     if error is not None:
         return error
@@ -183,13 +229,17 @@ def value_matches(
     if not exists:
         return TestResult.failed([f'key path "{key_path}" does not exist'])
 
-    if isinstance(value, list) and len(value) > 1:
-        # several values (a wildcard or an array value): wildcard_mode decides
-        return _handle_wildcard_matching(ctx, value, expected_value, wildcard_mode, key_path, regex_match=regex_match)
-    if isinstance(value, list) and len(value) == 1:
-        value = value[0]
-
-    is_match, message = compare_value(ctx, value, expected_value, regex_match=regex_match)
+    try:
+        if isinstance(value, list) and len(value) > 1:
+            # several values (a wildcard or an array value): wildcard_mode decides
+            return _handle_wildcard_matching(
+                ctx, value, expected_value, wildcard_mode, key_path, regex_match=regex_match, ordered=ordered
+            )
+        if isinstance(value, list) and len(value) == 1:
+            value = value[0]
+        is_match, message = _compare(ctx, value, expected_value, regex_match, ordered)
+    except OrderingError as e:
+        return TestResult.error([str(e)])
     return TestResult.success([message]) if is_match else TestResult.failed([message])
 
 
@@ -308,4 +358,80 @@ def value_count(
         expected_value=expected_value,
         regex_match=regex_match,
         comparison_type=comparison_type,
+    )
+
+
+@testfunction(
+    name='values_compare',
+    description='compares two values of one JSON file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def values_compare(
+    ctx,
+    dst: str,
+    key_path: str,
+    other_key_path: str,
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    offset: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
+    encoding: str | None = None,
+):
+    """Pass when the value at ``key_path`` compares to the value at ``other_key_path`` (+ ``offset``).
+
+    Use for: relations inside one file: a last-saved value later than the first-opened one,
+    two timestamps within a few seconds of each other, a counter one above another
+    (``comparison_type: equals`` with ``offset: 1``). To compare one value with a constant
+    use json.value_matches with ``comparison_type``.
+
+    Args:
+        dst: Guest path to the JSON file; a glob must match exactly one path. A missing file or
+            invalid JSON is an error. ``x.jsonlz4!`` reads LZ4-compressed JSON.
+        key_path: Dot path of the first value (syntax as in json.value_matches). It must select
+            exactly one value (a one-element array counts as its element): nothing fails,
+            several values are an error.
+        other_key_path: Dot path of the second value; same rules.
+        comparison_type: How the first value relates to the second: ``equals`` (default),
+            ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``
+            (``less`` = earlier for timestamps). Other values are an error.
+        value_type: ``auto`` (default; numbers if both are numbers, else timestamps),
+            ``number`` or ``timestamp``. A value that is no number or timestamp is an error.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        offset: Added to the second value before comparing (seconds for timestamps, may be
+            negative): ``first <comparison_type> second + offset``.
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+        encoding: ``None`` (default) detects UTF-8/16/32 with or without BOM; a name
+            (``latin-1``) decodes BOM-less files with it. Unknown names are an error.
+
+    Example:
+        function: json.values_compare
+        parameter:
+          dst: /home/user/data/session.json
+          key_path: window.lastSaved
+          other_key_path: window.opened
+          comparison_type: greater
+          timestamp_epoch: 1970
+          timestamp_unit: ms
+    """
+    return structured_values_compare(
+        ctx,
+        dst,
+        key_path,
+        other_key_path,
+        _json_format(encoding),
+        comparison_type,
+        value_type,
+        tolerance,
+        offset,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
     )

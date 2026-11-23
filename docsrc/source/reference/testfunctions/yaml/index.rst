@@ -5,7 +5,7 @@ YAML
    :class: status-tested
 
 :Status: :status-tested:`● Tested`
-:Functions: 3
+:Functions: 4
 :Category: YAML Data
 
 The **YAML** testset reads YAML files with PyYAML's safe loader and checks keys, values and counts by key path.
@@ -41,3 +41,4 @@ Test Functions
    contains_key
    value_matches
    value_count
+   values_compare

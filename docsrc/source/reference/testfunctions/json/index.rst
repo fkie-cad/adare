@@ -5,7 +5,7 @@ JSON
    :class: status-tested
 
 :Status: :status-tested:`● Tested`
-:Functions: 4
+:Functions: 5
 :Category: JSON Data Validation
 
 The **JSON** testset provides comprehensive JSON file testing capabilities for ADARE experiments. This testset focuses on JSON structure validation, key existence checking, value comparison, and array element verification.
@@ -41,3 +41,4 @@ Test Functions
    value_matches
    array_contains
    value_count
+   values_compare
