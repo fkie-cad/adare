@@ -740,7 +740,7 @@ class TestRegistryTypeNames:
     def test_dword_matches_canonical_and_legacy_name(self, value_type):
         assert_test_success(self._match(4, 1, value_type))
 
-    @pytest.mark.parametrize("value_type", ["REG_QWORD", "REG_QWORD_LITTLE_ENDIAN"])
+    @pytest.mark.parametrize("value_type", ["REG_QWORD", "REG_QWORD_LITTLE_ENDIAN", "UNKNOWN_TYPE_11"])
     def test_qword_matches_canonical_and_legacy_name(self, value_type):
         assert_test_success(self._match(11, 2**40, value_type))
 

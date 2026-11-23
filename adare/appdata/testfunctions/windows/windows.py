@@ -83,6 +83,7 @@ _REGISTRY_TYPE_NAMES = {
 _REGISTRY_TYPE_ALIASES = {
     'REG_DWORD_LITTLE_ENDIAN': 'REG_DWORD',
     'REG_QWORD_LITTLE_ENDIAN': 'REG_QWORD',
+    'UNKNOWN_TYPE_11': 'REG_QWORD',  # what earlier versions reported for a REG_QWORD
 }
 
 
@@ -174,8 +175,8 @@ def registry_value_matches(
             names: REG_NONE, REG_SZ, REG_EXPAND_SZ, REG_BINARY, REG_DWORD, REG_DWORD_BIG_ENDIAN,
             REG_LINK, REG_MULTI_SZ, REG_RESOURCE_LIST, REG_FULL_RESOURCE_DESCRIPTOR,
             REG_RESOURCE_REQUIREMENTS_LIST, REG_QWORD. The legacy aliases
-            ``REG_DWORD_LITTLE_ENDIAN`` and ``REG_QWORD_LITTLE_ENDIAN`` are accepted for
-            REG_DWORD / REG_QWORD. ``None`` skips the check.
+            ``REG_DWORD_LITTLE_ENDIAN`` and ``REG_QWORD_LITTLE_ENDIAN`` (and ``UNKNOWN_TYPE_11``,
+            the name earlier versions reported) are accepted for REG_DWORD / REG_QWORD. ``None`` skips the check.
 
     Example:
         function: windows.registry_value_matches
