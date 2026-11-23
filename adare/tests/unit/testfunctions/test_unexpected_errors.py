@@ -67,6 +67,7 @@ def _file_testfunctions():
             # file tests resolve dst themselves or through adarelib.testset.structured
             markers = ('resolve_globfilepath', 'structured.', 'load_data(')
             markers += ('structured_values_compare(',)  # round 2: values_compare other_dst / value_decode
+            markers += ('_metadata_path(',)  # standard.file_timestamps / file_permissions
             if not any(marker in source for marker in markers):
                 continue
             yield pytest.param(obj, VALID_PARAMS.get(f'{collection}.{name}', {}), id=f'{collection}.{name}')

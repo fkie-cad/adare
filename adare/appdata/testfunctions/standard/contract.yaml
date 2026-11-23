@@ -611,7 +611,7 @@ functions:
     formats: [file]
     features: [glob_dst]
     unsupported:
-      archive_dst: An archive member would be a temporary extracted copy with its own times; host test mode refuses an archive path with an error (name the archive file itself).
+      archive_dst: An archive member would be a temporary extracted copy with its own times, so an archive path is an error (in the guest agent and in host test mode); name the archive file itself.
       timestamp_tag: '``expected_time``, ``start_time`` and ``end_time`` are epoch seconds or date strings, not ``!timestamp`` tags.'
       ordered_comparison: '``comparison_type`` here is ``equals``, ``before``, ``after``, ``between`` or ``within_last`` (see choices), with ``tolerance_seconds``.'
     not_for:
@@ -672,7 +672,7 @@ functions:
     formats: [file, directory]
     features: [glob_dst]
     unsupported:
-      archive_dst: An archive member would be a temporary extracted copy with its own mode and owner; host test mode refuses an archive path with an error (name the archive file itself).
+      archive_dst: An archive member would be a temporary extracted copy with its own mode and owner, so an archive path is an error (in the guest agent and in host test mode); name the archive file itself.
     not_for:
       - goal: a file exists
         use: standard.file_exists

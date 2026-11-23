@@ -318,6 +318,12 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   `home_dir`; `registry_value_matches` compares typed values with canonical type names.
 - `--backend hostside`: `user_exists` checks `uid` / `home_dir`, metadata of a missing file is
   an ERROR, and `visual.*` tests are refused before the run (no screen after shutdown).
+- `standard.file_timestamps` / `file_permissions`: an archive member (`a.zip!/x`) is an ERROR;
+  the agent read the temporary extracted copy, so `within_last` passed on the extraction time.
+- Playbook timestamp variables (adarelib): an EXIF-form value `2024:01:02 03:04:06` keeps its
+  date; it was read as today at that time.
+- Host test mode: `linux.*` probes on a Windows guest (and `windows.*` elsewhere) are an ERROR,
+  as in the guest agent; they ran the PowerShell equivalents.
 - `adare test info` / `test search` show the bundled contract of a collection whose installed
   code differs from it, with a note to run `adare test sync` (they showed none).
 - Playbook test checks also run for playbooks with `!re` / `!timestamp` values (they were

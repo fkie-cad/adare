@@ -497,6 +497,18 @@ class GuestToHostTestExecutor(QgaProbeTests):
             [f"could not pull {', '.join(missing)} from guest; testing without it would read stale data"]
         )
 
+    def _guest_os_error(self, test_function: str) -> TestResult | None:
+        """The agent refuses linux.* off Linux and windows.* off Windows; host mode does the same."""
+        collection = test_function.split('.')[0] if '.' in test_function else ''
+        is_windows = getattr(self.guest_command, 'is_windows', None)
+        if not isinstance(is_windows, bool):  # a hostside image proxy does not know the OS
+            return None
+        if collection == 'linux' and is_windows:
+            return TestResult.error([f'{test_function} only runs on Linux guests, this guest is Windows'])
+        if collection == 'windows' and not is_windows:
+            return TestResult.error([f'{test_function} only runs on Windows guests'])
+        return None
+
     async def _execute_qga_probe_test(
         self,
         test_name: str,
@@ -510,6 +522,9 @@ class GuestToHostTestExecutor(QgaProbeTests):
         QGA and interpret the results on the host.
         """
         func_name = test_function.split('.')[-1] if '.' in test_function else test_function
+        os_error = self._guest_os_error(test_function)
+        if os_error is not None:
+            return os_error
 
         if func_name == 'process_running':
             return await self._test_process_running(test_instance)

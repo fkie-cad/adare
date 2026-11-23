@@ -1010,14 +1010,14 @@ asserts: metadata · formats: file, directory · runs: guest agent or host test 
 **Supports:** Globs in dst (`glob_dst`)
 
 **Does not support:**
-- Files inside archives and compressed files (`archive_dst`): An archive member would be a temporary extracted copy with its own mode and owner; host test mode refuses an archive path with an error (name the archive file itself).
+- Files inside archives and compressed files (`archive_dst`): An archive member would be a temporary extracted copy with its own mode and owner, so an archive path is an error (in the guest agent and in host test mode); name the archive file itself.
 
 **Not for:**
 - a file exists → `standard.file_exists`
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` | `''` | Guest path to the file or directory. A glob must match exactly one path, otherwise the test errors. A missing path is an error. |
+| **dst** | `str` | `''` | Guest path to the file or directory. A glob must match exactly one path, otherwise the test errors. A missing path is an error, and so is an archive member (its mode and owner would be those of a temporary extracted copy). |
 | **expected_permissions** | `str` | `''` | Octal digits (`'644'`, `'0755'`) or 9-char symbolic (`rwxr-xr-x`), compared with `st_mode & 0o777` (no setuid/sticky). Quote it in YAML (unquoted `0644` is read as decimal 420). Empty/invalid values error. |
 | check_owner | `str` | `None` | Expected owner user name (not UID); `None` skips the check. |
 | check_group | `str` | `None` | Expected group name (not GID); `None` skips the check. |
@@ -1176,7 +1176,7 @@ asserts: metadata, order · formats: file · runs: guest agent or host test mode
 **Supports:** Globs in dst (`glob_dst`)
 
 **Does not support:**
-- Files inside archives and compressed files (`archive_dst`): An archive member would be a temporary extracted copy with its own times; host test mode refuses an archive path with an error (name the archive file itself).
+- Files inside archives and compressed files (`archive_dst`): An archive member would be a temporary extracted copy with its own times, so an archive path is an error (in the guest agent and in host test mode); name the archive file itself.
 - Times as expected values (!timestamp) (`timestamp_tag`): `expected_time`, `start_time` and `end_time` are epoch seconds or date strings, not `!timestamp` tags.
 - Ordered comparison of numbers and times (`ordered_comparison`): `comparison_type` here is `equals`, `before`, `after`, `between` or `within_last` (see choices), with `tolerance_seconds`.
 
@@ -1186,7 +1186,7 @@ asserts: metadata, order · formats: file · runs: guest agent or host test mode
 
 | parameter | type | default | description |
 |---|---|---|---|
-| **dst** | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file is an error. |
+| **dst** | `str` | `''` | Guest path to the file. A glob must match exactly one path, otherwise the test errors. A missing file is an error, and so is an archive member (`a.zip!/x`): its times would be those of a temporary extracted copy. |
 | timestamp_type | `str` | `'modified'` | `modified` (mtime, default), `accessed` (atime) or `created`: creation time on Windows; elsewhere `st_birthtime` if Python exposes it, else `st_ctime` (inode change time on Linux). Other values error. Allowed: `modified`, `accessed`, `created`. |
 | comparison_type | `str` | `'equals'` | `equals` (default, within `tolerance_seconds`), `before` / `after` (strict, vs `expected_time`), `between` (inclusive, `start_time`.. `end_time`) or `within_last` (`within_duration` before the guest's now). Allowed: `equals`, `before`, `after`, `between`, `within_last`. |
 | expected_time | `str \| int \| float` | `None` | Reference for equals/before/after: Unix epoch seconds or a date string (see `time_format`). Naive strings are read in the guest's local timezone (the trailing `Z` format too). Missing/unparseable values error. |

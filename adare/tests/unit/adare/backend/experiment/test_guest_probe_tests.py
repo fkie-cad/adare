@@ -462,3 +462,41 @@ class TestFileTimestamps:
         command = FakeCommand(get_file_timestamps={'mtime': 100.0})
         result = await self._run(command, timestamp_type='bogus', comparison_type='after', expected_time=50)
         assert result.status == StatusEnum.ERROR
+
+
+class TestGuestOsGuard:
+    """linux.* on a Windows guest (and windows.* elsewhere) is an ERROR, as the agent reports it."""
+
+    @staticmethod
+    def _command(is_windows, **answers):
+        command = FakeCommand(**answers)
+        command.is_windows = is_windows
+        return command
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('function', ['linux.process_running', 'linux.user_exists', 'linux.system_service_status'])
+    async def test_linux_probe_on_windows_is_an_error(self, function):
+        executor = _executor(self._command(True, list_processes=['5'], get_user_info={}))
+        result = await executor._execute_qga_probe_test('t', function, _test(process_name='x', username='u'))
+        assert result.status == StatusEnum.ERROR
+        assert 'only runs on Linux' in result.details[0]
+
+    @pytest.mark.asyncio
+    async def test_windows_probe_on_linux_is_an_error(self):
+        executor = _executor(self._command(False))
+        result = await executor._execute_qga_probe_test('t', 'windows.registry_key_exists', _test(key_path='HKCU\\X'))
+        assert result.status == StatusEnum.ERROR
+
+    @pytest.mark.asyncio
+    async def test_linux_probe_on_linux_runs(self):
+        executor = _executor(self._command(False, list_processes=['5']))
+        result = await executor._execute_qga_probe_test('t', 'linux.process_running', _test(process_name='x'))
+        assert result.status == StatusEnum.SUCCESS
+
+    @pytest.mark.asyncio
+    async def test_standard_probe_runs_on_windows(self):
+        executor = _executor(self._command(True, get_file_permissions=FileNotFoundError('gone')))
+        result = await executor._execute_qga_probe_test(
+            't', 'standard.file_permissions', _test(dst='C:\\x.txt', expected_permissions='644')
+        )
+        assert 'only runs' not in ' '.join(result.details)
