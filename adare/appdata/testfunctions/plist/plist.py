@@ -122,7 +122,8 @@ def value_matches(
             left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
             unknown step, is an error.
         decoded_key_path: Key path into the value ``json`` decoded (syntax as in ``key_path``);
-            it must select one value. Required with ``json``, an error without it.
+            it must select one value: none fails (the value decoded, the key is not in it), several are an error.
+            Required with ``json``, an error without it.
 
     Example:
         function: plist.value_matches
@@ -249,7 +250,8 @@ def values_compare(
             ``dst``, ``archive!/member`` included); default ``None``: ``dst``. A missing file is
             an error. Compares a file with a copy saved before an action.
         value_decode: Decode both values before comparing (steps as in plist.value_matches).
-        decoded_key_path: With ``json`` in ``value_decode``: key path into the decoded value.
+        decoded_key_path: With ``json`` in ``value_decode``: key path into the decoded value; it must select one
+            value: none fails, several are an error.
 
     Example:
         function: plist.values_compare

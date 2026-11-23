@@ -37,7 +37,7 @@ from adarelib.testset.compare import compare_with_single_placeholder
 from adarelib.testset.structured import StructuredFormat, compare_count, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.valuecompare import ordered_setup, structured_values_compare
-from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
+from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, decoder_setup
 
 # configure logging
 import logging
@@ -127,7 +127,10 @@ def _compare_values(
 ):
     """Compare values using the same logic as JSON testfunctions (``ordered``: ordered mode)"""
     if decoder is not None:
-        actual_text = decoder(actual_text, as_text=True)
+        try:
+            actual_text = decoder(actual_text, as_text=True)
+        except DecodedKeyPathMissing as e:  # decoded fine, the key is not in it: no match
+            return False, str(e)
     if ordered is not None:
         return ordered.compare(actual_text, expected_text)
     expected_str = str(expected_text)
@@ -407,7 +410,8 @@ def element_text_matches(
             left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
             unknown step, is an error.
         decoded_key_path: Key path into the value ``json`` decoded (dot path as in json.value_matches);
-            it must select one value. Required with ``json``, an error without it.
+            it must select one value: none fails (the value decoded, the key is not in it), several are an error.
+            Required with ``json``, an error without it.
 
     Example:
         function: xml.element_text_matches
@@ -536,7 +540,8 @@ def attribute_matches(
             left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
             unknown step, is an error.
         decoded_key_path: Key path into the value ``json`` decoded (dot path as in json.value_matches);
-            it must select one value. Required with ``json``, an error without it.
+            it must select one value: none fails (the value decoded, the key is not in it), several are an error.
+            Required with ``json``, an error without it.
 
     Example:
         function: xml.attribute_matches
@@ -885,7 +890,8 @@ def values_compare(
             ``dst``, ``archive!/member`` included); default ``None``: ``dst``. A missing file is
             an error. Compares a file with a copy saved before an action.
         value_decode: Decode both values before comparing (steps as in xml.element_text_matches).
-        decoded_key_path: With ``json`` in ``value_decode``: key path into the decoded value.
+        decoded_key_path: With ``json`` in ``value_decode``: key path into the decoded value; it must select one
+            value: none fails, several are an error.
 
     Example:
         function: xml.values_compare

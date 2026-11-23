@@ -2,18 +2,19 @@
 from pathlib import Path
 import json
 import os
-from typing import Optional
+import re
+from typing import Any, Optional
 
 # internal imports
 from adarelib.testset.api import testfunction, TestContext
-from adarelib.testset.basictest import HostModeCategory
+from adarelib.testset.basictest import HostModeCategory, PlaceholderError
 from adarelib.event.event import TestResult
 from adarelib.testset.compare import get_nested_value
 from adarelib.testset.content import open_text
 from adarelib.testset.structured import compare_count, compare_value, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.valuecompare import ordered_setup
-from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
+from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, decoder_setup
 
 # configure logging
 import logging
@@ -56,8 +57,76 @@ def _unmet_conditions(ctx, data, conditions: dict, regex_match: bool, first_only
     return unmet
 
 
+def _regex_pattern_error(ctx, expected: Any, regex_match: bool) -> None:
+    """Compile the regex ``expected`` stands for, like :func:`_compare_values` would.
+
+    :raises re.error: invalid regex (``!re`` tag, ``regex_match`` string)
+    :raises PlaceholderError: a ``{{ placeholder }}`` that is unknown or holds an invalid regex
+    """
+    try:
+        from adarelib.testset.yaml.customtags import YamlRegexString
+    except ImportError:  # YAML support not installed: no !re tags can occur
+        YamlRegexString = None  # noqa: N806
+    if YamlRegexString is not None and isinstance(expected, YamlRegexString):
+        pattern = expected.string
+    elif regex_match and expected == "*":
+        return
+    elif ctx.has_placeholders(str(expected)):
+        _placeholder_pattern_error(ctx, str(expected))
+        return
+    elif regex_match and isinstance(expected, str):
+        pattern = expected
+    else:
+        return
+    try:
+        re.compile(pattern)
+    except re.error as e:
+        raise re.error(f'invalid regex pattern {pattern!r}: {e}') from e
+
+
+def _placeholder_pattern_error(ctx, expected: str) -> None:
+    """Raise PlaceholderError when ``expected`` names a placeholder the comparison could not evaluate as a regex."""
+    names = ctx.get_placeholders(expected)
+    if len(names) != 1:
+        return  # reported with the comparison's own message when a record is compared
+    metadata = ctx.get_placeholder_metadata(names[0])
+    if not metadata:
+        raise PlaceholderError(f"unknown placeholder '{{{{ {names[0]} }}}}': it has no metadata")
+    if metadata.get('type', 'string') != 'regex':
+        return
+    pattern = metadata.get('resolved_value', metadata.get('raw_value'))
+    if pattern is None:
+        raise PlaceholderError(f"regex placeholder '{names[0]}' has no pattern")
+    unresolved = re.search(r'\{\{\s*([^}]+?)\s*\}\}', pattern)
+    if unresolved:
+        raise PlaceholderError(f"unknown variable '{unresolved.group(1)}' in !re pattern {pattern!r}")
+    try:
+        re.compile(pattern)
+    except re.error as e:
+        raise PlaceholderError(f"invalid regular expression {pattern!r}: {e}") from e
+
+
+def _regex_problem(ctx, expected_values, regex_match: bool) -> TestResult | None:
+    """ERROR result when any of ``expected_values`` is an invalid regex, else None.
+
+    Checked before the file is read: an invalid pattern is a test-definition problem, so it
+    is an ERROR whether or not some record has the key (never FAILED for "key not found").
+    """
+    try:
+        for expected in expected_values:
+            _regex_pattern_error(ctx, expected, regex_match)
+    except PlaceholderError as e:
+        return TestResult.error([f'placeholder error: {e}'])
+    except re.error as e:
+        return TestResult.error([str(e)])
+    return None
+
+
 def _decoded(decoder, value):
-    """``value`` decoded by ``value_decode`` (unchanged without a decoder)."""
+    """``value`` decoded by ``value_decode`` (unchanged without a decoder).
+
+    :raises DecodedKeyPathMissing: ``decoded_key_path`` selects nothing in the decoded value
+    """
     return value if decoder is None else decoder(value)
 
 
@@ -111,6 +180,7 @@ def line_matches(
         regex_match: Treat string expected values as regexes searched (``re.search``) in
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
+            An invalid regex is an error even when no line has the key.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
             makes the first malformed line an error.
         encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
@@ -141,6 +211,9 @@ def line_matches(
         return TestResult.error(
             [f'conditions must be a non-empty mapping key_path -> expected value, got {conditions!r}']
         )
+    problem = _regex_problem(ctx, conditions.values(), regex_match)
+    if problem is not None:
+        return problem
 
     try:
         # Check if file is empty (edge case handling)
@@ -262,6 +335,7 @@ def line_count(
         regex_match: Treat string expected values as regexes searched (``re.search``) in
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
+            An invalid regex is an error even when no line has the key.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
             makes the first malformed line an error.
         encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
@@ -303,6 +377,9 @@ def line_count(
     log.debug(f'dst file {dst} will be used for test line_count')
 
     regex_match = regex_match or False
+    problem = _regex_problem(ctx, conditions.values() if isinstance(conditions, dict) else (), regex_match)
+    if problem is not None:
+        return problem
 
     # Parse expected_count
     if expected_count is None:
@@ -438,6 +515,7 @@ def value_in_any_line(
         regex_match: Treat string expected values as regexes searched (``re.search``) in
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
+            An invalid regex is an error even when no line has the key.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
             makes the first malformed line an error.
         encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
@@ -461,7 +539,8 @@ def value_in_any_line(
             left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
             unknown step, is an error.
         decoded_key_path: Key path into the value ``json`` decoded (dot path, numeric indexes allowed);
-            it must select one value. Required with ``json``, an error without it.
+            it must select one value: none fails (the value decoded, the key is not in it), several are an error.
+            Required with ``json``, an error without it.
 
     Example:
         function: jsonl.value_in_any_line
@@ -488,6 +567,10 @@ def value_in_any_line(
     )
     if problem is not None:
         return problem
+    if ordered is None:
+        problem = _regex_problem(ctx, [expected_value], regex_match or False)
+        if problem is not None:
+            return problem
     dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
@@ -505,6 +588,7 @@ def value_in_any_line(
         total_lines = 0
         malformed_count = 0
         lines_with_key = 0
+        decoded_missing = 0
 
         with open_text(dst, encoding) as f:
             for line_num, line in enumerate(f, 1):
@@ -535,17 +619,16 @@ def value_in_any_line(
 
                 lines_with_key += 1
 
-                # Handle multiple values from wildcards
-                if isinstance(value, list):
-                    for v in value:
+                # Handle multiple values from wildcards; a value without the decoded key is no match
+                for v in value if isinstance(value, list) else [value]:
+                    try:
                         is_match, msg = _compare_values(ctx, _decoded(decoder, v), expected_value, regex_match, ordered)
-                        if is_match:
-                            matching_lines.append((line_num, v, msg))
-                            break  # Only record once per line
-                else:
-                    is_match, msg = _compare_values(ctx, _decoded(decoder, value), expected_value, regex_match, ordered)
+                    except DecodedKeyPathMissing:
+                        decoded_missing += 1
+                        continue
                     if is_match:
-                        matching_lines.append((line_num, value, msg))
+                        matching_lines.append((line_num, v, msg))
+                        break  # Only record once per line
 
         # Log malformed lines if any
         if malformed_count > 0:
@@ -566,6 +649,8 @@ def value_in_any_line(
         ]
         if lines_with_key > 0:
             messages.append(f'Found {lines_with_key} lines with key "{key_path}" but none matched the expected value')
+            if decoded_missing:
+                messages.append(f'decoded_key_path {decoded_key_path!r} selected nothing in {decoded_missing} value(s)')
         else:
             messages.append(f'Key path "{key_path}" not found in any line')
         return TestResult.failed(messages)
@@ -656,6 +741,7 @@ def lines_in_order(
         regex_match: Treat string expected values as regexes searched (``re.search``) in
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
+            An invalid regex is an error even when no line has the key.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
             makes the first malformed line an error.
         encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
@@ -674,6 +760,9 @@ def lines_in_order(
     problems = _order_condition_errors(conditions)
     if problems:
         return TestResult.error(problems)
+    problem = _regex_problem(ctx, [v for condition in conditions for v in condition.values()], regex_match or False)
+    if problem is not None:
+        return problem
     dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:

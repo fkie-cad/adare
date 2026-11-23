@@ -21,7 +21,7 @@ Parameters
 * **timestamp_unit** (str, optional): Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``
 * **utc_offset** (str, optional): Zone of timestamps without one (``+02:00``); default UTC
 * **value_decode** (list or str, optional): Decode the value read from the file before comparing: one step or a list applied in order: ``url``, ``base64``, ``hex``, ``utf16``, ``json`` (see "Decoding a stored value" under :ref:`ordered-comparison`). A value a step cannot decode, or an unknown step, is an ERROR
-* **decoded_key_path** (str, optional): With ``json`` in ``value_decode``: key path into the decoded value (syntax of :doc:`/reference/testfunctions/json/value_matches`); it must select one value. Required with ``json``
+* **decoded_key_path** (str, optional): With ``json`` in ``value_decode``: key path into the decoded value (syntax of :doc:`/reference/testfunctions/json/value_matches`); it must select one value: none is FAILED (the value decoded, the key is not in it), several are an ERROR. Required with ``json``
 
 Numbers and Timestamps
 ----------------------
