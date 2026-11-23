@@ -2,7 +2,7 @@
 
 <!-- Generated; do not edit by hand. -->
 
-JSON Lines files (also called NDJSON): one JSON document per line, as written by event logs, history files and line-oriented exports. Every line is parsed on its own; blank lines are skipped and, by default, lines that are not valid JSON are ignored. `value_in_any_line` checks one field, `line_matches` several fields of the same line (in one line or in all of them) and `line_count` counts the lines that meet the conditions (`0` = absent).
+JSON Lines files (also called NDJSON): one JSON document per line, as written by event logs, history files and line-oriented exports. Every line is parsed on its own; blank lines are skipped and, by default, lines that are not valid JSON are ignored. `value_in_any_line` checks one field, `line_matches` several fields of the same line (in one line or in all of them), `line_count` counts the lines that meet the conditions (`0` = absent) and `lines_in_order` checks that records meeting several condition sets occur in a given order.
 
 ## `jsonl.line_count`
 
@@ -311,6 +311,124 @@ tests:
     regex_match: true
 ```
 
+## `jsonl.lines_in_order`
+
+tests that JSONL records meeting each of several condition sets occur in the given order
+
+Pass when each of `conditions` is met by a JSONL record after the record that met the one before it.
+
+Each condition set takes the earliest record after the record of the previous one, so two condition sets never match the same record; when that fails, no other choice of records would pass either. A record meets a condition set exactly as in jsonl.line_matches. Details list the matched line numbers (counted from 1, blank lines included); a FAILED result names the first condition set without a later record and, if it is met only before, those earlier line numbers.
+
+**Use for:** the order of events in an event log or NDJSON export (a login, then a download, then a deletion of the same file); records in between are ignored. For one condition set use jsonl.line_matches, for plain text lines text.lines_in_order.
+
+asserts: sequence, value · formats: jsonl · runs: guest agent, host test mode or hostside; dry-run on a local file · os: any
+
+**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Key paths into structured files (`key_path`), Regex values (!re) (`regex_tag`), Placeholders ({{ variable }}) (`placeholder`), Times as expected values (!timestamp) (`timestamp_tag`), Text encodings (`encoding`)
+
+**Does not support:**
+- Ordered comparison of numbers and times (`ordered_comparison`): Conditions compare by equality, regex or tag; for a number or time threshold use jsonl.value_in_any_line with `comparison_type`.
+
+**Not for:**
+- one record with several fields, in any position → `jsonl.line_matches`
+- how many records meet the conditions, or none does → `jsonl.line_count`
+- the order of plain text lines → `text.lines_in_order`
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path, an archive member (`logs.tar.gz!/events.jsonl`) is read like a file; a missing file is an error. |
+| **conditions** | `list` |  | Non-empty list, in the expected order, of mappings `key_path -> expected value`; a record meets one when every condition holds. If a path yields several values (wildcard or JSON array), one matching element suffices; missing keys fail the record. An empty list or an entry that is not a non-empty mapping is an error. |
+| regex_match | `bool` | `False` | Treat string expected values as regexes searched (`re.search`) in `str(value)`; the value `"*"` then means "key exists". Without it, values are compared with type-sensitive `==`; `!re`/`!timestamp` tags always work. |
+| skip_malformed | `bool` | `True` | `True` (default) ignores lines that are not valid JSON; `False` makes the first malformed line an error. |
+| encoding | `str \| None` | `None` | `None` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
+
+**Outcomes:**
+- PASSED: each condition set is met by a record after the record that met the one before it (other records in between are ignored)
+- FAILED: the file was read and a condition set is met by no later record; the details name it and the earlier lines that meet it, if any
+- ERROR: the file does not exist; a glob matches no file or more than one
+- ERROR: the file cannot be read or decoded; an unknown `encoding`
+- ERROR: a malformed line with `skip_malformed` false
+- ERROR: `conditions` empty, not a list, or holding an entry that is no non-empty mapping
+- ERROR: an invalid regex or unknown placeholder
+
+**Limits:**
+- Each condition set takes the earliest record after the previous match, so two sets never share a record; when that fails no other choice of records passes either.
+- Line numbers in the details count from 1 and include blank and malformed lines.
+- A missing key fails the record. When a path selects several values (a wildcard or an array), one matching value is enough.
+- With `regex_match` string values are regexes searched (`re.search`) in `str(value)` and `"*"` means "key exists"; without it values compare with type-sensitive `==`.
+
+**Use cases:**
+- A sequence of events: A login, then a download, then a deletion of the same file, in an event log or NDJSON export, whatever else was logged in between.
+
+**Examples:**
+
+*a login, then a delete, then a logout* → PASSED
+
+```yaml
+tests:
+- name: a_login_then_a_delete_then_a_logout
+  function: jsonl.lines_in_order
+  parameter:
+    dst: /var/log/app/events.jsonl
+    conditions:
+    - {event: login, user.name: alice}
+    - {event: file_deleted, user.name: bob}
+    - {event: logout}
+```
+
+*a regex on a field* → PASSED
+
+```yaml
+tests:
+- name: a_regex_on_a_field
+  function: jsonl.lines_in_order
+  parameter:
+    dst: /var/log/app/events.jsonl
+    conditions:
+    - {event: file_deleted, path: '/home/alice/.*'}
+    - {event: file_deleted, path: '/home/bob/.*'}
+    regex_match: true
+```
+
+*a later record that only occurs earlier fails* → FAILED. The logout in line 6 comes after both deletes, so no delete follows it.
+
+```yaml
+tests:
+- name: a_later_record_that_only_occurs_earlier_fails
+  function: jsonl.lines_in_order
+  parameter:
+    dst: /var/log/app/events.jsonl
+    conditions:
+    - {event: logout}
+    - {event: file_deleted}
+```
+
+*a malformed line is an error when not skipped* → ERROR
+
+```yaml
+tests:
+- name: a_malformed_line_is_an_error_when_not_skipped
+  function: jsonl.lines_in_order
+  parameter:
+    dst: /var/log/app/events.jsonl
+    conditions:
+    - {event: login}
+    skip_malformed: false
+```
+
+*an empty list of conditions is an error* → ERROR
+
+```yaml
+tests:
+- name: an_empty_list_of_conditions_is_an_error
+  function: jsonl.lines_in_order
+  parameter:
+    dst: /var/log/app/events.jsonl
+    conditions: []
+```
+
+**Related:**
+- `jsonl.line_matches`: a record meets a condition set exactly as it meets `conditions` there
+
 ## `jsonl.value_in_any_line`
 
 tests if specified key path with expected value exists in any line of JSONL file
@@ -323,7 +441,7 @@ With `comparison_type` (`greater`, `less`, ...), `tolerance` or the time paramet
 
 asserts: exists, value, order · formats: jsonl · runs: guest agent, host test mode or hostside; dry-run on a local file · os: any
 
-**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Key paths into structured files (`key_path`), Regex values (!re) (`regex_tag`), Placeholders ({{ variable }}) (`placeholder`), Times as expected values (!timestamp) (`timestamp_tag`), Ordered comparison of numbers and times (`ordered_comparison`), Text encodings (`encoding`)
+**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Key paths into structured files (`key_path`), Regex values (!re) (`regex_tag`), Placeholders ({{ variable }}) (`placeholder`), Times as expected values (!timestamp) (`timestamp_tag`), Ordered comparison of numbers and times (`ordered_comparison`), Text encodings (`encoding`), Decoding a stored value (value_decode) (`value_decode`)
 
 **Not for:**
 - several fields of the same line → `jsonl.line_matches`
@@ -338,13 +456,15 @@ asserts: exists, value, order · formats: jsonl · runs: guest agent, host test 
 | regex_match | `bool` | `False` | Treat string expected values as regexes searched (`re.search`) in `str(value)`; the value `"*"` then means "key exists". Without it, values are compared with type-sensitive `==`; `!re`/`!timestamp` tags always work. |
 | skip_malformed | `bool` | `True` | `True` (default) ignores lines that are not valid JSON; `False` makes the first malformed line an error. |
 | encoding | `str \| None` | `None` | `None` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
-| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); a `!re` tag, `{{placeholder}}` or `regex_match` is then an error, and so is a value that is no number or timestamp. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
+| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); `!re` / `regex_match` are then errors, a lone `{{ name }}` is the saved variable; a value that is no number or timestamp is an error. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 | value_type | `str` | `'auto'` | `auto` (default; numbers if both sides are numbers, else timestamps), `number` or `timestamp`. Allowed: `auto`, `number`, `timestamp`. |
 | tolerance | `int \| float \| None` | `None` | Allowed difference for `equals`/`not_equals` (seconds for timestamps). |
 | time_format | `str \| None` | `None` | `strptime` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
 | timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of `1970`, `1601` or `2001`. Allowed: `1970`, `1601`, `2001`. |
 | timestamp_unit | `str \| None` | `None` | Unit of that count: `s` (default), `ms`, `us`, `ns` or `100ns`. Allowed: `s`, `ms`, `us`, `ns`, `100ns`. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (`+02:00`); default UTC. |
+| value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: `url` (percent-decoding), `base64`, `hex`, `utf16` (bytes as UTF-16 text), `json` (parse, then take `decoded_key_path`). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path, numeric indexes allowed); it must select one value. Required with `json`, an error without it. |
 
 **Outcomes:**
 - PASSED: at least one valid line has a value at `key_path` that matches `expected_value`
@@ -353,7 +473,7 @@ asserts: exists, value, order · formats: jsonl · runs: guest agent, host test 
 - ERROR: the file cannot be read or decoded; an unknown `encoding`
 - ERROR: a malformed line with `skip_malformed` false
 - ERROR: an invalid regex or unknown placeholder
-- ERROR: in ordered mode, a `!re` tag, placeholder or `regex_match`, bad ordered parameters, or a value in a line that is no number or timestamp
+- ERROR: in ordered mode, a `!re` tag or `regex_match`, text around a `{{ name }}` or a saved variable that is no number or time, bad ordered parameters, or a value in a line that is no number or timestamp
 
 **Limits:**
 - When a path selects several values (a wildcard or an array), one matching value is enough.

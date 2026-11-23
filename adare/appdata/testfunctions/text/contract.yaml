@@ -6,8 +6,8 @@ collection:
   title: Text
   summary: >-
     Counts content in any file: occurrences of a string or byte sequence in the raw bytes (binary
-    files included, in one or several encodings at once), and lines of a text file that contain a
-    string or match a regex. Absence is ``expected_count: 0``; a missing, unreadable or undecodable
+    files included, in one or several encodings at once), lines of a text file that contain a
+    string or match a regex, and the order of such lines. Absence is ``expected_count: 0``; a missing, unreadable or undecodable
     file is an error, never a pass.
 
 # Anchors for the example files (not read by the parser).
@@ -276,3 +276,88 @@ functions:
           content: 'deleted: ('
           regex_match: true
           expected_count: 0
+
+  lines_in_order:
+    asserts: [sequence, content]
+    formats: [text]
+    features: [archive_dst, glob_dst, encoding, placeholder]
+    unsupported:
+      regex_tag: 'A ``!re`` pattern is an error; write the regex as a plain string with ``regex: true``.'
+      timestamp_tag: A ``!timestamp`` pattern is an error.
+    not_for:
+      - goal: how often one pattern occurs, or that it is absent
+        use: text.line_count
+      - goal: the order of JSON Lines records by their fields
+        use: jsonl.lines_in_order
+      - goal: a pattern anywhere in the content, across lines
+        use: standard.file_content_matches_regex
+    related:
+      - use: text.line_count
+        why: the same line matching (substring or ``re.search``), but counts one pattern
+    outcomes:
+      passed: each pattern matches a line after the line the pattern before it matched (other lines in between are ignored)
+      failed: the file was read and a pattern matches no line after the previous match; the details name it and the earlier lines it matches, if any
+      error:
+        - the file does not exist; a glob matches no file or more than one
+        - the content is not valid in ``encoding``; an unknown ``encoding``
+        - '``patterns`` empty, not a list, or holding an empty or non-string entry; an invalid regex'
+        - a ``!re`` or ``!timestamp`` pattern
+    limits:
+      - Each pattern takes the earliest line after the previous match, so two patterns never share a line; when that fails no other choice of lines passes either.
+      - 'Lines end at ``\n``, ``\r\n`` or ``\r``; a pattern never spans two lines.'
+      - 'With ``regex: true`` every pattern is a regex searched in the line (``re.search``, unanchored); without it a pattern is a substring.'
+    use_cases:
+      - title: Events in a log, in order
+        text: A service started, then a file was opened, then it was deleted; other log lines between them do not matter.
+      - title: Steps of a history or journal file
+        text: An action sequence in a shell history or an application journal, each step after the one before.
+    examples:
+      - title: a delete before an open before an error
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: ['deleted: report-2025.pdf', 'opened: notes.txt', 'ERROR']
+      - title: regex patterns
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: ['deleted: .*\.pdf$', 'deleted: .*\.odt$']
+          regex: true
+      - title: ignoring case
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: [OPENED, error disk]
+          case_sensitive: false
+      - title: the right lines in the wrong order fail
+        text: '``opened`` is in line 2, but no ``report-2025.pdf`` line follows it; the details name line 1 as the earlier match.'
+        expect: failed
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: ['opened: notes.txt', 'deleted: report-2025.pdf']
+      - title: one line cannot match two patterns
+        expect: failed
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: [disk, full]
+      - title: a !re pattern is an error
+        expect: error
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: [!re 'deleted: .*']
+      - title: a missing file is an error
+        expect: error
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/other.log
+          patterns: [deleted]

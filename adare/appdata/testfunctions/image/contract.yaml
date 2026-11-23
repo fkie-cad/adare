@@ -181,7 +181,7 @@ functions:
         - not an image, or corrupt EXIF data
         - an unknown tag name or a tag number out of range
         - an invalid regex or unknown placeholder; a ``wildcard_mode`` other than ``any`` / ``all``
-        - in ordered mode, a value or ``expected_value`` that is no number or timestamp, or a ``!re`` / placeholder / ``regex_match`` with it
+        - in ordered mode, a value or ``expected_value`` that is no number or timestamp, or a ``!re`` or ``regex_match`` with it, text around a ``{{ name }}`` or a saved variable that is no number or time
     limits:
       - 'Values compare by text form: text as stored without trailing NULs; integers in decimal; rationals and floats as decimals (``72``, ``2.8``, ``0.004``; ``nan`` for x/0); sequences joined with ``", "`` (GPS ``51, 30, 12.5``); bytes as text when printable UTF-8, else lowercase hex.'
       - 'The user comment (0x9286) is compared without its 8-byte charset prefix; the UTF-16 title/comment/author/keywords/subject tags (0x9C9B-0x9C9F) decoded.'

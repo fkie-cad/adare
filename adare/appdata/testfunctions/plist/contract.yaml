@@ -91,7 +91,7 @@ functions:
   value_matches:
     asserts: [value, order]
     formats: [plist]
-    features: [archive_dst, glob_dst, key_path, wildcard_mode, regex_tag, placeholder, timestamp_tag, ordered_comparison]
+    features: [archive_dst, glob_dst, key_path, wildcard_mode, regex_tag, placeholder, timestamp_tag, ordered_comparison, value_decode]
     not_for:
       - goal: a key or value is absent
         use: plist.value_count
@@ -104,7 +104,7 @@ functions:
         - the file does not exist or is a directory; a glob matches no file or more than one
         - the content is no valid plist
         - an invalid regex or placeholder; an invalid ``wildcard_mode``
-        - in ordered mode, a value that is no number or timestamp, or a ``!re`` / placeholder / ``regex_match`` with it
+        - in ordered mode, a value that is no number or timestamp, or a ``!re`` or ``regex_match`` with it, text around a ``{{ name }}`` or a saved variable that is no number or time
         - bad ordered parameters (``comparison_type``, ``value_type``, ``timestamp_epoch``, ...)
     limits:
       - 'Equality is Python ``==`` and type-sensitive: ``41`` is not ``''41''``. ``!re``, placeholders and ``regex_match`` compare ``str(value)``.'
@@ -275,7 +275,7 @@ functions:
   values_compare:
     asserts: [compare, order]
     formats: [plist]
-    features: [archive_dst, glob_dst, key_path, ordered_comparison]
+    features: [archive_dst, glob_dst, key_path, ordered_comparison, value_decode, other_dst]
     unsupported:
       wildcard_mode: Each key path must select exactly one value (a one-element array counts as its element); several are an error.
       regex_tag: Values compare as numbers or times only; test text with plist.value_matches.

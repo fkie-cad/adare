@@ -5,7 +5,7 @@ Text
    :class: status-tested
 
 :Status: :status-tested:`● Tested`
-:Functions: 2
+:Functions: 3
 :Category: Text and Binary Content
 
 .. adare-testfunction-collection:: text
@@ -28,3 +28,4 @@ Test Functions
 
    occurrence_count
    line_count
+   lines_in_order

@@ -32,7 +32,7 @@ asserts: value, order · formats: excel · runs: guest agent, host test mode or 
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Compared exactly with `str(expected_value)` (`None` -> `''`). A single `!re`/`!timestamp` tag is matched by type. |
 | sheet | `str \| int` | `0` | Sheet name (str) or 0-based sheet index (int); unknown sheets fail. |
 | regex_match | `bool` | `False` | Treat `expected_value` as a regex searched in the cell value (`re.search`, unanchored; `^...$` for the whole value); an invalid regex is an error. |
-| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); a `!re` tag, `{{placeholder}}` or `regex_match` is then an error, and so is a value that is no number or timestamp. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
+| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); `!re` / `regex_match` are then errors, a lone `{{ name }}` is the saved variable; a value that is no number or timestamp is an error. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 | value_type | `str` | `'auto'` | `auto` (default; numbers if both sides are numbers, else timestamps), `number` or `timestamp`. Allowed: `auto`, `number`, `timestamp`. |
 | tolerance | `int \| float \| None` | `None` | Allowed difference for `equals`/`not_equals` (seconds for timestamps). |
 | time_format | `str \| None` | `None` | `strptime` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
@@ -48,7 +48,7 @@ asserts: value, order · formats: excel · runs: guest agent, host test mode or 
 - ERROR: the file cannot be read or is no valid .xlsx workbook
 - ERROR: an invalid regex or unknown placeholder; more than one placeholder in `expected_value`
 - ERROR: a cell or `expected_value` that is no number or timestamp for an ordered comparison
-- ERROR: `!re`, `{{placeholder}}` or `regex_match` combined with an ordered comparison, or other bad comparison parameters
+- ERROR: `!re` or `regex_match` combined with an ordered comparison, text around a `{{ name }}`, a saved variable that is no number or time, or other bad comparison parameters
 
 **Limits:**
 - Cells compare as strings: numbers via `str()` (`5.0` when every cell of the row is a number), dates as `2024-01-31 00:00:00` (or `2024-01-31T00:00:00` when every cell of the row is a date). Use `!re` or an ordered comparison when unsure.

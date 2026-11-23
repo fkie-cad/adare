@@ -18,8 +18,12 @@ Stubbed (the narrowest layers that need a VM or an installed ADARE home):
 """
 
 import asyncio
+import datetime
 import io
 import json
+import sqlite3
+import struct
+import tempfile
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -31,9 +35,10 @@ from adare.backend.experiment.execution import base as execution_base
 from adare.backend.experiment.execution import test_actions
 from adare.backend.experiment.variable_resolver import VariableResolver
 from adare.backend.hostside.guestfs import GuestFileNotFound, GuestFS, PatchedGuestFS, StagedOp
-from adare.backend.hostside.testing import HostsideTestExecutor
+from adare.backend.hostside.testing import GuestFSFileProxy, HostsideTestExecutor
 from adare.types.playbook import ActionTestAction, parse_playbook
 from adarelib.common.automatic_variables import AutomaticVariables
+from adarelib.common.variables import Variable, VariableType
 from adarelib.constants import StatusEnum
 from adarelib.testset.testfunction import import_basictest_subclasses
 
@@ -62,18 +67,53 @@ def _zip(members: dict[str, bytes]) -> bytes:
     return buf.getvalue()
 
 
+def _wal_database() -> tuple[bytes, bytes]:
+    """(main file, -wal) of a WAL database: row 1 checkpointed, rows 2 and 3 only in the -wal."""
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / 'state.db'
+        conn = sqlite3.connect(str(db))
+        try:
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute('PRAGMA wal_autocheckpoint=0')
+            conn.execute('CREATE TABLE items (id INTEGER, name TEXT)')
+            conn.execute("INSERT INTO items VALUES (1, 'alpha')")
+            conn.commit()
+            conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+            for i, name in ((2, 'beta'), (3, 'gamma')):  # one transaction each
+                conn.execute('INSERT INTO items VALUES (?, ?)', (i, name))
+                conn.commit()
+            return db.read_bytes(), Path(f'{db}-wal').read_bytes()
+        finally:
+            conn.close()
+
+
+WAL_DB, WAL_LOG = _wal_database()
+# a container header: magic, u16be version, u32be record count
+HEADER_BIN = b'CNTR' + struct.pack('>HI', 3, 42)
+
 GUEST_FILES = {
     '/home/user/data/settings.json': json.dumps(DOC).encode(),
     '/home/user/logs/a.log': b'one\n',
     '/home/user/logs/b.log': b'two\n',
     '/home/user/logs/c.txt': b'not a log\n',
     '/home/user/notes.txt': b'secret token, another secret, SECRET',
-    '/home/user/backup.zip': _zip({'conf/app.json': json.dumps({'version': '2.4.1'}).encode()}),
+    '/home/user/backup.zip': _zip(
+        {
+            'conf/app.json': json.dumps({'version': '2.4.1'}).encode(),
+            'conf/stats.json': json.dumps({'first_ms': UNIX_S * 1000 + 1}).encode(),
+        }
+    ),
+    '/home/user/data/settings.before.json': json.dumps({'items': DOC['items'][:2] + [{'ms': UNIX_S * 1000}]}).encode(),
+    '/home/user/data/state.db': WAL_DB,
+    '/home/user/data/state.db-wal': WAL_LOG,
+    '/home/user/blobs.zip': _zip({'data/header.bin': HEADER_BIN}),
 }
 
 PLAYBOOK = """
 variables:
   build: "2.4"
+  cutoff: !timestamp {timestamp: '2024-01-02T03:00:00Z'}
+  late_cutoff: !timestamp {timestamp: '2024-01-02T03:10:00Z'}
 actions: []
 tests:
   - name: json_count_regex
@@ -164,6 +204,84 @@ tests:
       dst: /home/user/gone.zip!/conf/app.json
       key_path: version
       expected_value: 2.4.1
+  - name: saved_variable_ordered
+    function: json.value_matches
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[0].ms
+      expected_value: "{{ ms_before }}"
+      comparison_type: greater
+  - name: saved_timestamp_ordered
+    function: json.value_matches
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[0].ms
+      expected_value: "{{ started }}"
+      comparison_type: greater
+      timestamp_epoch: 1970
+      timestamp_unit: ms
+  - name: declared_timestamp_ordered
+    function: json.value_matches
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[0].ts
+      expected_value: "{{ cutoff }}"
+      comparison_type: greater
+      timestamp_epoch: 1601
+      timestamp_unit: 100ns
+  - name: declared_timestamp_ordered_later
+    function: json.value_matches
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[0].ts
+      expected_value: "{{ late_cutoff }}"
+      comparison_type: greater
+      timestamp_epoch: 1601
+      timestamp_unit: 100ns
+  - name: values_compare_other_dst
+    function: json.values_compare
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[2].ms
+      other_dst: /home/user/data/settings.before.json
+      other_key_path: items[2].ms
+      comparison_type: greater
+  - name: values_compare_other_archive_member
+    function: json.values_compare
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[0].ms
+      other_dst: /home/user/backup.zip!/conf/stats.json
+      other_key_path: first_ms
+      comparison_type: less
+  - name: sqlite_wal_added
+    function: sqlite.row_count
+    parameter:
+      dst: /home/user/data/state.db
+      query: SELECT id FROM items
+      view: wal_added
+      expected_count: 2
+  - name: sqlite_main_file
+    function: sqlite.row_count
+    parameter:
+      dst: /home/user/data/state.db
+      query: SELECT id FROM items
+      view: main_file
+      expected_count: 1
+  - name: wal_frames_of_the_wal_itself
+    function: sqlite.wal_frame_count
+    parameter:
+      dst: /home/user/data/state.db-wal
+      frames: commits
+      expected_count: 2
+  - name: struct_value_in_archive_member
+    function: binary.struct_value_matches
+    parameter:
+      dst: /home/user/blobs.zip!/data/header.bin
+      offset: 6
+      value_format: u32be
+      expected_value: 40
+      comparison_type: greater
 """
 
 
@@ -229,8 +347,15 @@ def chain(tmp_path, monkeypatch, collection):
     actions.set_test_execution_mode(execution_base.TestExecutionMode.HOST)
     actions.set_guest_to_host_test_executor(executor)
 
-    def run(name):
-        return asyncio.run(actions.execute_test(ActionTestAction(name=name), None, None))
+    def run(name, context=None, saved_timestamps=None):
+        """``context``: what save_variable / command capture put in the execution context;
+        ``saved_timestamps``: {variable: unix seconds} saved as execute_save_timestamp saves them."""
+        context = dict(context or {})
+        for variable, unix_s in (saved_timestamps or {}).items():
+            context[variable] = unix_s
+            moment = datetime.datetime.fromtimestamp(unix_s, datetime.UTC)
+            playbook.variables.add(variable, Variable(moment, VariableType.TIMESTAMP, metadata={'timezone': 'UTC'}))
+        return asyncio.run(actions.execute_test(ActionTestAction(name=name), None, None, execution_context=context))
 
     yield run
     executor.cleanup()
@@ -257,6 +382,14 @@ def _status(result):
         ('archive_member_missing', StatusEnum.ERROR),
         ('missing_file', StatusEnum.ERROR),
         ('missing_archive', StatusEnum.ERROR),
+        ('declared_timestamp_ordered', StatusEnum.SUCCESS),
+        ('declared_timestamp_ordered_later', StatusEnum.FAILED),
+        ('values_compare_other_dst', StatusEnum.SUCCESS),
+        ('values_compare_other_archive_member', StatusEnum.SUCCESS),
+        ('sqlite_wal_added', StatusEnum.SUCCESS),
+        ('sqlite_main_file', StatusEnum.SUCCESS),
+        ('wal_frames_of_the_wal_itself', StatusEnum.SUCCESS),
+        ('struct_value_in_archive_member', StatusEnum.SUCCESS),
     ],
 )
 def test_playbook_test_verdict(chain, name, status):
@@ -319,3 +452,96 @@ def test_dst_is_restored_after_the_run(chain, monkeypatch):
     chain('occurrences')
 
     assert [i.parameter.dst for i in instances] == ['/home/user/backup.zip!/conf/app.json', '/home/user/notes.txt']
+
+
+def _guest_access(monkeypatch):
+    """Record the guest paths pulled and probed through the GuestFS proxy."""
+    seen = {'pulled': [], 'probed': []}
+    original_pull = GuestFSFileProxy.pull_file
+    original_exists = GuestFSFileProxy.file_exists
+
+    async def pull_file(self, guest_path, force=False):
+        seen['pulled'].append(guest_path)
+        return await original_pull(self, guest_path, force=force)
+
+    async def file_exists(self, guest_path):
+        seen['probed'].append(guest_path)
+        return await original_exists(self, guest_path)
+
+    monkeypatch.setattr(GuestFSFileProxy, 'pull_file', pull_file)
+    monkeypatch.setattr(GuestFSFileProxy, 'file_exists', file_exists)
+    return seen
+
+
+def test_wal_view_pulls_the_database_and_its_wal_once(chain, monkeypatch):
+    seen = _guest_access(monkeypatch)
+
+    assert _status(chain('sqlite_wal_added')) == StatusEnum.SUCCESS
+    assert sorted(seen['pulled']) == ['/home/user/data/state.db', '/home/user/data/state.db-wal']
+
+
+def test_wal_given_as_dst_has_no_companion_probes(chain, monkeypatch):
+    seen = _guest_access(monkeypatch)
+
+    assert _status(chain('wal_frames_of_the_wal_itself')) == StatusEnum.SUCCESS
+    assert seen['pulled'] == ['/home/user/data/state.db-wal']
+    assert not [p for p in seen['probed'] if p.endswith(('-wal-wal', '-wal-journal'))]
+
+
+def test_values_compare_pulls_both_files(chain, monkeypatch):
+    seen = _guest_access(monkeypatch)
+
+    result = chain('values_compare_other_dst')
+
+    assert _status(result) == StatusEnum.SUCCESS, result.message
+    assert sorted(seen['pulled']) == ['/home/user/data/settings.before.json', '/home/user/data/settings.json']
+
+
+def test_other_dst_is_restored_after_the_run(chain, monkeypatch):
+    instances = []
+    original = HostsideTestExecutor.execute_test
+
+    async def spy(self, test_name, test_function, test_instance):
+        instances.append(test_instance)
+        return await original(self, test_name, test_function, test_instance)
+
+    monkeypatch.setattr(HostsideTestExecutor, 'execute_test', spy)
+
+    chain('values_compare_other_archive_member')
+
+    assert instances[0].parameter.other_dst == '/home/user/backup.zip!/conf/stats.json'
+
+
+def test_values_compare_details_name_guest_paths(chain):
+    details = ' '.join(chain('values_compare_other_archive_member').data['result']['details'])
+
+    assert '/home/user/data/settings.json' in details and '/home/user/backup.zip!/conf/stats.json' in details
+    assert 'adare_hostside_test_' not in details
+
+
+def test_saved_variable_reaches_an_ordered_comparison(chain):
+    """save_variable / capture values are filled in before the test runs; unset is an ERROR."""
+    assert _status(chain('saved_variable_ordered', {'ms_before': UNIX_S * 1000 - 1})) == StatusEnum.SUCCESS
+    assert _status(chain('saved_variable_ordered', {'ms_before': UNIX_S * 1000})) == StatusEnum.FAILED
+    assert _status(chain('saved_variable_ordered')) == StatusEnum.ERROR
+
+
+def test_saved_timestamp_reaches_an_ordered_comparison(chain, monkeypatch):
+    """A save_timestamp variable arrives as a placeholder with timestamp metadata and is compared in order."""
+    seen = {}
+    original = HostsideTestExecutor.execute_test
+
+    async def spy(self, test_name, test_function, test_instance):
+        seen['expected_value'] = test_instance.parameter.expected_value
+        seen['metadata'] = dict(test_instance.variable_metadata or {})
+        return await original(self, test_name, test_function, test_instance)
+
+    monkeypatch.setattr(HostsideTestExecutor, 'execute_test', spy)
+
+    before = chain('saved_timestamp_ordered', saved_timestamps={'started': UNIX_S - 60})
+    after = chain('saved_timestamp_ordered', saved_timestamps={'started': UNIX_S + 60})
+
+    assert _status(before) == StatusEnum.SUCCESS, before.data['result']['details']
+    assert _status(after) == StatusEnum.FAILED, after.data['result']['details']
+    placeholder = seen['expected_value'].strip('{} ')
+    assert seen['metadata'][placeholder]['type'] == 'timestamp'

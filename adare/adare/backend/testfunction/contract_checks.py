@@ -21,6 +21,8 @@ from adare.backend.testfunction.contract import (
 # A file test (one that reads ``dst``) must say whether it reads archive members and globs.
 _FILE_CATEGORIES = ('FILE_BASED', 'FILE_CONTENT')
 _DECLARE_FOR_DST = ('archive_dst', 'glob_dst')
+# A parameter that is the feature itself: the function must list that feature.
+_FEATURE_PARAMS = (('expected_count', 'count_comparison'), ('value_decode', 'value_decode'), ('other_dst', 'other_dst'))
 
 
 def _literal(value: Any) -> bool:
@@ -56,8 +58,9 @@ def _declaration_problems(entry: CatalogEntry, contract: Contract) -> list[str]:
                 problems.append(
                     f'{entry.dotnotation}: reads dst but does not declare `{feature}` (features or unsupported)'
                 )
-    if 'expected_count' in params and 'count_comparison' not in contract.features:
-        problems.append(f'{entry.dotnotation}: has expected_count but not the `count_comparison` feature')
+    for param, feature in _FEATURE_PARAMS:
+        if param in params and feature not in contract.features:
+            problems.append(f'{entry.dotnotation}: has {param} but not the `{feature}` feature')
     return problems
 
 

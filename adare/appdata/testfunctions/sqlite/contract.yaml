@@ -6,8 +6,10 @@ collection:
   title: SQLite
   summary: >-
     SQL queries on SQLite databases and the write-ahead log (``-wal``) next to them: the rows a
-    query returns, how many there are, which rows live only in the WAL, and how many frames and
-    transactions the WAL holds. The original files are never opened by SQLite: the database and
+    query returns, how many there are, which rows live only in the WAL, the state after each
+    transaction in the WAL, two query values compared with each other (also across databases),
+    how many frames and transactions the WAL holds, and deleted data left in the free space of
+    the database file. The original files are never opened by SQLite: the database and
     its ``-wal`` / ``-journal`` are copied once and the copy is queried, so uncheckpointed changes
     are seen, the evidence is not modified and every result names the SHA-256 of the bytes read.
 
@@ -33,6 +35,25 @@ fixtures:
     fixture: sqlite_wal/app.db
   wal_log: &wal_log
     fixture: sqlite_wal/app.db-wal
+  # notes: row 2 deleted with secure_delete off, so its bytes stay in the page's free space
+  deleted_note: &deleted_note
+    sqlite:
+      - PRAGMA secure_delete = OFF
+      - CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT)
+      - INSERT INTO notes VALUES (1, 'kept-note'), (2, 'deleted-note-title')
+      - DELETE FROM notes WHERE id = 2
+  # the same delete with secure_delete on: the freed bytes are zeroed
+  erased_note: &erased_note
+    sqlite:
+      - PRAGMA secure_delete = ON
+      - CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT)
+      - INSERT INTO notes VALUES (1, 'kept-note'), (2, 'deleted-note-title')
+      - DELETE FROM notes WHERE id = 2
+  # a document with two Unix times in seconds: created 2026-01-01T11:00:00Z, modified 90 s later
+  documents: &documents
+    sqlite:
+      - CREATE TABLE documents (name TEXT, created INTEGER, modified INTEGER)
+      - INSERT INTO documents VALUES ('report.txt', 1767265200, 1767265290)
 
 functions:
   query_result:
@@ -44,8 +65,10 @@ functions:
         use: sqlite.row_count
       - goal: how many frames or transactions the write-ahead log holds
         use: sqlite.wal_frame_count
-      - goal: a value in deleted records, free pages or stale WAL frames that no query returns
-        use: text.occurrence_count
+      - goal: a value in deleted records or free pages that no query returns
+        use: sqlite.free_space_pattern_count
+      - goal: a query value compared with another query value, another view or another database
+        use: sqlite.values_compare
     related:
       - use: sqlite.row_count
         why: the same query and views, but asserts the number of rows only
@@ -66,9 +89,9 @@ functions:
       - Differences (``wal_added`` / ``wal_removed``) compare whole rows; select identifying columns, a changed row appears in both.
       - '``dst`` inside an archive (``backup.zip!/app/data.db``) also extracts the ``-wal`` / ``-journal`` members next to it, so the views work there too.'
       - The rows read are reported in the details, cut after 2000 characters.
+      - '``view`` is ``current``, ``main_file``, ``wal_added``, ``wal_removed`` or ``commit:N`` (the state after the N-th transaction in the ``-wal``; ``commit:-1`` the last, ``commit:0`` the main file). An N out of range is an error.'
     choices:
       comparison_type: [equals, greater, less, greater_equal, less_equal]
-      view: [current, main_file, wal_added, wal_removed]
     use_cases:
       - title: A record was written
         text: A history entry, bookmark or setting row with the expected values after an action.
@@ -172,8 +195,10 @@ functions:
         use: sqlite.query_result
       - goal: how many frames or transactions the write-ahead log holds
         use: sqlite.wal_frame_count
-      - goal: a value anywhere in the raw database bytes, including freed pages
-        use: text.occurrence_count
+      - goal: deleted rows still in the database file's free space
+        use: sqlite.free_space_pattern_count
+      - goal: the count in one view against the count in another (one row more in the WAL)
+        use: sqlite.values_compare
     related:
       - use: sqlite.query_result
         why: the same query and views, and checks the returned rows themselves
@@ -189,9 +214,9 @@ functions:
       - Every returned row counts, so ``SELECT COUNT(*)`` returns one row; select the rows themselves.
       - Differences (``wal_added`` / ``wal_removed``) compare whole rows; select identifying columns, a changed row appears in both.
       - '``dst`` inside an archive also extracts the ``-wal`` / ``-journal`` members next to it.'
+      - '``view`` is ``current``, ``main_file``, ``wal_added``, ``wal_removed`` or ``commit:N`` (the state after the N-th transaction in the ``-wal``; ``commit:-1`` the last, ``commit:0`` the main file). An N out of range is an error.'
     choices:
       comparison_type: [equals, greater, less, greater_equal, less_equal]
-      view: [current, main_file, wal_added, wal_removed]
     use_cases:
       - title: Record created exactly once
         text: An action must add one row (one history entry, one bookmark), not zero and not two.
@@ -260,6 +285,26 @@ functions:
           query: SELECT id FROM items WHERE name = 'removed-entry'
           expected_count: 1
           view: main_file
+      - title: the deleted entry was still there after the first transaction
+        text: '``commit:1`` replays the ``-wal`` through its first transaction (the insert), before the delete.'
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id FROM items WHERE name = 'removed-entry'
+          expected_count: 1
+          view: commit:1
+      - title: a commit the WAL does not hold is an error
+        expect: error
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id FROM items
+          expected_count: 1
+          view: commit:5
       - title: but gone in the current state
         files:
           /home/user/app/data.db: *wal_db
@@ -367,3 +412,229 @@ functions:
         parameter:
           dst: /home/user/app/data.db
           expected_count: 0
+
+  values_compare:
+    asserts: [compare, order]
+    formats: [sqlite]
+    features: [archive_dst, glob_dst, sqlite_view, ordered_comparison, other_dst]
+    not_for:
+      - goal: one query value against a constant
+        use: sqlite.query_result
+      - goal: how many rows a query returns
+        use: sqlite.row_count
+    related:
+      - use: sqlite.query_result
+        why: the same snapshot and views, for the rows themselves
+      - use: sqlite.wal_frame_count
+        why: how many transactions ``commit:N`` can choose from
+    outcomes:
+      passed: 'the value ``query`` returns relates to the value ``other_query`` returns, plus ``offset``, as ``comparison_type`` says'
+      failed:
+        - a query returns no row
+        - the queries ran and the comparison does not hold
+      error:
+        - a database does not exist; a glob matches no file or more than one
+        - a query returns more than one row; an SQL error; an empty ``query``
+        - a value that is no number or timestamp (NULL, a BLOB, text that is no time)
+        - an unknown ``view``, or ``commit:N`` out of range
+        - bad comparison parameters (``comparison_type``, ``value_type``, ``timestamp_epoch``, ...)
+    limits:
+      - Each side is the first column of the single row its query returns. ``other_query`` defaults to ``query``, ``other_view`` to ``view``, ``other_dst`` to ``dst``.
+      - With one database both sides come from one snapshot, so they show the same moment; ``other_dst`` gets its own snapshot.
+      - '``offset`` is added to the second value (seconds for timestamps): ``first <comparison_type> second + offset``.'
+      - '``view`` and ``other_view`` are ``current``, ``main_file`` or ``commit:N``; the differences ``wal_added`` / ``wal_removed`` are not values.'
+      - Two text values cannot be compared; numbers and times only.
+    choices:
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+    use_cases:
+      - title: The WAL adds exactly one row
+        text: '``SELECT count(*)`` on ``view: current`` equal to ``other_view: main_file`` with ``offset: 1``, in one check.'
+      - title: How a value changed between two transactions
+        text: '``view: commit:2`` against ``other_view: commit:1``.'
+      - title: Two times of one record in order
+        text: A modification time after the creation time, with ``other_query`` on the other column.
+      - title: Before and after an action
+        text: '``other_dst`` on a copy of the database a ``command`` action made before the action under test.'
+    examples:
+      - title: the WAL adds exactly one matching row
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT count(*) FROM items WHERE name = 'example'
+          view: current
+          other_view: main_file
+          offset: 1
+      - title: fewer rows after the second transaction than after the first
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT count(*) FROM items
+          view: commit:1
+          other_view: commit:2
+          comparison_type: greater
+      - title: modified after created, as times
+        files:
+          /home/user/docs/index.db: *documents
+        parameter:
+          dst: /home/user/docs/index.db
+          query: SELECT modified FROM documents WHERE name = 'report.txt'
+          other_query: SELECT created FROM documents WHERE name = 'report.txt'
+          comparison_type: greater
+          value_type: timestamp
+          timestamp_epoch: 1970
+      - title: within two minutes of each other
+        files:
+          /home/user/docs/index.db: *documents
+        parameter:
+          dst: /home/user/docs/index.db
+          query: SELECT modified FROM documents
+          other_query: SELECT created FROM documents
+          value_type: timestamp
+          timestamp_epoch: 1970
+          tolerance: 120
+      - title: against a copy made before the action
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+          /tmp/before/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT max(id) FROM items
+          other_dst: /tmp/before/data.db
+          comparison_type: greater
+      - title: equal counts fail when the WAL added a row
+        expect: failed
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT count(*) FROM items WHERE name = 'example'
+          other_view: main_file
+      - title: no row fails
+        expect: failed
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id FROM items WHERE name = 'missing'
+          other_query: SELECT id FROM items WHERE name = 'example'
+      - title: several rows are an error
+        text: Each query must return exactly one row; aggregate (``count(*)``, ``max(...)``) or add a ``WHERE``.
+        expect: error
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id FROM items
+      - title: a text value is an error
+        expect: error
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT name FROM items WHERE id = 1
+
+  free_space_pattern_count:
+    asserts: [count, absent, content]
+    formats: [sqlite]
+    features: [archive_dst, glob_dst, count_comparison, encoding, negative]
+    unsupported:
+      regex_tag: 'A ``!re`` or ``!timestamp`` pattern is an error; use ``pattern_type: regex`` with a plain string.'
+      sqlite_view: '``view`` is ``main_file`` or ``current`` (the ``-wal`` checkpointed into a copy) only; no ``wal_added`` / ``wal_removed`` / ``commit:N``.'
+    not_for:
+      - goal: whether a query still returns the row
+        use: sqlite.row_count
+      - goal: a pattern anywhere in the file, live rows included
+        use: binary.pattern_count
+      - goal: content of stale frames in the write-ahead log
+        use: text.occurrence_count
+    related:
+      - use: sqlite.row_count
+        why: '``expected_count: 0`` that the row is gone, next to this test that its bytes remain'
+    outcomes:
+      passed: the occurrences of ``pattern`` in the chosen free space satisfy ``comparison_type``
+      failed: the file was parsed and the count comparison does not hold
+      error:
+        - the database does not exist; a glob matches no file or more than one
+        - the database files cannot be copied or read
+        - 'a corrupt header, or a broken freelist or freeblock chain (a pointer out of range, a cycle, a freelist count that does not match the header): the free space could not be located'
+        - '``view: current`` and SQLite cannot checkpoint the copy'
+        - an empty ``pattern``; invalid escapes, hex or regex; a ``!re`` / ``!timestamp`` pattern
+        - an unknown ``region``, ``view``, ``pattern_type`` or ``encoding``; a negative or non-integer ``expected_count``; an unknown ``comparison_type``
+    limits:
+      - 'The file is parsed per the SQLite file format, without SQLite: freelist pages (with the overflow pages of a deleted large row), freeblocks inside b-tree pages, and the unallocated space of each b-tree page. Live rows are never counted.'
+      - Occurrences are counted per region, so a match never spans two regions. The details list the matching pages and regions (absolute file offsets) and the size of each kind of free space.
+      - Freeing a cell overwrites its first 4 bytes (the freeblock header), and later writes reuse free space; search for a part of the deleted value that is long enough to be unique.
+      - '``PRAGMA secure_delete`` (on in some builds) zeroes freed space, so ``expected_count: 0`` proves the delete erased it.'
+      - '``pattern_type: regex`` is an ASCII regular expression over the raw bytes; empty matches are not counted.'
+    choices:
+      pattern_type: [text, bytes, hex, regex]
+      region: [all, freelist, freeblocks, unallocated]
+      view: [main_file, current]
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: A deleted record is still recoverable
+        text: '``comparison_type: greater_equal`` with ``expected_count: 1`` in the free space, while sqlite.row_count no longer returns the row.'
+      - title: A delete erased the data
+        text: '``expected_count: 0``, as with ``PRAGMA secure_delete`` or after a ``VACUUM``.'
+    examples:
+      - title: a deleted title is still in the free space
+        files:
+          /home/user/app/notes.db: *deleted_note
+        parameter:
+          dst: /home/user/app/notes.db
+          pattern: deleted-note-title
+          expected_count: 1
+          comparison_type: greater_equal
+      - title: a live row is not free space
+        files:
+          /home/user/app/notes.db: *deleted_note
+        parameter:
+          dst: /home/user/app/notes.db
+          pattern: kept-note
+          expected_count: 0
+      - title: a regex over the raw bytes
+        files:
+          /home/user/app/notes.db: *deleted_note
+        parameter:
+          dst: /home/user/app/notes.db
+          pattern: 'deleted-[a-z]+-title'
+          pattern_type: regex
+          expected_count: 1
+          comparison_type: greater_equal
+      - title: secure_delete erased it
+        files:
+          /home/user/app/notes.db: *erased_note
+        parameter:
+          dst: /home/user/app/notes.db
+          pattern: deleted-note-title
+          expected_count: 0
+      - title: recoverable data fails an erase check
+        expect: failed
+        files:
+          /home/user/app/notes.db: *deleted_note
+        parameter:
+          dst: /home/user/app/notes.db
+          pattern: deleted-note-title
+          expected_count: 0
+      - title: an empty pattern is an error
+        expect: error
+        files:
+          /home/user/app/notes.db: *deleted_note
+        parameter:
+          dst: /home/user/app/notes.db
+          pattern: ''
+      - title: a file that is no database is an error
+        expect: error
+        files:
+          /home/user/app/notes.db:
+            text: not an sqlite database
+        parameter:
+          dst: /home/user/app/notes.db
+          pattern: deleted-note-title

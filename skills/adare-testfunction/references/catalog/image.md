@@ -228,7 +228,7 @@ asserts: exists, value, order · formats: image · runs: guest agent, host test 
 | **expected_value** | `str \| int \| float \| bool` |  | Compared with the value's text form: text as stored (trailing NULs removed); integers in decimal; rationals and floats as decimals (`72`, `2.8`, `0.004`; `nan` for x/0); sequences joined with `", "` (GPS `51, 30, 12.5`); bytes as text when printable UTF-8, else lowercase hex; the user comment without its 8-byte charset prefix; the UTF-16 title/comment tags (0x9C9B-0x9C9F) decoded. A YAML number is formatted the same way (write a sequence as text, `51, 30, 12.5`); a `!re`/`!timestamp` tag or `{{placeholder}}` is matched by type. |
 | regex_match | `bool` | `False` | Search `expected_value` as a Python regex (`re.search`, unanchored). An invalid regex is an error. |
 | wildcard_mode | `str` | `'any'` | With the tag in several IFDs, `any` (default): one occurrence must match; `all`: every one must match. Other values are an error. Allowed: `any`, `all`. |
-| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); a `!re` tag, `{{placeholder}}` or `regex_match` is then an error, and so is a value that is no number or timestamp. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
+| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); `!re` / `regex_match` are then errors, a lone `{{ name }}` is the saved variable; a value that is no number or timestamp is an error. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 | value_type | `str` | `'auto'` | `auto` (default; numbers if both sides are numbers, else timestamps), `number` or `timestamp`. Allowed: `auto`, `number`, `timestamp`. |
 | tolerance | `int \| float \| None` | `None` | Allowed difference for `equals`/`not_equals` (seconds for timestamps). |
 | time_format | `str \| None` | `None` | `strptime` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
@@ -243,7 +243,7 @@ asserts: exists, value, order · formats: image · runs: guest agent, host test 
 - ERROR: not an image, or corrupt EXIF data
 - ERROR: an unknown tag name or a tag number out of range
 - ERROR: an invalid regex or unknown placeholder; a `wildcard_mode` other than `any` / `all`
-- ERROR: in ordered mode, a value or `expected_value` that is no number or timestamp, or a `!re` / placeholder / `regex_match` with it
+- ERROR: in ordered mode, a value or `expected_value` that is no number or timestamp, or a `!re` or `regex_match` with it, text around a `{{ name }}` or a saved variable that is no number or time
 
 **Limits:**
 - Values compare by text form: text as stored without trailing NULs; integers in decimal; rationals and floats as decimals (`72`, `2.8`, `0.004`; `nan` for x/0); sequences joined with `", "` (GPS `51, 30, 12.5`); bytes as text when printable UTF-8, else lowercase hex.

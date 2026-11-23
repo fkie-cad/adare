@@ -6,7 +6,7 @@ One line per testfunction: `name` [asserts · formats] use for. Prefer `adare te
 read `catalog/<collection>.md` (or `adare test info <name>`) for parameters, outcomes, limits and
 examples, and `features.md` (or `adare test feature <id>`) for shared syntax.
 
-**Assertion kinds:** `exists` a file, folder, key, row, element or entry is present, `absent` something is gone or was never written (a negative test, INCONCLUSIVE without proof of the act), `value` a value equals or matches an expected value (exact, regex, placeholder), `count` how many times something occurs or how many items there are, `order` a number or point in time is greater, less or within a tolerance of another, `compare` two files, sheets or values of one file are compared with each other, `content` the raw content or bytes of a file (contains, equals, regex, hash, size), `metadata` file system metadata (timestamps, permissions, owner), `state` live state of the guest system (service, process, user, registry), `ui` what is visible on the screen
+**Assertion kinds:** `exists` a file, folder, key, row, element or entry is present, `absent` something is gone or was never written (a negative test, INCONCLUSIVE without proof of the act), `value` a value equals or matches an expected value (exact, regex, placeholder), `count` how many times something occurs or how many items there are, `order` a number or point in time is greater, less or within a tolerance of another, `sequence` lines or records occur in a given order (one after the other, others in between allowed), `compare` two files, sheets or values of one file are compared with each other, `content` the raw content or bytes of a file (contains, equals, regex, hash, size), `metadata` file system metadata (timestamps, permissions, owner), `state` live state of the guest system (service, process, user, registry), `ui` what is visible on the screen
 
 
 ## Binary (`catalog/binary.md`)
@@ -55,12 +55,13 @@ examples, and `features.md` (or `adare test feature <id>`) for shared syntax.
 - `json.contains_key` [exists · json] checking a settings/config file gained a key.
 - `json.value_count` [count, absent · json] counting entries (e.g. exactly 3 bookmarks with a given tag) and asserting absence: `expected_count: 0` without `expected_value` passes when the key path selects nothing, with `expected_value` when no value …
 - `json.value_matches` [value, order · json] asserting a setting/field value.
-- `json.values_compare` [order, compare · json] relations inside one file: a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (`comparison_type: equals` with `offset: 1`).
+- `json.values_compare` [order, compare · json] relations inside one file (or between two, `other_dst`): a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (`comparison_type: equals` …
 
 ## JSONL (`catalog/jsonl.md`)
 
 - `jsonl.line_count` [count, absent · jsonl] asserting how many records/events were written (e.g. exactly 3 deletions); absence: `expected_count: 0`.
 - `jsonl.line_matches` [exists, value · jsonl] event logs / NDJSON exports (e.g. "a line with type=login and user=alice exists").
+- `jsonl.lines_in_order` [sequence, value · jsonl] the order of events in an event log or NDJSON export (a login, then a download, then a deletion of the same file); records in between are ignored.
 - `jsonl.value_in_any_line` [exists, value, order · jsonl] a single-field check across a log; for multi-field conditions use jsonl.line_matches.
 
 ## Linux (`catalog/linux.md`)
@@ -75,12 +76,14 @@ examples, and `features.md` (or `adare test feature <id>`) for shared syntax.
 - `plist.contains_key` [exists · plist] checking that a preferences/settings plist gained a key.
 - `plist.value_count` [count, absent · plist] counting entries (`recent[*]`) and asserting absence: `expected_count: 0` passes when the key path selects nothing (or nothing matches `expected_value`), while a missing or invalid file is still an error.
 - `plist.value_matches` [value, order · plist] asserting a preference value.
-- `plist.values_compare` [compare, order · plist] relations inside one file: a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (`comparison_type: equals` with `offset: 1`).
+- `plist.values_compare` [compare, order · plist] relations inside one file (or between two, `other_dst`): a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (`comparison_type: equals` …
 
 ## SQLite (`catalog/sqlite.md`)
 
+- `sqlite.free_space_pattern_count` [count, absent, content · sqlite] asserting that a deleted record is still recoverable from the database file (`comparison_type: greater_equal`, `expected_count: 1`) while a query no longer returns it (sqlite.row_count with `expected_count: 0`), …
 - `sqlite.query_result` [exists, absent, value, count · sqlite] asserting that a row was written, changed or removed; which rows exist only in the write-ahead log, not yet checkpointed into the main file (`view: wal_added`), or are still in the main file but deleted or changed in …
 - `sqlite.row_count` [count, exists, absent · sqlite] asserting how many records an action left behind (exactly one history entry for a URL); asserting a record is gone: `expected_count: 0`; asserting a row is only in the write-ahead log, not yet checkpointed into the …
+- `sqlite.values_compare` [compare, order · sqlite] one check for "the write-ahead log adds exactly one row": `SELECT count(*)` on `view: current` equal to `other_view: main_file` with `offset: 1`; how a value changed between two transactions in the WAL (``view: …
 - `sqlite.wal_frame_count` [count, absent · sqlite] asserting that changes are still in the WAL, not yet checkpointed into the main file (`frames: valid` greater than 0), how many transactions the WAL holds (`frames: commits`), or that a checkpoint emptied it …
 
 ## Standard (`catalog/standard.md`)
@@ -102,6 +105,7 @@ examples, and `features.md` (or `adare test feature <id>`) for shared syntax.
 ## Text (`catalog/text.md`)
 
 - `text.line_count` [count, absent, content · text] counting log or history entries (exactly 2 lines with a file name); asserting a line is gone: `expected_count: 0`.
+- `text.lines_in_order` [sequence, content · text] the order of events in a log (a service started, then a file was opened, then deleted); a sequence of steps in a history or journal file.
 - `text.occurrence_count` [count, absent, content · text, binary] how many times a word or value appears in any file (`expected_count: N`), binary ones included (a database, a cache, a memory dump), in one or several encodings at once; asserting a value was wiped: ``expected_count: …
 
 ## TOML (`catalog/toml.md`)
@@ -109,7 +113,7 @@ examples, and `features.md` (or `adare test feature <id>`) for shared syntax.
 - `toml.contains_key` [exists · toml] checking that a settings/config file gained a key.
 - `toml.value_count` [count, absent · toml] counting entries (`items[*]` for `[[items]]`) and asserting absence: `expected_count: 0` passes when the key path selects nothing (or nothing matches `expected_value`), while a missing or invalid file is still …
 - `toml.value_matches` [value, order · toml] asserting a setting/field value.
-- `toml.values_compare` [order, compare · toml] relations inside one file: a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (`comparison_type: equals` with `offset: 1`).
+- `toml.values_compare` [order, compare · toml] relations inside one file (or between two, `other_dst`): a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (`comparison_type: equals` …
 
 ## Visual (`catalog/visual.md`)
 
@@ -131,7 +135,7 @@ examples, and `features.md` (or `adare test feature <id>`) for shared syntax.
 - `xml.element_exists` [exists · xml] checking a config/profile XML gained an entry.
 - `xml.element_text_matches` [value, order · xml] asserting an XML setting or record value, and document properties of office files: the author of a .docx is `dc:creator` in `report.docx!/docProps/core.xml` (xpath `./dc:creator`, namespaces ``{dc: …
 - `xml.namespace_matches` [value · xml] checking which XML dialect/schema version a file uses.
-- `xml.values_compare` [compare, order · xml] relations inside one XML file: a last-saved value later than the first-opened one (two attributes, or two elements), two timestamps within a few seconds of each other, a counter one above another (``comparison_type: …
+- `xml.values_compare` [compare, order · xml] relations inside one XML file (or between two, `other_dst`): a last-saved value later than the first-opened one (two attributes, or two elements), two timestamps within a few seconds of each other, a counter one …
 - `xml.xpath_result_matches` [value, exists · xml] typed checks on the first matched element.
 
 ## YAML (`catalog/yaml.md`)
@@ -139,4 +143,4 @@ examples, and `features.md` (or `adare test feature <id>`) for shared syntax.
 - `yaml.contains_key` [exists · yaml] checking that a settings/config file gained a key.
 - `yaml.value_count` [count, absent · yaml] counting entries (`recent[*]`, documents `[*]`) and asserting absence: `expected_count: 0` passes when the key path selects nothing (or nothing matches `expected_value`), while a missing or invalid file is …
 - `yaml.value_matches` [value, order · yaml] asserting a setting/field value.
-- `yaml.values_compare` [order, compare · yaml] relations inside one file: a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (`comparison_type: equals` with `offset: 1`).
+- `yaml.values_compare` [order, compare · yaml] relations inside one file (or between two, `other_dst`): a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (`comparison_type: equals` …

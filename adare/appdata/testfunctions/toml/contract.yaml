@@ -112,7 +112,7 @@ functions:
   value_matches:
     asserts: [value, order]
     formats: [toml]
-    features: [archive_dst, glob_dst, key_path, wildcard_mode, regex_tag, placeholder, timestamp_tag, ordered_comparison]
+    features: [archive_dst, glob_dst, key_path, wildcard_mode, regex_tag, placeholder, timestamp_tag, ordered_comparison, value_decode]
     unsupported:
       encoding: There is no ``encoding`` parameter; TOML is always UTF-8.
     not_for:
@@ -127,7 +127,7 @@ functions:
         - the file does not exist or is a directory; a glob matches no file or more than one
         - the content is not valid TOML (syntax error, duplicate key, impossible date or time, bytes that are not UTF-8)
         - an invalid ``wildcard_mode``; an invalid regex or unknown placeholder
-        - in ordered mode, a ``!re`` tag, placeholder or ``regex_match``, bad ordered parameters, or a value that is no number or timestamp
+        - in ordered mode, a ``!re`` tag or ``regex_match``, text around a ``{{ name }}`` or a saved variable that is no number or time, bad ordered parameters, or a value that is no number or timestamp
     limits:
       - Equality is Python ``==`` and type-sensitive (``5`` is not ``"5"``).
       - 'Dates and times compare as ISO 8601 strings: ``2026-01-01`` (local date), ``07:32:00`` (local time), ``2026-01-01T11:00:00`` (local date-time), ``2026-01-01T10:00:00+00:00`` (``Z`` becomes ``+00:00``).'
@@ -256,7 +256,7 @@ functions:
   values_compare:
     asserts: [order, compare]
     formats: [toml]
-    features: [archive_dst, glob_dst, key_path, ordered_comparison]
+    features: [archive_dst, glob_dst, key_path, ordered_comparison, value_decode, other_dst]
     unsupported:
       encoding: There is no ``encoding`` parameter; TOML is always UTF-8.
     not_for:

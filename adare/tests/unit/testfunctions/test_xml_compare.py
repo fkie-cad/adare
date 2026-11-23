@@ -227,3 +227,104 @@ def test_values_compare_errors(dst, xpath, other_xpath, params):
 
 def test_values_compare_missing_file_is_error(tmp_path):
     _assert(_compare(str(tmp_path / 'absent.xml'), './a', './b'), ERROR)
+
+
+# --- round 2: value_decode, values_compare with other_dst --------------------------------
+
+
+def _r2_run(function, **params):
+    testfunction = getattr(xml_tf, function)
+    return testfunction._test_class(name='t', parameter=testfunction._parameter_class(**params)).test()
+
+
+@pytest.fixture
+def r2_files(tmp_path):
+    before, after = tmp_path / 'before.xml', tmp_path / 'after.xml'
+    before.write_text('<state count="3"><saved>2026-03-01T10:00:00Z</saved><ref>a%2Fb</ref></state>')
+    after.write_text('<state count="5"><saved>2026-03-01T10:05:00Z</saved><ref>eyJpZCI6IDl9</ref></state>')
+    return str(before), str(after)
+
+
+def test_values_compare_other_dst(r2_files, tmp_path):
+    before, after = r2_files
+    result = _r2_run(
+        'values_compare',
+        dst=after,
+        xpath='.',
+        attribute='count',
+        other_xpath='.',
+        other_attribute='count',
+        other_dst=before,
+        comparison_type='greater',
+    )
+    _assert(result, SUCCESS)
+    assert any(before in d for d in result.details)
+    _assert(
+        _r2_run(
+            'values_compare',
+            dst=after,
+            xpath='./saved',
+            other_xpath='./saved',
+            other_dst=before,
+            comparison_type='less',
+        ),
+        FAILED,
+    )
+    missing = _r2_run(
+        'values_compare', dst=after, xpath='./saved', other_xpath='./saved', other_dst=str(tmp_path / 'gone.xml')
+    )
+    _assert(missing, ERROR)
+    assert 'does not exist' in missing.details[0]
+
+
+def test_value_decode(r2_files):
+    before, after = r2_files
+    _assert(
+        _r2_run(
+            'element_text_matches',
+            dst=after,
+            xpath='./ref',
+            expected_value='9',
+            value_decode=['base64', 'json'],
+            decoded_key_path='id',
+        ),
+        SUCCESS,
+    )
+    _assert(
+        _r2_run(
+            'element_text_matches',
+            dst=before,
+            xpath='./ref',
+            expected_value='A/B',
+            case_sensitive=False,
+            value_decode='url',
+        ),
+        SUCCESS,
+    )
+    _assert(
+        _r2_run('attribute_matches', dst=after, xpath='.', attribute='count', expected_value='5', value_decode='url'),
+        SUCCESS,
+    )
+    _assert(
+        _r2_run(
+            'element_text_matches',
+            dst=after,
+            xpath='./ref',
+            expected_value=8,
+            comparison_type='greater',
+            value_decode=['base64', 'json'],
+            decoded_key_path='id',
+        ),
+        SUCCESS,
+    )
+    _assert(_r2_run('element_text_matches', dst=after, xpath='./saved', expected_value='x', value_decode='hex'), ERROR)
+    _assert(
+        _r2_run('attribute_matches', dst=after, xpath='.', attribute='count', expected_value='5', value_decode='json'),
+        ERROR,
+    )
+    _assert(
+        _r2_run(
+            'values_compare', dst=after, xpath='./ref', other_xpath='./ref', other_dst=before, value_decode='base64'
+        ),
+        ERROR,
+    )

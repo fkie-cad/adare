@@ -2,7 +2,7 @@
 
 <!-- Generated; do not edit by hand. -->
 
-Counts content in any file: occurrences of a string or byte sequence in the raw bytes (binary files included, in one or several encodings at once), and lines of a text file that contain a string or match a regex. Absence is `expected_count: 0`; a missing, unreadable or undecodable file is an error, never a pass.
+Counts content in any file: occurrences of a string or byte sequence in the raw bytes (binary files included, in one or several encodings at once), lines of a text file that contain a string or match a regex, and the order of such lines. Absence is `expected_count: 0`; a missing, unreadable or undecodable file is an error, never a pass.
 
 ## `text.line_count`
 
@@ -154,6 +154,138 @@ tests:
     regex_match: true
     expected_count: 0
 ```
+
+## `text.lines_in_order`
+
+tests that lines matching each of several patterns occur in the given order
+
+Pass when each of `patterns` matches a line of text file `dst` after the line of the pattern before it.
+
+Each pattern takes the earliest line after the line of the previous pattern, so two patterns never match the same line; when that fails, no other choice of lines would pass either. Details list the matched line numbers (counted from 1); a FAILED result names the first pattern without a later line and, if it occurs only before, those earlier line numbers.
+
+**Use for:** the order of events in a log (a service started, then a file was opened, then deleted); a sequence of steps in a history or journal file. Lines between the matched ones are ignored. For how often one pattern occurs use text.line_count; for JSON Lines records use jsonl.lines_in_order.
+
+asserts: sequence, content · formats: text · runs: guest agent, host test mode or hostside; dry-run on a local file · os: any
+
+**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Text encodings (`encoding`), Placeholders ({{ variable }}) (`placeholder`)
+
+**Does not support:**
+- Regex values (!re) (`regex_tag`): A `!re` pattern is an error; write the regex as a plain string with `regex: true`.
+- Times as expected values (!timestamp) (`timestamp_tag`): A `!timestamp` pattern is an error.
+
+**Not for:**
+- how often one pattern occurs, or that it is absent → `text.line_count`
+- the order of JSON Lines records by their fields → `jsonl.lines_in_order`
+- a pattern anywhere in the content, across lines → `standard.file_content_matches_regex`
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the text file; a glob must match exactly one path, an archive member (`logs.tar.gz!/service.log`) is read like a file. A missing file or content not valid in the encoding is an error. Lines end at `\n`, `\r\n` or `\r`. |
+| **patterns** | `list` |  | Non-empty list of non-empty strings, in the expected order. Each is a substring a line must contain, or with `regex` a regex searched in each line (`re.search`). An empty list, a non-string, an invalid regex, or a `!re` / `{{placeholder}}` value is an error: write regexes as plain strings with `regex`. |
+| regex | `bool` | `False` | Treat every pattern as a regex. |
+| case_sensitive | `bool` | `True` | `True` (default) matches case exactly; `False` compares substrings after casefolding, or compiles the regexes with `re.IGNORECASE`. |
+| encoding | `str \| None` | `'utf-8'` | Text encoding, default `utf-8`; `None` also detects BOM-less UTF-16. A BOM always wins. Unknown names are an error. |
+
+**Outcomes:**
+- PASSED: each pattern matches a line after the line the pattern before it matched (other lines in between are ignored)
+- FAILED: the file was read and a pattern matches no line after the previous match; the details name it and the earlier lines it matches, if any
+- ERROR: the file does not exist; a glob matches no file or more than one
+- ERROR: the content is not valid in `encoding`; an unknown `encoding`
+- ERROR: `patterns` empty, not a list, or holding an empty or non-string entry; an invalid regex
+- ERROR: a `!re` or `!timestamp` pattern
+
+**Limits:**
+- Each pattern takes the earliest line after the previous match, so two patterns never share a line; when that fails no other choice of lines passes either.
+- Lines end at `\n`, `\r\n` or `\r`; a pattern never spans two lines.
+- With `regex: true` every pattern is a regex searched in the line (`re.search`, unanchored); without it a pattern is a substring.
+
+**Use cases:**
+- Events in a log, in order: A service started, then a file was opened, then it was deleted; other log lines between them do not matter.
+- Steps of a history or journal file: An action sequence in a shell history or an application journal, each step after the one before.
+
+**Examples:**
+
+*a delete before an open before an error* → PASSED
+
+```yaml
+tests:
+- name: a_delete_before_an_open_before_an_error
+  function: text.lines_in_order
+  parameter:
+    dst: /var/log/app/service.log
+    patterns: ['deleted: report-2025.pdf', 'opened: notes.txt', 'ERROR']
+```
+
+*regex patterns* → PASSED
+
+```yaml
+tests:
+- name: regex_patterns
+  function: text.lines_in_order
+  parameter:
+    dst: /var/log/app/service.log
+    patterns: ['deleted: .*\.pdf$', 'deleted: .*\.odt$']
+    regex: true
+```
+
+*ignoring case* → PASSED
+
+```yaml
+tests:
+- name: ignoring_case
+  function: text.lines_in_order
+  parameter:
+    dst: /var/log/app/service.log
+    patterns: [OPENED, error disk]
+    case_sensitive: false
+```
+
+*the right lines in the wrong order fail* → FAILED. `opened` is in line 2, but no `report-2025.pdf` line follows it; the details name line 1 as the earlier match.
+
+```yaml
+tests:
+- name: the_right_lines_in_the_wrong_order_fail
+  function: text.lines_in_order
+  parameter:
+    dst: /var/log/app/service.log
+    patterns: ['opened: notes.txt', 'deleted: report-2025.pdf']
+```
+
+*one line cannot match two patterns* → FAILED
+
+```yaml
+tests:
+- name: one_line_cannot_match_two_patterns
+  function: text.lines_in_order
+  parameter:
+    dst: /var/log/app/service.log
+    patterns: [disk, full]
+```
+
+*a !re pattern is an error* → ERROR
+
+```yaml
+tests:
+- name: a_re_pattern_is_an_error
+  function: text.lines_in_order
+  parameter:
+    dst: /var/log/app/service.log
+    patterns: [!re 'deleted: .*']
+```
+
+*a missing file is an error* → ERROR
+
+```yaml
+tests:
+- name: a_missing_file_is_an_error
+  function: text.lines_in_order
+  parameter:
+    dst: /var/log/app/other.log
+    patterns: [deleted]
+```
+
+**Related:**
+- `text.line_count`: the same line matching (substring or `re.search`), but counts one pattern
 
 ## `text.occurrence_count`
 

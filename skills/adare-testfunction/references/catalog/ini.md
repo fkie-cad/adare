@@ -305,7 +305,7 @@ With `comparison_type` (`greater`, `less`, ...), `tolerance` or the time paramet
 
 asserts: value, order · formats: ini · runs: guest agent, host test mode or hostside; dry-run on a local file · os: any
 
-**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Text encodings (`encoding`), Several matches (wildcard_mode) (`wildcard_mode`), Regex values (!re) (`regex_tag`), Placeholders ({{ variable }}) (`placeholder`), Times as expected values (!timestamp) (`timestamp_tag`), Ordered comparison of numbers and times (`ordered_comparison`)
+**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Text encodings (`encoding`), Several matches (wildcard_mode) (`wildcard_mode`), Regex values (!re) (`regex_tag`), Placeholders ({{ variable }}) (`placeholder`), Times as expected values (!timestamp) (`timestamp_tag`), Ordered comparison of numbers and times (`ordered_comparison`), Decoding a stored value (value_decode) (`value_decode`)
 
 **Not for:**
 - a key or value is absent → `ini.value_count`
@@ -321,13 +321,15 @@ asserts: value, order · formats: ini · runs: guest agent, host test mode or ho
 | case_sensitive | `bool` | `True` | `False` compares section and key names case-insensitively; values are always compared as given. |
 | encoding | `str` | `None` | Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8). |
 | wildcard_mode | `str` | `'any'` | With several occurrences, `any` (default): one must match; `all`: every one must match. Other values are an error. Allowed: `any`, `all`. |
-| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); a `!re` tag, `{{placeholder}}` or `regex_match` is then an error, and so is a value that is no number or timestamp. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
+| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); `!re` / `regex_match` are then errors, a lone `{{ name }}` is the saved variable; a value that is no number or timestamp is an error. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 | value_type | `str` | `'auto'` | `auto` (default; numbers if both sides are numbers, else timestamps), `number` or `timestamp`. Allowed: `auto`, `number`, `timestamp`. |
 | tolerance | `int \| float \| None` | `None` | Allowed difference for `equals`/`not_equals` (seconds for timestamps). |
 | time_format | `str \| None` | `None` | `strptime` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
 | timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of `1970`, `1601` or `2001`. Allowed: `1970`, `1601`, `2001`. |
 | timestamp_unit | `str \| None` | `None` | Unit of that count: `s` (default), `ms`, `us`, `ns` or `100ns`. Allowed: `s`, `ms`, `us`, `ns`, `100ns`. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (`+02:00`); default UTC. |
+| value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: `url` (percent-decoding), `base64`, `hex`, `utf16` (bytes as UTF-16 text), `json` (parse, then take `decoded_key_path`). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path as in json.value_matches); it must select one value. Required with `json`, an error without it. |
 
 **Outcomes:**
 - PASSED: the value of `key` (several occurrences: `any` one, or `all`) equals or matches `expected_value`
@@ -335,7 +337,7 @@ asserts: value, order · formats: ini · runs: guest agent, host test mode or ho
 - ERROR: the file does not exist or is a directory; a glob matches no file or more than one
 - ERROR: the file cannot be read or decoded; an unknown `encoding`
 - ERROR: an invalid regex or placeholder; an invalid `wildcard_mode`
-- ERROR: in ordered mode, a value that is no number or timestamp, or a `!re` / placeholder / `regex_match` with it
+- ERROR: in ordered mode, a value that is no number or timestamp, or a `!re` or `regex_match` with it, text around a `{{ name }}` or a saved variable that is no number or time
 - ERROR: bad ordered parameters (`comparison_type`, `value_type`, `timestamp_epoch`, ...)
 
 **Limits:**

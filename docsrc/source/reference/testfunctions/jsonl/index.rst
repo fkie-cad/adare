@@ -5,7 +5,7 @@ JSONL
    :class: status-tested
 
 :Status: :status-tested:`● Tested`
-:Functions: 3
+:Functions: 4
 :Category: JSON Lines Data
 
 .. adare-testfunction-collection:: jsonl
@@ -38,3 +38,4 @@ Test Functions
    line_matches
    line_count
    value_in_any_line
+   lines_in_order

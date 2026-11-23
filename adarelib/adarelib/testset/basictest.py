@@ -102,6 +102,9 @@ class BasicTest:
     # Suffixes of companion files that belong to parameter.dst (e.g. SQLite '-wal');
     # host mode pulls those that exist on the guest alongside dst.
     host_mode_sidecars: ClassVar[tuple[str, ...]] = ()
+    # Parameters besides dst that hold a guest file path (e.g. 'other_dst'); host mode pulls
+    # each one that is set (with its sidecars) and rewrites it to the local copy, like dst.
+    host_mode_path_params: ClassVar[tuple[str, ...]] = ()
     # True if a pass asserts that something is ABSENT (deleted, never written, not shown).
     # The host then requires proof that the actions before the test took effect, and
     # reports an unproven pass as INCONCLUSIVE instead of SUCCESS.
@@ -352,6 +355,16 @@ class BasicTest:
         except (ValueError, OverflowError, OSError) as e:
             return False, f"Interval comparison failed: could not parse timestamps ({e})"
         return check_interval(actual, lower, upper, float(metadata.get('precision') or 0))
+
+    def parse_expected_timestamp(self, timestamp: str | int | float, metadata: dict) -> 'datetime.datetime':
+        """The point in time of a saved timestamp (the expected side of a comparison).
+
+        Reads ``timestamp`` like a ``!timestamp`` placeholder's value: ``format`` and
+        ``localtime`` of ``metadata`` apply, a value without a zone is UTC unless ``localtime``.
+
+        :raises ValueError: (or ``OverflowError`` / ``OSError``) a value that is no timestamp
+        """
+        return self._parse_timestamp_with_format(timestamp, metadata, is_expected=True)
 
     def _parse_timestamp_with_format(
         self, timestamp_str: str | int | float, metadata: dict, is_expected: bool = False

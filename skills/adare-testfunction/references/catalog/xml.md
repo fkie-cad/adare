@@ -16,7 +16,7 @@ With `comparison_type` (`greater`, `less`, ...), `tolerance` or the time paramet
 
 asserts: value, order · formats: xml · runs: guest agent, host test mode or hostside; dry-run on a local file · os: any
 
-**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Regex values (!re) (`regex_tag`), Placeholders ({{ variable }}) (`placeholder`), Times as expected values (!timestamp) (`timestamp_tag`), Ordered comparison of numbers and times (`ordered_comparison`)
+**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Regex values (!re) (`regex_tag`), Placeholders ({{ variable }}) (`placeholder`), Times as expected values (!timestamp) (`timestamp_tag`), Ordered comparison of numbers and times (`ordered_comparison`), Decoding a stored value (value_decode) (`value_decode`)
 
 **Does not support:**
 - Several matches (wildcard_mode) (`wildcard_mode`): Only the first element `xpath` selects is checked; narrow `xpath` with a predicate (`[@ref='x']`).
@@ -35,13 +35,15 @@ asserts: value, order · formats: xml · runs: guest agent, host test mode or ho
 | regex_match | `bool` | `False` | Search `expected_value` as a Python regex (`re.search`, unanchored). |
 | case_sensitive | `bool` | `True` | `False` compares lower-cased / uses `re.IGNORECASE`. |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in `xpath` (`{ns: 'http://...'}` + `//ns:item`); `{uri}tag` also works without it. |
-| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); a `!re` tag, `{{placeholder}}` or `regex_match` is then an error, and so is a value that is no number or timestamp. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
+| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); `!re` / `regex_match` are then errors, a lone `{{ name }}` is the saved variable; a value that is no number or timestamp is an error. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 | value_type | `str` | `'auto'` | `auto` (default; numbers if both sides are numbers, else timestamps), `number` or `timestamp`. Allowed: `auto`, `number`, `timestamp`. |
 | tolerance | `int \| float \| None` | `None` | Allowed difference for `equals`/`not_equals` (seconds for timestamps). |
 | time_format | `str \| None` | `None` | `strptime` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
 | timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of `1970`, `1601` or `2001`. Allowed: `1970`, `1601`, `2001`. |
 | timestamp_unit | `str \| None` | `None` | Unit of that count: `s` (default), `ms`, `us`, `ns` or `100ns`. Allowed: `s`, `ms`, `us`, `ns`, `100ns`. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (`+02:00`); default UTC. |
+| value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: `url` (percent-decoding), `base64`, `hex`, `utf16` (bytes as UTF-16 text), `json` (parse, then take `decoded_key_path`). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path as in json.value_matches); it must select one value. Required with `json`, an error without it. |
 
 **Outcomes:**
 - PASSED: `attribute` of the first selected element equals or matches `expected_value`
@@ -49,7 +51,7 @@ asserts: value, order · formats: xml · runs: guest agent, host test mode or ho
 - ERROR: the file does not exist or is a directory; a glob matches no file or more than one
 - ERROR: the file is no well-formed XML; an XPath outside the ElementPath subset
 - ERROR: an invalid regex or placeholder
-- ERROR: in ordered mode, a value that is no number or timestamp, or a `!re` / placeholder / `regex_match` with it
+- ERROR: in ordered mode, a value that is no number or timestamp, or a `!re` or `regex_match` with it, text around a `{{ name }}` or a saved variable that is no number or time
 - ERROR: bad ordered parameters (`comparison_type`, `value_type`, `timestamp_epoch`, ...)
 
 **Limits:**
@@ -314,7 +316,7 @@ With `comparison_type` (`greater`, `less`, ...), `tolerance` or the time paramet
 
 asserts: value, order · formats: xml · runs: guest agent, host test mode or hostside; dry-run on a local file · os: any
 
-**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Regex values (!re) (`regex_tag`), Placeholders ({{ variable }}) (`placeholder`), Times as expected values (!timestamp) (`timestamp_tag`), Ordered comparison of numbers and times (`ordered_comparison`), Several matches (wildcard_mode) (`wildcard_mode`)
+**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Regex values (!re) (`regex_tag`), Placeholders ({{ variable }}) (`placeholder`), Times as expected values (!timestamp) (`timestamp_tag`), Ordered comparison of numbers and times (`ordered_comparison`), Several matches (wildcard_mode) (`wildcard_mode`), Decoding a stored value (value_decode) (`value_decode`)
 
 **Not for:**
 - an attribute value → `xml.attribute_matches`
@@ -331,13 +333,15 @@ asserts: value, order · formats: xml · runs: guest agent, host test mode or ho
 | case_sensitive | `bool` | `True` | `False` compares lower-cased / uses `re.IGNORECASE`. |
 | wildcard_mode | `str` | `'any'` | For several matched elements: `any` (default) or `all` must match; other values are an execution error (only checked when several elements match). Allowed: `any`, `all`. |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in `xpath` (`{ns: 'http://...'}` + `//ns:item`); `{uri}tag` also works without it. |
-| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); a `!re` tag, `{{placeholder}}` or `regex_match` is then an error, and so is a value that is no number or timestamp. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
+| comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); `!re` / `regex_match` are then errors, a lone `{{ name }}` is the saved variable; a value that is no number or timestamp is an error. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 | value_type | `str` | `'auto'` | `auto` (default; numbers if both sides are numbers, else timestamps), `number` or `timestamp`. Allowed: `auto`, `number`, `timestamp`. |
 | tolerance | `int \| float \| None` | `None` | Allowed difference for `equals`/`not_equals` (seconds for timestamps). |
 | time_format | `str \| None` | `None` | `strptime` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
 | timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of `1970`, `1601` or `2001`. Allowed: `1970`, `1601`, `2001`. |
 | timestamp_unit | `str \| None` | `None` | Unit of that count: `s` (default), `ms`, `us`, `ns` or `100ns`. Allowed: `s`, `ms`, `us`, `ns`, `100ns`. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (`+02:00`); default UTC. |
+| value_decode | `list[str] \| str \| None` | `None` | Decode the value read from the file before comparing: one step or a list applied in order: `url` (percent-decoding), `base64`, `hex`, `utf16` (bytes as UTF-16 text), `json` (parse, then take `decoded_key_path`). Bytes left at the end are UTF-8 text, else hex. A value a step cannot decode, or an unknown step, is an error. |
+| decoded_key_path | `str \| None` | `None` | Key path into the value `json` decoded (dot path as in json.value_matches); it must select one value. Required with `json`, an error without it. |
 
 **Outcomes:**
 - PASSED: the text of the selected element (several: `any` one, or `all`) equals or matches `expected_value`
@@ -345,7 +349,7 @@ asserts: value, order · formats: xml · runs: guest agent, host test mode or ho
 - ERROR: the file does not exist or is a directory; a glob matches no file or more than one
 - ERROR: the file is no well-formed XML; an XPath outside the ElementPath subset
 - ERROR: an invalid regex or placeholder; an invalid `wildcard_mode` when several elements match
-- ERROR: in ordered mode, a text that is no number or timestamp, or a `!re` / placeholder / `regex_match` with it
+- ERROR: in ordered mode, a text that is no number or timestamp, or a `!re` or `regex_match` with it, text around a `{{ name }}` or a saved variable that is no number or time
 - ERROR: bad ordered parameters (`comparison_type`, `value_type`, `timestamp_epoch`, ...)
 
 **Limits:**
@@ -546,15 +550,15 @@ tests:
 
 ## `xml.values_compare`
 
-compares two values (element text or attribute) of one XML file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)
+compares two values (element text or attribute) of one XML file (or of two files) as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)
 
 Pass when the value selected by `xpath` compares to the one selected by `other_xpath` (+ `offset`).
 
-**Use for:** relations inside one XML file: a last-saved value later than the first-opened one (two attributes, or two elements), two timestamps within a few seconds of each other, a counter one above another (`comparison_type: equals` with `offset: 1`). To compare one value with a constant use xml.element_text_matches or xml.attribute_matches with `comparison_type`.
+**Use for:** relations inside one XML file (or between two, `other_dst`): a last-saved value later than the first-opened one (two attributes, or two elements), two timestamps within a few seconds of each other, a counter one above another (`comparison_type: equals` with `offset: 1`). To compare one value with a constant use xml.element_text_matches or xml.attribute_matches with `comparison_type`.
 
 asserts: compare, order · formats: xml · runs: guest agent, host test mode or hostside; dry-run on a local file · os: any
 
-**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Ordered comparison of numbers and times (`ordered_comparison`)
+**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Ordered comparison of numbers and times (`ordered_comparison`), Decoding a stored value (value_decode) (`value_decode`), A second file (other_dst) (`other_dst`)
 
 **Does not support:**
 - Several matches (wildcard_mode) (`wildcard_mode`): Each side must select exactly one value; several are an error.
@@ -574,12 +578,15 @@ asserts: compare, order · formats: xml · runs: guest agent, host test mode or 
 | comparison_type | `str` | `'equals'` | How the first value relates to the second: `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal` (`less` = earlier for timestamps). Other values are an error. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 | value_type | `str` | `'auto'` | `auto` (default; numbers if both are numbers, else timestamps), `number` or `timestamp`. A value that is no number or timestamp is an error. Allowed: `auto`, `number`, `timestamp`. |
 | tolerance | `int \| float \| None` | `None` | Allowed difference for `equals`/`not_equals` (seconds for timestamps). |
-| offset | `int \| float \| None` | `None` | Added to the second value before comparing (seconds for timestamps, may be negative): `first <comparison_type> second + offset`. |
+| offset | `int \| float \| None` | `None` | Added to the second value before comparing (seconds for timestamps, may be negative; `'{{ name }}'` = a saved number): `first <comparison_type> second + offset`. |
 | time_format | `str \| None` | `None` | `strptime` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
 | timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of `1970`, `1601` or `2001`. Allowed: `1970`, `1601`, `2001`. |
 | timestamp_unit | `str \| None` | `None` | Unit of that count: `s` (default), `ms`, `us`, `ns` or `100ns`. Allowed: `s`, `ms`, `us`, `ns`, `100ns`. |
 | utc_offset | `str \| None` | `None` | Zone of timestamps without one (`+02:00`); default UTC. |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in both XPaths (`{ns: 'http://...'}` + `//ns:item`); `{uri}tag` also works without it. |
+| other_dst | `str \| None` | `None` | Guest path of a second XML file to read `other_xpath` from (same rules as `dst`, `archive!/member` included); default `None`: `dst`. A missing file is an error. Compares a file with a copy saved before an action. |
+| value_decode | `list[str] \| str \| None` | `None` | Decode both values before comparing (steps as in xml.element_text_matches). |
+| decoded_key_path | `str \| None` | `None` | With `json` in `value_decode`: key path into the decoded value. |
 
 **Outcomes:**
 - PASSED: `first <comparison_type> second + offset` holds

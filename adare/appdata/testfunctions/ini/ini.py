@@ -27,6 +27,7 @@ from adarelib.testset.content import decode_text, read_bytes_capped
 from adarelib.testset.structured import WILDCARD_MODES, compare_count, compare_value, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.valuecompare import ordered_setup
+from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
 
 # configure logging
 import logging
@@ -252,6 +253,8 @@ def value_matches(
     timestamp_epoch: int | None = None,
     timestamp_unit: str | None = None,
     utc_offset: str | None = None,
+    value_decode: list[str] | str | None = None,
+    decoded_key_path: str | None = None,
 ):
     """Pass when the value of ``key`` in ``section`` of ``dst`` equals (or matches) ``expected_value``.
 
@@ -281,8 +284,8 @@ def value_matches(
         comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
             ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
             below, compares the value with ``expected_value`` as a number or point in time
-            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
-            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+            (ordered mode; ``less`` = earlier); ``!re`` / ``regex_match`` are then errors, a lone
+            ``{{ name }}`` is the saved variable; a value that is no number or timestamp is an error.
         value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
             ``number`` or ``timestamp``.
         tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
@@ -290,6 +293,13 @@ def value_matches(
         timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
         timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
         utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+        value_decode: Decode the value read from the file before comparing: one step or a
+            list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16``
+            (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes
+            left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
+            unknown step, is an error.
+        decoded_key_path: Key path into the value ``json`` decoded (dot path as in json.value_matches);
+            it must select one value. Required with ``json``, an error without it.
 
     Example:
         function: ini.value_matches
@@ -301,7 +311,10 @@ def value_matches(
     """
     if wildcard_mode not in WILDCARD_MODES:
         return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
-    ordered, problem = ordered_setup(
+    decoder, problem = decoder_setup(value_decode, decoded_key_path)
+    if problem is not None:
+        return problem
+    ordered, expected_value, problem = ordered_setup(
         ctx,
         expected_value,
         regex_match,
@@ -323,11 +336,12 @@ def value_matches(
         return TestResult.failed([f'{_where(section, key)} does not exist'])
     expected = _expected_text(expected_value)
     try:
+        values = [e.value if decoder is None else decoder(e.value, as_text=True) for e in found]
         if ordered is not None:
-            results = [(e, *ordered.compare(e.value, expected)) for e in found]
+            results = [(e, *ordered.compare(v, expected)) for e, v in zip(found, values, strict=True)]
         else:
-            results = [(e, *compare_value(ctx, e.value, expected, regex_match)) for e in found]
-    except (re.error, OrderingError) as e:
+            results = [(e, *compare_value(ctx, v, expected, regex_match)) for e, v in zip(found, values, strict=True)]
+    except (re.error, OrderingError, ValueDecodeError) as e:
         return TestResult.error([str(e)])
     if len(results) == 1:
         _, ok, message = results[0]

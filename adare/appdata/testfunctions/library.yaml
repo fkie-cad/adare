@@ -10,6 +10,7 @@ asserts:
   value: a value equals or matches an expected value (exact, regex, placeholder)
   count: how many times something occurs or how many items there are
   order: a number or point in time is greater, less or within a tolerance of another
+  sequence: lines or records occur in a given order (one after the other, others in between allowed)
   compare: two files, sheets or values of one file are compared with each other
   content: the raw content or bytes of a file (contains, equals, regex, hash, size)
   metadata: file system metadata (timestamps, permissions, owner)
@@ -115,8 +116,10 @@ features:
       ``value_type`` (auto, number, timestamp), ``tolerance`` and the time parameters
       (``time_format``, ``timestamp_epoch``, ``timestamp_unit``, ``utc_offset``) compare the found
       value with ``expected_value`` as a number or a point in time. A value that is no number or time
-      is an ERROR (the test looked at the wrong field). ``!re``, placeholders and ``regex_match`` cannot
-      be combined with them.
+      is an ERROR (the test looked at the wrong field). ``!re`` and ``regex_match`` cannot be combined
+      with them. An ``expected_value`` of exactly ``'{{ name }}'`` may be a variable saved during the
+      run: a ``save_timestamp`` is compared as that moment (the time parameters then describe only the
+      value in the file); text around the placeholder, or a ``!re`` / interval variable, is an ERROR.
     syntax: |-
       comparison_type: greater
       timestamp_epoch: 1970
@@ -201,13 +204,45 @@ features:
     summary: >-
       ``view`` chooses which state of a database in WAL mode a query sees: ``current`` (main file plus
       committed WAL frames, as an application sees it), ``main_file`` (the file alone), ``wal_added``
-      / ``wal_removed`` (rows the WAL adds or removes). All views come from one snapshot.
+      / ``wal_removed`` (rows the WAL adds or removes), ``commit:N`` (the state after the N-th
+      transaction in the WAL; negative N counts from the end, ``commit:0`` is the main file; N out of
+      range is an ERROR). All views come from one snapshot.
     syntax: |-
       view: wal_removed
+      view: commit:-2
     example: |-
       view: main_file
     doc: /reference/testfunctions/sqlite/index
-    keywords: [wal, write-ahead, journal, checkpoint, uncommitted, deleted rows, main file]
+    keywords: [wal, write-ahead, journal, checkpoint, uncommitted, deleted rows, main file, commit n, per commit, intermediate state]
+
+  value_decode:
+    title: Decoding a stored value (value_decode)
+    summary: >-
+      ``value_decode`` decodes the value read from the file before it is compared: one step or a list
+      applied in order, from ``url``, ``base64``, ``hex``, ``utf16`` and ``json``. After ``json``,
+      ``decoded_key_path`` (key path syntax) selects one value of the decoded document. A value a
+      step cannot decode, or an unknown step, is an ERROR.
+    syntax: |-
+      value_decode: base64
+      value_decode: [url, base64, json]
+      decoded_key_path: session.user
+    example: |-
+      value_decode: [base64, json]
+      decoded_key_path: last_opened
+    doc: /reference/testfunctions/index
+    keywords: [decode, base64, url encoded, percent, hex, utf16, nested json, encoded, embedded]
+
+  other_dst:
+    title: A second file (other_dst)
+    summary: >-
+      ``values_compare`` takes ``other_dst``: the second value is read from another file or archive
+      member instead of ``dst``, e.g. a copy a ``command`` action made before the action under test.
+      Globs, archives and host mode work as for ``dst``.
+    syntax: |-
+      other_dst: /tmp/before/settings.json
+    example: |-
+      other_dst: /tmp/before/settings.json
+    keywords: [before after, two files, copy, other file, snapshot, previous version, cross-file]
 
   negative:
     title: Negative tests (absence)
@@ -248,14 +283,10 @@ gaps:
     summary: values_compare compares numbers and times only, not two text values.
     keywords: [compare two strings, same text twice, text equals other key]
     instead: Test each value against the expected text with ``value_matches``.
-  - id: sqlite_per_commit_view
-    summary: SQLite views cover the main file, the current state and the WAL difference, not the state after commit N.
-    keywords: [commit n, per commit, intermediate state, wal history]
-    instead: Use ``sqlite.wal_frame_count`` for the number of commits and the ``wal_added`` / ``wal_removed`` views.
-  - id: sqlite_freelist_carving
-    summary: Deleted SQLite records in free pages, freeblocks or stale WAL frames are not carved.
-    keywords: [carve, carving, freelist, free page, deleted record recovery, unallocated, slack]
-    instead: Search the raw bytes with ``text.occurrence_count`` or ``binary.pattern_count`` (main file and ``-wal``).
+  - id: sqlite_wal_carving
+    summary: Stale or uncommitted frames of an SQLite write-ahead log are not carved; free space is only searched in the main file (or the checkpointed ``current`` copy).
+    keywords: [stale wal frame, wal carving, wal slack, uncommitted frame]
+    instead: Search the raw bytes of the ``-wal`` with ``text.occurrence_count`` or ``binary.pattern_count``.
   - id: memory_and_network
     summary: Testfunctions read files and guest state, not memory dumps or network captures.
     keywords: [memory, ram, dump, volatility, pcap, network, traffic, packet]

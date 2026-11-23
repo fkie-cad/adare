@@ -377,3 +377,34 @@ def test_value_matches_ordered(sample):
 def test_value_matches_ordered_uninterpretable_is_error(sample):
     params = {'dst': sample, 'section': 'General', 'key': 'language'}
     _assert(_run(ValueMatches, **params, expected_value=1, comparison_type='greater'), StatusEnum.ERROR)
+
+
+# --- round 2: value_decode, values_compare with other_dst --------------------------------
+
+
+def test_value_decode(tmp_path):
+    path = tmp_path / 'r2.ini'
+    path.write_text('[main]\nref = %2Fdata%2Fapp\nstate = eyJpZCI6IDl9\n', encoding='utf-8')
+
+    def run(**params):
+        return ValueMatches(
+            name='t', parameter=ini.value_matches._parameter_class(dst=str(path), section='main', **params)
+        ).test()
+
+    assert run(key='ref', expected_value='/data/app', value_decode='url').status == StatusEnum.SUCCESS
+    assert (
+        run(key='state', expected_value=9, value_decode=['base64', 'json'], decoded_key_path='id').status
+        == StatusEnum.SUCCESS
+    )
+    assert (
+        run(
+            key='state',
+            expected_value=8,
+            comparison_type='greater',
+            value_decode=['base64', 'json'],
+            decoded_key_path='id',
+        ).status
+        == StatusEnum.SUCCESS
+    )
+    assert run(key='ref', expected_value='x', value_decode='hex').status == StatusEnum.ERROR
+    assert run(key='ref', expected_value='x', decoded_key_path='id').status == StatusEnum.ERROR

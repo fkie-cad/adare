@@ -9,7 +9,8 @@ collection:
     history files and line-oriented exports. Every line is parsed on its own; blank lines are
     skipped and, by default, lines that are not valid JSON are ignored. ``value_in_any_line``
     checks one field, ``line_matches`` several fields of the same line (in one line or in all of
-    them) and ``line_count`` counts the lines that meet the conditions (``0`` = absent).
+    them), ``line_count`` counts the lines that meet the conditions (``0`` = absent) and
+    ``lines_in_order`` checks that records meeting several condition sets occur in a given order.
 
 # Anchors for the example files (not read by the parser).
 fixtures:
@@ -235,7 +236,7 @@ functions:
   value_in_any_line:
     asserts: [exists, value, order]
     formats: [jsonl]
-    features: [archive_dst, glob_dst, key_path, regex_tag, placeholder, timestamp_tag, ordered_comparison, encoding]
+    features: [archive_dst, glob_dst, key_path, regex_tag, placeholder, timestamp_tag, ordered_comparison, encoding, value_decode]
     not_for:
       - goal: several fields of the same line
         use: jsonl.line_matches
@@ -251,7 +252,7 @@ functions:
         - the file cannot be read or decoded; an unknown ``encoding``
         - a malformed line with ``skip_malformed`` false
         - an invalid regex or unknown placeholder
-        - in ordered mode, a ``!re`` tag, placeholder or ``regex_match``, bad ordered parameters, or a value in a line that is no number or timestamp
+        - in ordered mode, a ``!re`` tag or ``regex_match``, text around a ``{{ name }}`` or a saved variable that is no number or time, bad ordered parameters, or a value in a line that is no number or timestamp
     limits:
       - When a path selects several values (a wildcard or an array), one matching value is enough.
       - 'With ``regex_match`` a string ``expected_value`` is a regex searched (``re.search``) in ``str(value)`` and ``"*"`` means "key exists"; without it values compare with type-sensitive ``==``.'
@@ -316,3 +317,82 @@ functions:
           key_path: event
           expected_value: 5
           comparison_type: greater
+
+  lines_in_order:
+    asserts: [sequence, value]
+    formats: [jsonl]
+    features: [archive_dst, glob_dst, key_path, regex_tag, placeholder, timestamp_tag, encoding]
+    unsupported:
+      ordered_comparison: Conditions compare by equality, regex or tag; for a number or time threshold use jsonl.value_in_any_line with ``comparison_type``.
+    not_for:
+      - goal: one record with several fields, in any position
+        use: jsonl.line_matches
+      - goal: how many records meet the conditions, or none does
+        use: jsonl.line_count
+      - goal: the order of plain text lines
+        use: text.lines_in_order
+    related:
+      - use: jsonl.line_matches
+        why: a record meets a condition set exactly as it meets ``conditions`` there
+    outcomes:
+      passed: each condition set is met by a record after the record that met the one before it (other records in between are ignored)
+      failed: the file was read and a condition set is met by no later record; the details name it and the earlier lines that meet it, if any
+      error:
+        - the file does not exist; a glob matches no file or more than one
+        - the file cannot be read or decoded; an unknown ``encoding``
+        - a malformed line with ``skip_malformed`` false
+        - '``conditions`` empty, not a list, or holding an entry that is no non-empty mapping'
+        - an invalid regex or unknown placeholder
+    limits:
+      - Each condition set takes the earliest record after the previous match, so two sets never share a record; when that fails no other choice of records passes either.
+      - Line numbers in the details count from 1 and include blank and malformed lines.
+      - A missing key fails the record. When a path selects several values (a wildcard or an array), one matching value is enough.
+      - 'With ``regex_match`` string values are regexes searched (``re.search``) in ``str(value)`` and ``"*"`` means "key exists"; without it values compare with type-sensitive ``==``.'
+    use_cases:
+      - title: A sequence of events
+        text: A login, then a download, then a deletion of the same file, in an event log or NDJSON export, whatever else was logged in between.
+    examples:
+      - title: a login, then a delete, then a logout
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            - {event: login, user.name: alice}
+            - {event: file_deleted, user.name: bob}
+            - {event: logout}
+      - title: a regex on a field
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            - {event: file_deleted, path: '/home/alice/.*'}
+            - {event: file_deleted, path: '/home/bob/.*'}
+          regex_match: true
+      - title: a later record that only occurs earlier fails
+        text: The logout in line 6 comes after both deletes, so no delete follows it.
+        expect: failed
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            - {event: logout}
+            - {event: file_deleted}
+      - title: a malformed line is an error when not skipped
+        expect: error
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            - {event: login}
+          skip_malformed: false
+      - title: an empty list of conditions is an error
+        expect: error
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions: []

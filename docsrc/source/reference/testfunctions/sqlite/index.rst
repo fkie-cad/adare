@@ -5,7 +5,7 @@ SQLite
    :class: status-dev
 
 :Status: :status-dev:`● Development`
-:Functions: 3
+:Functions: 5
 :Category: Database Validation
 
 .. adare-testfunction-collection:: sqlite
@@ -63,3 +63,5 @@ Test Functions
    query_result
    row_count
    wal_frame_count
+   values_compare
+   free_space_pattern_count
