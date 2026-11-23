@@ -5,11 +5,16 @@ Value testfunctions (``json.value_matches``, ``xml.attribute_matches``, ...) tak
 ``time_format``, ``timestamp_epoch``, ``timestamp_unit`` and ``utc_offset``. With all of them
 at their defaults a function compares exactly as before (``==``, ``!re``, placeholders,
 ``regex_match``). Setting any of them switches to :func:`adarelib.testset.ordering.compare`
-("ordered mode"); a ``!re``/``!timestamp`` tag, a ``{{placeholder}}`` or ``regex_match``
-is then a parameter conflict (ERROR).
+("ordered mode"); a ``!re``/``!timestamp`` tag or ``regex_match`` is then a parameter
+conflict (ERROR). An ``expected_value`` that is exactly one ``{{ name }}`` placeholder is the
+saved variable's value (:func:`saved_value`): a number or text (``save_variable``, a command's
+``capture``) or a point in time (``save_timestamp``); a regex variable, a timestamp with a
+tolerance or interval, text around the placeholder or a variable not set yet is an ERROR.
 
-:func:`compare_pair` is the body of the ``<collection>.values_compare`` functions: two values
-from one file, ``first <comparison_type> second + offset``.
+:func:`compare_pair` is the body of the ``<collection>.values_compare`` functions: two values,
+``first <comparison_type> second + offset``, from one file or from ``dst`` and ``other_dst``
+(:func:`structured_values_compare`). ``value_decode`` (:mod:`adarelib.testset.valuedecode`)
+decodes the values read from the file before they are compared.
 
 Result rules: bad parameters, a side that selects several values, a value that is no number
 or timestamp -> ERROR; a side that selects nothing, or a comparison that does not hold -> FAILED.
@@ -17,6 +22,8 @@ or timestamp -> ERROR; a side that selects nothing, or a comparison that does no
 Standard library only (plus adarelib), importable on Python 3.10.
 """
 
+import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -25,6 +32,7 @@ from adarelib.event.event import TestResult
 from adarelib.testset.compare import resolve_key_path
 from adarelib.testset.ordering import OrderingError, TimeFormat, compare, parameter_errors
 from adarelib.testset.structured import StructuredFormat, load_data, text
+from adarelib.testset.valuedecode import ValueDecodeError, ValueDecoder, build_decoder
 
 ORDERED_PARAMETERS = (
     'comparison_type',
@@ -140,7 +148,10 @@ def _is_yaml_tag(value: Any) -> bool:
 
 
 def expected_conflicts(ctx: Any, expected: Any, regex_match: bool = False) -> list[str]:
-    """Why ``expected`` cannot be compared in order (a regex or placeholder); empty when it can."""
+    """Why ``expected`` cannot be compared in order (a regex); empty when it can.
+
+    Placeholders are checked by :func:`saved_value`.
+    """
     errors = []
     if regex_match:
         errors.append('regex_match cannot be combined with an ordered comparison (comparison_type, value_type, ...)')
@@ -150,11 +161,57 @@ def expected_conflicts(ctx: Any, expected: Any, regex_match: bool = False) -> li
             'compared in order; '
             'give a plain number or timestamp'
         )
-    elif isinstance(expected, str) and ctx.has_placeholders(expected):
-        errors.append(
-            'a {{placeholder}} in expected_value cannot be compared in order; give a plain number or timestamp'
-        )
     return errors
+
+
+_LONE_PLACEHOLDER = re.compile(r'\s*\{\{\s*([^{}]+?)\s*\}\}\s*')
+_PLAIN_VARIABLE_TYPES = ('string', 'int', 'integer', 'float')
+
+
+def _nonzero_tolerance(tolerance: Any) -> bool:
+    if isinstance(tolerance, (list, tuple)):
+        return any(bool(t) for t in tolerance)
+    return bool(tolerance)
+
+
+def saved_value(ctx: Any, value: Any, name: str = 'expected_value', timestamps: bool = True) -> tuple[Any, list[str]]:
+    """``value`` for an ordered comparison: a lone ``{{ var }}`` becomes the saved variable's value.
+
+    Values without a placeholder pass unchanged. A variable of type string/int/float gives its
+    ``resolved_value``; a ``timestamp`` without tolerance or interval (``save_timestamp``,
+    ``!timestamp``) gives its point in time, read by ``ctx.parse_expected_timestamp`` (format,
+    ``localtime``), unless ``timestamps`` is false. Returns ``(value, errors)``; errors for text
+    around the placeholder, a variable not set before the test, a regex variable, a timestamp with
+    tolerance or interval, or a timestamp that cannot be read.
+    """
+    if not isinstance(value, str) or not ctx.has_placeholders(value):
+        return value, []
+    match = _LONE_PLACEHOLDER.fullmatch(value)
+    if match is None:
+        return value, [
+            f'{name} {value!r} mixes text with a {{{{placeholder}}}}; an ordered comparison takes one '
+            'saved variable alone ("{{ name }}") or a plain number or timestamp'
+        ]
+    var = match.group(1).strip()
+    metadata = ctx.get_placeholder_metadata(var) or {}
+    resolved = metadata.get('resolved_value')
+    if not metadata or resolved is None or '{{' in str(resolved):
+        return value, [f'variable {var} not set before the test ({name}); an ordered comparison needs its saved value']
+    kind = metadata.get('type', 'string')
+    if kind == 'timestamp' and timestamps:
+        if metadata.get('interval') or _nonzero_tolerance(metadata.get('tolerance')):
+            return value, [
+                f'variable {var} is a timestamp with a tolerance or interval, which compares on its own; '
+                f'drop the ordered parameters, or save a plain timestamp for {name}'
+            ]
+        try:
+            return ctx.parse_expected_timestamp(resolved, metadata), []
+        except (ValueError, OverflowError, OSError) as e:
+            return value, [f'variable {var} = {resolved!r} is no timestamp: {e}']
+    if kind in _PLAIN_VARIABLE_TYPES:
+        return resolved, []
+    wanted = 'a number or timestamp' if timestamps else 'a number'
+    return value, [f'variable {var} is of type {kind}; {name} in an ordered comparison needs {wanted}']
 
 
 def ordered_setup(
@@ -168,24 +225,29 @@ def ordered_setup(
     timestamp_epoch: int | None = None,
     timestamp_unit: str | None = None,
     utc_offset: str | None = None,
-) -> tuple[OrderedComparison | None, TestResult | None]:
-    """``(comparison or None, None)``, or ``(None, error_result)`` for bad or conflicting parameters.
+) -> tuple[OrderedComparison | None, Any, TestResult | None]:
+    """``(comparison or None, expected, None)``, or ``(None, expected, error_result)``.
 
     For the value testfunctions: call it before reading the file, then compare each value with
-    ``comparison.compare`` when it is not ``None`` (else with the function's own comparison).
+    ``comparison.compare(value, expected)`` when the comparison is not ``None`` (else with the
+    function's own comparison and the ``expected`` given). In ordered mode the returned
+    ``expected`` has a lone ``{{ var }}`` replaced by the saved value (:func:`saved_value`).
     """
     try:
         ordered = ordered_comparison(
             comparison_type, value_type, tolerance, time_format, timestamp_epoch, timestamp_unit, utc_offset
         )
     except OrderingError as e:
-        return None, TestResult.error([str(e)])
+        return None, expected, TestResult.error([str(e)])
     if ordered is None:
-        return None, None
+        return None, expected, None
     conflicts = expected_conflicts(ctx, expected, regex_match)
     if conflicts:
-        return None, TestResult.error(conflicts)
-    return ordered, None
+        return None, expected, TestResult.error(conflicts)
+    resolved, errors = saved_value(ctx, expected)
+    if errors:
+        return None, expected, TestResult.error(errors)
+    return ordered, resolved, None
 
 
 # ---------------------------------------------------------------------------
@@ -210,12 +272,18 @@ def _single(label: str, values: list[Any]) -> tuple[Any, TestResult | None]:
 
 
 def compare_pair(
-    label: str, values: list[Any], other_label: str, other_values: list[Any], ordered: OrderedComparison
+    label: str,
+    values: list[Any],
+    other_label: str,
+    other_values: list[Any],
+    ordered: OrderedComparison,
+    decoder: ValueDecoder | None = None,
 ) -> TestResult:
     """Pass when the value of ``values`` <op> the value of ``other_values`` + offset.
 
     ``label`` / ``other_label`` name each side in messages (``key path "a.b"``). A side that
     selects several values is an ERROR (checked first), one that selects nothing FAILED.
+    ``decoder`` (``value_decode``) decodes both values first; a decode failure is an ERROR.
     """
     first, first_problem = _single(label, values)
     second, second_problem = _single(other_label, other_values)
@@ -223,6 +291,11 @@ def compare_pair(
     if problems:
         errors = [p for p in problems if p.status == StatusEnum.ERROR]
         return (errors or problems)[0]
+    if decoder is not None:
+        try:
+            first, second = decoder(first), decoder(second)
+        except ValueDecodeError as e:
+            return TestResult.error([f'{label} / {other_label}: {e}'])
     try:
         holds, message = ordered.compare(first, second)
     except OrderingError as e:
@@ -231,20 +304,48 @@ def compare_pair(
     return TestResult.success(details) if holds else TestResult.failed(details)
 
 
+Select = Callable[[Any, str, bool], tuple[str, list[Any]]]
+
+
+def _key_path_side(data: Any, key_path: str, _first: bool) -> tuple[str, list[Any]]:
+    return f'key path "{key_path}"', resolve_key_path(data, key_path)
+
+
 def values_compare(
-    ctx: Any, dst: str, key_path: str, other_key_path: str, fmt: StructuredFormat, ordered: OrderedComparison
+    ctx: Any,
+    dst: str,
+    key_path: str,
+    other_key_path: str,
+    fmt: StructuredFormat,
+    ordered: OrderedComparison,
+    other_dst: str | None = None,
+    decoder: ValueDecoder | None = None,
+    select: Select | None = None,
 ) -> TestResult:
-    """Body of ``<collection>.values_compare`` for key-path formats (JSON, YAML, TOML, plist)."""
+    """Body of ``<collection>.values_compare``: ``key_path`` in ``dst``, ``other_key_path`` in ``other_dst``.
+
+    ``other_dst`` ``None`` (or empty) reads the second value from ``dst`` as well; otherwise it is
+    loaded exactly like ``dst`` (glob, archive member, a missing file is an ERROR).
+    ``select(data, path, first)`` returns ``(label, values)`` of one side; the default resolves
+    a key path (JSON, YAML, TOML, plist). A ``ValueError`` it raises is an execution error.
+    """
     data, error = load_data(ctx, dst, fmt)
     if error is not None:
         return error
-    return compare_pair(
-        f'key path "{key_path}"',
-        resolve_key_path(data, key_path),
-        f'key path "{other_key_path}"',
-        resolve_key_path(data, other_key_path),
-        ordered,
-    )
+    other_data = data
+    if other_dst:
+        other_data, error = load_data(ctx, other_dst, fmt)
+        if error is not None:
+            return error
+    pick = select or _key_path_side
+    try:
+        label, values = pick(data, key_path, True)
+        other_label, other_values = pick(other_data, other_key_path, False)
+    except ValueError as e:
+        return TestResult.execution_error(e, f'{fmt.label} processing error')
+    if other_dst:
+        label, other_label = f'{label} in {dst}', f'{other_label} in {other_dst}'
+    return compare_pair(label, values, other_label, other_values, ordered, decoder)
 
 
 def structured_values_compare(
@@ -261,12 +362,25 @@ def structured_values_compare(
     timestamp_epoch: int | None = None,
     timestamp_unit: str | None = None,
     utc_offset: str | None = None,
+    other_dst: str | None = None,
+    value_decode: Any = None,
+    decoded_key_path: Any = None,
+    select: Select | None = None,
 ) -> TestResult:
-    """:func:`values_compare` with the parameters validated first (bad ones -> ERROR)."""
+    """:func:`values_compare` with the parameters validated first (bad ones -> ERROR).
+
+    ``offset`` may be a lone ``{{ var }}``: the saved number (:func:`saved_value`).
+    """
+    offset, errors = saved_value(ctx, offset, 'offset', timestamps=False)
+    if errors:
+        return TestResult.error(errors)
     try:
         ordered = build_comparison(
             comparison_type, value_type, tolerance, time_format, timestamp_epoch, timestamp_unit, utc_offset, offset
         )
-    except OrderingError as e:
+        decoder = build_decoder(value_decode, decoded_key_path)
+    except (OrderingError, ValueDecodeError) as e:
         return TestResult.error([str(e)])
-    return values_compare(ctx, dst, key_path, other_key_path, fmt, ordered)
+    if other_dst is not None and not isinstance(other_dst, str):
+        return TestResult.error([f'other_dst must be a path, got {other_dst!r}'])
+    return values_compare(ctx, dst, key_path, other_key_path, fmt, ordered, other_dst, decoder, select)

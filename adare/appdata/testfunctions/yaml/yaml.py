@@ -75,6 +75,8 @@ def value_matches(
     timestamp_epoch: int | None = None,
     timestamp_unit: str | None = None,
     utc_offset: str | None = None,
+    value_decode: list[str] | str | None = None,
+    decoded_key_path: str | None = None,
 ):
     """Pass when the YAML value at ``key_path`` in ``dst`` equals (or matches) ``expected_value``.
 
@@ -105,8 +107,8 @@ def value_matches(
         comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
             ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
             below, compares the value with ``expected_value`` as a number or point in time
-            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
-            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+            (ordered mode; ``less`` = earlier); ``!re`` / ``regex_match`` are then errors, a lone
+            ``{{ name }}`` is the saved variable; a value that is no number or timestamp is an error.
         value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
             ``number`` or ``timestamp``.
         tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
@@ -114,6 +116,13 @@ def value_matches(
         timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
         timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
         utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+        value_decode: Decode the value read from the file before comparing: one step or a
+            list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16``
+            (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes
+            left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
+            unknown step, is an error.
+        decoded_key_path: Key path into the value ``json`` decoded (syntax as in ``key_path``);
+            it must select one value. Required with ``json``, an error without it.
 
     Example:
         function: yaml.value_matches
@@ -138,6 +147,8 @@ def value_matches(
         timestamp_epoch=timestamp_epoch,
         timestamp_unit=timestamp_unit,
         utc_offset=utc_offset,
+        value_decode=value_decode,
+        decoded_key_path=decoded_key_path,
     )
 
 
@@ -189,7 +200,7 @@ def value_count(
 
 @testfunction(
     name='values_compare',
-    description='compares two values of one YAML file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)',
+    description='compares two values of one YAML file (or of two files) as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)',
     category=HostModeCategory.FILE_CONTENT,
 )
 def values_compare(
@@ -205,10 +216,14 @@ def values_compare(
     timestamp_epoch: int | None = None,
     timestamp_unit: str | None = None,
     utc_offset: str | None = None,
+    other_dst: str | None = None,
+    value_decode: list[str] | str | None = None,
+    decoded_key_path: str | None = None,
 ):
     """Pass when the value at ``key_path`` compares to the value at ``other_key_path`` (+ ``offset``).
 
-    Use for: relations inside one file: a last-saved value later than the first-opened one,
+    Use for: relations inside one file (or between two, ``other_dst``): a last-saved value
+    later than the first-opened one,
     two timestamps within a few seconds of each other, a counter one above another
     (``comparison_type: equals`` with ``offset: 1``). To compare one value with a constant
     use yaml.value_matches with ``comparison_type``.
@@ -227,11 +242,16 @@ def values_compare(
             ``number`` or ``timestamp``. A value that is no number or timestamp is an error.
         tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
         offset: Added to the second value before comparing (seconds for timestamps, may be
-            negative): ``first <comparison_type> second + offset``.
+            negative; ``'{{ name }}'`` = a saved number): ``first <comparison_type> second + offset``.
         time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
         timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
         timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
         utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+        other_dst: Guest path of a second file to read ``other_key_path`` from (same rules as
+            ``dst``, ``archive!/member`` included); default ``None``: ``dst``. A missing file is
+            an error. Compares a file with a copy saved before an action.
+        value_decode: Decode both values before comparing (steps as in yaml.value_matches).
+        decoded_key_path: With ``json`` in ``value_decode``: key path into the decoded value.
 
     Example:
         function: yaml.values_compare
@@ -255,4 +275,11 @@ def values_compare(
         timestamp_epoch,
         timestamp_unit,
         utc_offset,
+        other_dst,
+        value_decode,
+        decoded_key_path,
     )
+
+
+# host mode pulls other_dst like dst
+values_compare._test_class.host_mode_path_params = ('other_dst',)

@@ -139,6 +139,9 @@ class TestContext:
     def get_placeholder_metadata(self, placeholder_name: str) -> dict[str, Any]:
         return self._test.get_placeholder_metadata(placeholder_name)
 
+    def parse_expected_timestamp(self, timestamp, metadata: dict[str, Any]):
+        return self._test.parse_expected_timestamp(timestamp, metadata)
+
     def has_tolerance_metadata(self, placeholder_name: str) -> bool:
         return self._test.has_tolerance_metadata(placeholder_name)
 

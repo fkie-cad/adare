@@ -8,7 +8,7 @@ values_compare
 :Category: Property List Data
 :Function Name: ``values_compare``
 
-**Compares two values of one property list file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset).**
+**Compares two values of one property list file (or of two files) as numbers or timestamps (earlier/later, within a tolerance, A = B + offset).**
 
 Passes when ``value(key_path) <comparison_type> value(other_key_path) + offset`` holds in one property list file. Both values are compared as numbers or as points in time; the time parameters say how to read timestamps (ISO 8601 and RFC 2822 by default, ``time_format`` for others, ``timestamp_epoch`` for numeric counts).
 
@@ -42,7 +42,7 @@ Parameters
      - **Optional.** Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
    * - ``offset``
      - number
-     - **Optional.** Added to the second value before comparing (seconds for timestamps, may be negative): ``first <comparison_type> second + offset``.
+     - **Optional.** Added to the second value before comparing (seconds for timestamps, may be negative): ``first <comparison_type> second + offset``. ``'{{ name }}'`` takes a saved number (:ref:`ordered-comparison`).
    * - ``time_format``
      - string
      - **Optional.** ``strptime`` format of text timestamps; default ISO 8601 or RFC 2822.
@@ -55,6 +55,15 @@ Parameters
    * - ``utc_offset``
      - string
      - **Optional.** Zone of timestamps without one (``+02:00``); default UTC.
+   * - ``other_dst``
+     - string
+     - **Optional.** Path of a second file to read the second value from, loaded like ``dst`` (``archive.zip!/member`` included); default: ``dst``. A missing file is an ERROR. Compares a file with a copy saved before an action: :ref:`before-after-action`.
+   * - ``value_decode``
+     - list / string
+     - **Optional.** Decode both values before comparing (steps as in :doc:`value_matches`; see "Decoding a stored value" under :ref:`ordered-comparison`).
+   * - ``decoded_key_path``
+     - string
+     - **Optional.** With ``json`` in ``value_decode``: key path into the decoded value.
 
 Usage Example
 -------------

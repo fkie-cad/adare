@@ -151,11 +151,20 @@ def normalize_dst(value: Any) -> Any:
     return join_archive_path(value['archive'], [member])
 
 
+# Test parameters that hold a guest file path and take the archive mapping form like dst.
+PATH_PARAMETERS = ('dst', 'other_dst')
+
+
 def normalize_test_parameters(test: dict) -> dict:
-    """Return ``test`` with a mapping ``parameter.dst`` turned into its string form."""
+    """Return ``test`` with a mapping ``parameter.dst`` (or ``other_dst``) turned into its string form."""
     parameter = test.get('parameter')
-    if isinstance(parameter, dict) and isinstance(parameter.get('dst'), dict):
-        test = {**test, 'parameter': {**parameter, 'dst': normalize_dst(parameter['dst'])}}
+    if not isinstance(parameter, dict):
+        return test
+    mappings = {
+        name: normalize_dst(parameter[name]) for name in PATH_PARAMETERS if isinstance(parameter.get(name), dict)
+    }
+    if mappings:
+        test = {**test, 'parameter': {**parameter, **mappings}}
     return test
 
 
