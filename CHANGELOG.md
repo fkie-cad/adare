@@ -207,9 +207,13 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   (`secure_delete` off). `view: main_file` or `current` (the `-wal` checkpointed into a copy).
   A corrupt header or a broken freelist or freeblock chain is ERROR. Parser:
   `adarelib.testset.sqlite_freespace` (standard library only).
-  Free space does not cover live data that still holds deleted values (`sqlite_stat4`
-  samples, full-text index segments) or the unused tail of a reused overflow page; the
-  reference page says how to check a whole file (with its `-wal`) instead.
+  `region: overflow_tail` (also in `all`) covers the unused tail of the last page of each
+  in-use overflow chain, where a page freed and reused in the same transaction keeps old
+  bytes; a broken chain (cycle, shared page, out of range, wrong length) is ERROR.
+  `region: whole_file` counts the pattern in the database, its `-wal` and `-journal` as
+  seized (each file on its own, nothing parsed), for "gone from the evidence" checks that
+  also cover live data still holding deleted values (`sqlite_stat4` samples, full-text index
+  segments); `view: current` with it is ERROR.
 - **SQLite `view: commit:N`** (adare, adarelib; additive) on `query_result`, `row_count` and
   `values_compare`: the database as it was after the N-th transaction in the `-wal`
   (negative N counts from the end, `commit:0` is the main file). N out of range is ERROR.
