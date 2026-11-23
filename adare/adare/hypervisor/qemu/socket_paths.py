@@ -40,13 +40,18 @@ def qemu_runtime_dir_path() -> Path:
     return QEMU_STATE_DIR / 'run'
 
 
+# The macOS/BSD limit: a path that fits it fits on every OS. VM creation and interactive
+# sessions place sockets next to disks in arbitrary directories and use this bound.
+PORTABLE_SOCKET_PATH_MAX = 103
+
+
 def unix_socket_path_limit(system: str | None = None) -> int:
     """Longest usable Unix socket path in characters (``sun_path`` size minus the NUL).
 
     107 on Linux and Windows (108-byte ``sun_path``), 103 on macOS and the BSDs (104).
     """
     system = system or platform.system()
-    return 107 if system in ('Linux', 'Windows') else 103
+    return 107 if system in ('Linux', 'Windows') else PORTABLE_SOCKET_PATH_MAX
 
 
 def _name_budget(runtime_dir: Path, limit: int) -> int:

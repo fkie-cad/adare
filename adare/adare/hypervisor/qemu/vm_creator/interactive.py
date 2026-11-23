@@ -11,6 +11,7 @@ from pathlib import Path
 from adare.config.configdirectory import QEMU_STATE_DIR
 from adare.console import console, print_section, print_step
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
+from adare.hypervisor.qemu.socket_paths import PORTABLE_SOCKET_PATH_MAX
 from adare.hypervisor.qemu.vm_creator.base_creator import VMCreationError
 from adare.hypervisor.qemu.vm_creator.disk_helpers import disk_device_args
 from adare.hypervisor.qemu.vm_creator.extend_console import _confirm, run_extend_console
@@ -30,11 +31,6 @@ class InteractiveSessionError(VMCreationError):
         super().__init__(f"Interactive: {detail}")
 
 
-# macOS AF_UNIX sun_path limit is 104 bytes; Linux allows 108. Use the stricter
-# bound so interactive-extend works on macOS long temp dirs ($TMPDIR ≈ 49 chars).
-_QMP_SOCK_LIMIT = 104
-
-
 def _interactive_socket(disk_path: Path, kind: str) -> Path:
     """Unix socket path for an interactive-session channel (`kind` = 'qmp'/'qga').
 
@@ -43,14 +39,14 @@ def _interactive_socket(disk_path: Path, kind: str) -> Path:
     `env extend` under macOS's /var/folders/... TMPDIR) don't blow the limit.
     """
     preferred = disk_path.parent / f'.{disk_path.stem}-interactive-{kind}.sock'
-    if len(str(preferred)) < _QMP_SOCK_LIMIT:
+    if len(str(preferred)) <= PORTABLE_SOCKET_PATH_MAX:  # fits on every OS (macOS is strictest)
         return preferred
     run_dir = QEMU_STATE_DIR / 'run'
     run_dir.mkdir(parents=True, exist_ok=True)
     fallback = run_dir / f'.interactive-{uuid.uuid4().hex[:8]}.{kind}'
-    if len(str(fallback)) >= _QMP_SOCK_LIMIT:
+    if len(str(fallback)) > PORTABLE_SOCKET_PATH_MAX:
         raise InteractiveSessionError(
-            f'{kind.upper()} socket path too long ({len(str(fallback))} >= {_QMP_SOCK_LIMIT} chars): {fallback}'
+            f'{kind.upper()} socket path too long ({len(str(fallback))} > {PORTABLE_SOCKET_PATH_MAX} chars): {fallback}'
         )
     return fallback
 
