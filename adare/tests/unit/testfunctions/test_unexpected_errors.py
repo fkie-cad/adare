@@ -20,7 +20,21 @@ from adarelib.testset.api import TestContext
 pytestmark = pytest.mark.unit
 
 COLLECTIONS = Path(__file__).resolve().parents[3] / 'appdata' / 'testfunctions'
-FILE_COLLECTIONS = ('csv', 'excel', 'json', 'jsonl', 'xml', 'standard', 'plist', 'yaml', 'toml', 'ini', 'image', 'text')
+FILE_COLLECTIONS = (
+    'csv',
+    'excel',
+    'json',
+    'jsonl',
+    'xml',
+    'standard',
+    'plist',
+    'yaml',
+    'toml',
+    'ini',
+    'image',
+    'text',
+    'binary',
+)
 
 _DUMMIES = {str: 'x', int: 1, float: 1.0, bool: False, list: [], dict: {}}
 

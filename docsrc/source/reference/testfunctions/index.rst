@@ -79,6 +79,9 @@ a goal? See :doc:`/guide/choosing-testfunctions`.
    * - :doc:`image/index`
      - 5
      - PNG text chunks, EXIF tags and image dimensions
+   * - :doc:`binary/index`
+     - 4
+     - Binary containers without a parser: values at offsets (pointers followed), byte patterns in a region, key/value string tables
 
 Usage in Playbooks
 -------------------
@@ -150,4 +153,5 @@ Overview of all Test Functions
    yaml/index
    toml/index
    image/index
+   binary/index
 
