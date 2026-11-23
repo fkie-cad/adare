@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 import attrs
 import cattrs
+from cattrs.v import format_exception
 
 from adare.exceptions import DataStructuringError
 from adarelib.helper.yaml import yaml_to_dict
@@ -18,8 +19,22 @@ log = logging.getLogger(__name__)
 
 @attrs.define
 class PostsetupInstallations:
-    """
-    Class to store information about installations that should be done after boot but before the experiment.
+    """One post-setup step: a command run in the guest before every experiment run.
+
+    Steps run in file order, with the same rights on every execution path.
+
+    Attributes:
+        name: Step name (shown in progress, errors and ``logs/postsetup.log``).
+        command: The command text.
+        description: Free text for the operator.
+        cwd: Working directory for the command.
+        shell: Run the command through a dedicated shell.
+        admin: Run elevated (root via sudo on Linux, elevated on Windows)
+            instead of as the VM user. Windows steps run elevated in any case.
+        allow_failure: A failing step (non-zero exit, timeout, transport error)
+            becomes a warning and the run continues; otherwise it fails the run.
+        timeout: Per-step budget in seconds; ``None`` means the default
+            (:data:`DEFAULT_POSTSETUP_TIMEOUT`).
     """
 
     name: str
@@ -27,6 +42,73 @@ class PostsetupInstallations:
     description: str | None = ''
     cwd: str | None = ''
     shell: bool = attrs.field(default=False)
+    admin: bool = False
+    allow_failure: bool = False
+    timeout: float | None = None
+
+    def __attrs_post_init__(self):
+        if self.timeout is not None and self.timeout <= 0:
+            raise ValueError(f'timeout must be > 0 seconds (got {self.timeout})')
+
+
+#: Seconds a post-setup step may run when it sets no ``timeout``.
+DEFAULT_POSTSETUP_TIMEOUT = 600.0
+
+#: Converter for post-setup steps that rejects unknown keys (a typo such as
+#: ``admn`` must fail the load instead of silently dropping the setting).
+_postsetup_converter = cattrs.Converter(forbid_extra_keys=True)
+
+
+def _format_step_error(exc: BaseException, type_: Any) -> str:
+    """Render one cattrs error; a class-level ValueError (our own check) keeps its text."""
+    if isinstance(exc, ValueError) and type_ is None:
+        return str(exc)
+    return format_exception(exc, type_)
+
+
+def structure_postsetup_steps(raw: Any) -> list[PostsetupInstallations]:
+    """Structure a ``postsetupinstallations`` list, rejecting unknown step keys.
+
+    Raises:
+        ValueError: A step is not a mapping, has an unknown key or an invalid value;
+            the message names the step (1-based position and name) and the offending key.
+            (No ``[n]`` indices: the CLI error printer strips bracketed words.)
+    """
+    if not isinstance(raw, list):
+        raise ValueError(f'postsetupinstallations must be a list of steps, got {type(raw).__name__}')
+    return [_structure_postsetup_step(step, position) for position, step in enumerate(raw, start=1)]
+
+
+def _structure_postsetup_step(step: Any, position: int) -> PostsetupInstallations:
+    label = f'postsetupinstallations step {position}'
+    if not isinstance(step, dict):
+        raise ValueError(f'{label}: a step must be a mapping with name and command, got {type(step).__name__}')
+    if step.get('name'):
+        label += f' ("{step["name"]}")'
+    try:
+        return _postsetup_converter.structure(step, PostsetupInstallations)
+    except cattrs.BaseValidationError as e:
+        extra_keys = _forbidden_keys(e)
+        if extra_keys:
+            keys = ', '.join(f"'{key}'" for key in sorted(extra_keys))
+            known = ', '.join(field.name for field in attrs.fields(PostsetupInstallations))
+            noun = 'key' if len(extra_keys) == 1 else 'keys'
+            raise ValueError(f'{label}: unknown {noun} {keys} (known keys: {known})') from e
+        messages = '; '.join(
+            message.removesuffix(' @ ')
+            for message in cattrs.transform_error(e, path='', format_exception=_format_step_error)
+        )
+        raise ValueError(f'{label}: {messages}') from e
+
+
+def _forbidden_keys(error: BaseException) -> list[str]:
+    """Unknown keys reported anywhere inside a cattrs validation error."""
+    if isinstance(error, cattrs.ForbiddenExtraKeysError):
+        return list(error.extra_fields)
+    found: list[str] = []
+    for sub in getattr(error, 'exceptions', ()):
+        found.extend(_forbidden_keys(sub))
+    return found
 
 
 @attrs.define
@@ -348,9 +430,15 @@ def parse_environment_file(environment_file: Path) -> EnvironmentMetadata | None
     # An empty file loads as None; structure {} so it fails with a field error.
     environment_dict = yaml_to_dict(environment_file) or {}
     try:
-        environment = cattrs.structure(environment_dict, EnvironmentMetadata)
-    except cattrs.BaseValidationError as e:
-        error_msg = "\n".join(cattrs.transform_error(e))
+        # Steps go through their own strict converter (unknown keys are errors).
+        if isinstance(environment_dict, dict):
+            steps = structure_postsetup_steps(environment_dict.get('postsetupinstallations') or [])
+            environment = cattrs.structure({**environment_dict, 'postsetupinstallations': []}, EnvironmentMetadata)
+            environment.postsetupinstallations = steps
+        else:
+            environment = cattrs.structure(environment_dict, EnvironmentMetadata)
+    except (cattrs.BaseValidationError, ValueError) as e:
+        error_msg = "\n".join(cattrs.transform_error(e)) if isinstance(e, cattrs.BaseValidationError) else f'\n{e}'
         raise DataStructuringError(
             log,
             message=f'parsing errors while parsing environment file {environment_file}:{error_msg}',

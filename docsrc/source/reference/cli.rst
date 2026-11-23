@@ -157,7 +157,11 @@ all projects) and versioned.
   Options:
     * ``-n, --name TEXT`` - Name for the new environment (required)
     * ``-i, --install TEXT`` - Post-setup install as ``name:command`` (repeatable)
-    * ``--from-file PATH`` - YAML file with post-setup installations to add
+    * ``--from-file PATH`` - YAML file with post-setup installations to add (per-step ``admin``, ``allow_failure``, ``timeout``)
+    * ``--shell``, ``--cwd TEXT`` - Applied to every ``--install`` command
+    * ``--admin`` - Run every ``--install`` command elevated (root via sudo / Windows admin)
+    * ``--allow-failure`` - A failing ``--install`` command only warns; the run continues
+    * ``--timeout SECONDS`` - Per-command timeout for ``--install`` commands (default 600)
     * ``--interactive/--manual`` - Boot the base in a GUI window for manual customization
     * ``--console`` - With ``--interactive``: also open a REPL that records typed commands as installs
     * ``-d, --description TEXT``, ``-t, --tag TEXT`` - Metadata for the new environment

@@ -8,9 +8,14 @@ from sqlalchemy import exists
 
 # internal imports
 from adare.database.api.base import GlobalDatabaseApi
-from adare.database.models.global_models import Environment, PostSetupInstallation, SyncMetadata, Tag
+from adare.database.models.global_models import (
+    Environment,
+    PostSetupInstallation,
+    SyncMetadata,
+    Tag,
+    mapping_postsetupinstallation_environment,
+)
 from adare.database.models.sync_identity import apply_remote_identity
-from adare.types.environment import PostsetupInstallations as PostsetupInstallationsAttrs
 
 log = logging.getLogger(__name__)
 
@@ -85,10 +90,23 @@ class EnvironmentDbApi(GlobalDatabaseApi):
             file=environment_file.resolve().as_posix(),  # Store absolute path
             tags=self.get_or_create_tags(tags),
         )
-        environment.installations = [
-            self.get_or_create(PostSetupInstallation, **install_dict)[0] for install_dict in installations
-        ]
+        # An identical step listed twice is one row; it keeps its first position.
+        steps = list(
+            dict.fromkeys(
+                self.get_or_create(PostSetupInstallation, **install_dict)[0] for install_dict in installations
+            )
+        )
         self._session.add(environment)
+        self._session.flush()
+        # Explicit mapping rows: the order is the file order, and a step row shared with other
+        # environments keeps its own position per environment.
+        for position, step in enumerate(steps):
+            self._session.execute(
+                mapping_postsetupinstallation_environment.insert().values(
+                    postsetupinstallation_id=step.id, environment_id=environment.id, position=position
+                )
+            )
+        self._session.expire(environment, ['installations'])
         self._session.commit()
         return environment
 
@@ -123,16 +141,6 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         if not include_superseded:
             query = query.filter(Environment.is_current)
         return query.all()
-
-    def get_environment_installations(self, environment_ulid: str):
-        if env := self._session.query(Environment).filter_by(id=environment_ulid).first():
-            return [
-                PostsetupInstallationsAttrs(
-                    name=installation.name, command=installation.command, description=installation.description
-                )
-                for installation in env.installations
-            ]
-        raise ValueError(f'environment {environment_ulid} not found in database')
 
     def get_environment_platform(self, environment_ulid: str):
         if env := self._session.query(Environment).filter_by(id=environment_ulid).first():

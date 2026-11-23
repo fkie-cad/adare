@@ -313,11 +313,6 @@ def check_for_experiment_change(project_path: Path, experiment_ulid: str, sha256
         return not api.experiment_sha256_equals(experiment_ulid, sha256)
 
 
-def get_environment_installations(environment_ulid: str):
-    with EnvironmentDbApi() as api:
-        return api.get_environment_installations(environment_ulid)
-
-
 def get_environment_platform(environment_ulid: str):
     with EnvironmentDbApi() as api:
         return api.get_environment_platform(environment_ulid)

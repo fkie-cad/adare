@@ -60,6 +60,9 @@ mapping_postsetupinstallation_environment = Table(
     GlobalBase.metadata,
     Column("postsetupinstallation_id", ForeignKey("post_setup_installation.id")),
     Column("environment_id", ForeignKey("environment.id")),
+    # Order of the step in the environment file. Lives on the mapping row because one
+    # step row is shared by every environment that has an identical step.
+    Column("position", Integer, nullable=False, default=0, server_default='0'),
 )
 
 
@@ -134,6 +137,9 @@ class PostSetupInstallation(SerializerMixin, GlobalBase):
     command = Column(String, nullable=False)
     shell = Column(Boolean, default=False)
     cwd = Column(String, nullable=True, default=None)
+    admin = Column(Boolean, nullable=False, default=False, server_default='0')
+    allow_failure = Column(Boolean, nullable=False, default=False, server_default='0')
+    timeout = Column(Float, nullable=True, default=None)
 
     def __str__(self):
         return str(self.name)
@@ -535,7 +541,13 @@ class Environment(RemoteIdentityMixin, SerializerMixin, GlobalBase):
     vm_id = Column(CHAR(26), ForeignKey('vm.id', ondelete='RESTRICT'), nullable=True)
     vm = relationship(Vm, backref=backref("environments"))
 
-    installations = relationship(PostSetupInstallation, secondary=mapping_postsetupinstallation_environment)
+    # In file order. Written by EnvironmentDbApi.create_environment_version (which fills the
+    # mapping table's `position`); do not assign to it directly.
+    installations = relationship(
+        PostSetupInstallation,
+        secondary=mapping_postsetupinstallation_environment,
+        order_by=mapping_postsetupinstallation_environment.c.position,
+    )
 
     file = Column(String, nullable=True)
     sha256hash = Column(String, nullable=True)

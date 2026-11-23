@@ -287,3 +287,44 @@ def test_provision_and_postsetupinstallations_are_independent_inputs(tmp_path):
     as_postsetup = yaml.safe_load(yaml.dump(_WIN11ARM64_FRESH))
     as_postsetup['postsetupinstallations'] = [{'name': 'tool', 'command': 'install-tool'}]
     assert _hash(as_provision, tmp_path)[0] != _hash(as_postsetup, tmp_path)[0]
+
+
+# --- post-setup step options (admin / allow_failure / timeout) ---
+
+# Recipe hash of the golden environment plus the two steps below, computed with the code
+# from before the step options existed. Steps that leave the options at their defaults
+# must keep hashing to it, or every already-built recipe environment gets orphaned.
+_POSTSETUP_STEPS = [
+    {'name': 'tool', 'command': 'install-tool'},
+    {'name': 'x', 'command': 'y', 'cwd': '/tmp', 'shell': True, 'description': 'd'},
+]
+GOLDEN_RECIPE_HASH_WITH_POSTSETUP = '126487e1d8a0b2057ed1fa7d2d91cbb7e48c8ab2ca06caab41995d77d67d00d6'
+
+
+def _with_postsetup(steps: list[dict]) -> dict:
+    env = yaml.safe_load(yaml.dump(_WIN11ARM64_FRESH))
+    env['postsetupinstallations'] = steps
+    return env
+
+
+def test_default_step_options_keep_the_pre_existing_hash(tmp_path):
+    assert _hash(_with_postsetup(_POSTSETUP_STEPS), tmp_path)[0] == GOLDEN_RECIPE_HASH_WITH_POSTSETUP
+
+
+def test_spelling_out_the_default_step_options_does_not_change_the_hash(tmp_path):
+    explicit = [dict(step, admin=False, allow_failure=False) for step in _POSTSETUP_STEPS]
+    assert _hash(_with_postsetup(explicit), tmp_path)[0] == GOLDEN_RECIPE_HASH_WITH_POSTSETUP
+
+
+@pytest.mark.parametrize('option', [{'admin': True}, {'allow_failure': True}, {'timeout': 30}])
+def test_a_non_default_step_option_changes_the_hash(tmp_path, option):
+    steps = [dict(_POSTSETUP_STEPS[0], **option), _POSTSETUP_STEPS[1]]
+    assert _hash(_with_postsetup(steps), tmp_path)[0] != GOLDEN_RECIPE_HASH_WITH_POSTSETUP
+
+
+def test_the_step_options_are_distinct_hash_inputs(tmp_path):
+    hashes = {
+        _hash(_with_postsetup([dict(_POSTSETUP_STEPS[0], **option)]), tmp_path)[0]
+        for option in ({'admin': True}, {'allow_failure': True}, {'timeout': 30}, {'timeout': 60})
+    }
+    assert len(hashes) == 4

@@ -60,7 +60,18 @@ Prefetch/registry/MFT entries, exactly the artifacts under measurement, so a per
 install contaminates its own results.
 
 `recipe.provision` (build time, baked in) vs `postsetupinstallations` (every
-experiment run, unchanged behaviour). Both are folded into the recipe hash.
+experiment run). Both are folded into the recipe hash.
+
+`postsetupinstallations` steps run in file order and take: `name`, `command`,
+`description`, `cwd`, `shell`, plus `admin` (default false = VM user; true = root via
+sudo on Linux, elevated on Windows, where steps are elevated anyway), `allow_failure`
+(default false; true = a failure only warns) and `timeout` (seconds, default 600, must
+be > 0). A step fails on non-zero exit, timeout or transport error; without
+`allow_failure` that fails the run (message: step, exit code, duration, last ~20 lines).
+Every step's command, rights, exit code, duration, stdout and stderr land in
+`<run>/logs/postsetup.log`. Same rights on every path (normal run, host tests,
+`--backend hostside`, `adare dev start` unless `--no-postsetup`). **An unknown key in a
+step is a load error**, so check spelling (`admin`, not `root`).
 
 ```yaml
 recipe:

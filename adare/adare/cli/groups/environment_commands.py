@@ -205,6 +205,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
     @click.option('--from-file', type=click.Path(exists=True), help='YAML file with post-setup installations to add')
     @click.option('--shell', is_flag=True, help='Run --install commands through a shell')
     @click.option('--cwd', help='Working directory for --install commands')
+    @click.option('--admin', is_flag=True, help='Run --install commands elevated (root via sudo / Windows admin)')
+    @click.option('--allow-failure', is_flag=True, help='A failing --install command only warns; the run continues')
+    @click.option('--timeout', type=float, help='Per-command timeout in seconds for --install commands (default: 600)')
     @click.option(
         '--interactive',
         '--manual',
@@ -242,6 +245,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         from_file,
         shell,
         cwd,
+        admin,
+        allow_failure,
+        timeout,
         interactive,
         console,
         ram,
@@ -259,8 +265,10 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         SOURCE can be an environment name, environment ULID, or VM name.
 
         Declarative mode (default): pass --install/--from-file to add post-setup
-        installations on top of the source's existing ones; the new environment
-        is a strict superset and shares the same underlying VM disk (no new VM
+        installations on top of the source's existing ones (--shell, --cwd,
+        --admin, --allow-failure and --timeout apply to every --install
+        command; steps that need different settings go in --from-file); the
+        new environment is a strict superset and shares the same underlying VM disk (no new VM
         is created).
 
         Interactive mode (--interactive, QEMU only): boots a throwaway overlay of
@@ -280,6 +288,9 @@ def register(cli, AliasedGroup, exec_with_error_printing):
             from_file=from_file,
             shell=shell,
             cwd=cwd,
+            admin=admin,
+            allow_failure=allow_failure,
+            timeout=timeout,
             interactive=interactive,
             console=console,
             ram=ram,

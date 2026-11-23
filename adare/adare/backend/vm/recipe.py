@@ -187,6 +187,26 @@ def _answer_file_hash(os_def: OsDefinition) -> str:
     return hash_string_sha256(f'no-template:{os_def.template or os_def.name}')
 
 
+def _post_install_identity(inst) -> dict:
+    """Identity of one post-setup step. The option fields (admin, allow_failure,
+    timeout) are added **only when non-default**, like ``provision`` below: an
+    unconditional key would change the hash of every recipe environment already built."""
+    identity = {
+        'name': inst.name,
+        'command': inst.command,
+        'description': inst.description,
+        'cwd': inst.cwd,
+        'shell': inst.shell,
+    }
+    if inst.admin:
+        identity['admin'] = True
+    if inst.allow_failure:
+        identity['allow_failure'] = True
+    if inst.timeout is not None:
+        identity['timeout'] = inst.timeout
+    return identity
+
+
 def _recipe_identity(
     recipe: Recipe, os_def: OsDefinition, postsetupinstallations: list, provision_commands: list[ProvisionCommand] = ()
 ) -> dict:
@@ -225,16 +245,7 @@ def _recipe_identity(
         'install_mode': os_def.install_mode,
         'template': os_def.template or '',
         'params': attrs.asdict(recipe.params),
-        'post_install': [
-            {
-                'name': inst.name,
-                'command': inst.command,
-                'description': inst.description,
-                'cwd': inst.cwd,
-                'shell': inst.shell,
-            }
-            for inst in postsetupinstallations
-        ],
+        'post_install': [_post_install_identity(inst) for inst in postsetupinstallations],
     }
     if provision_commands:
         identity['provision'] = provision_identity(list(provision_commands))

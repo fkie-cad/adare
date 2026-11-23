@@ -105,9 +105,9 @@ Optional Fields
 - **vm_type**: ``auto`` (default), ``path``, ``url``, or ``recipe``.
 - **vm_format**: disk format hint (``qcow2``/``ova``/``vmdk``/``vdi``/``img``/``raw``);
   required for a URL with no recognizable disk extension.
-- **postsetupinstallations**: commands run inside **every experiment run**. Not the
-  place to install software under test -- see ``recipe.provision`` in
-  :ref:`build-time-provisioning` for why.
+- **postsetupinstallations**: commands run inside **every experiment run**, in file
+  order. Not the place to install software under test -- see ``recipe.provision`` in
+  :ref:`build-time-provisioning` for why. Fields and rules: :ref:`postsetup-steps`.
 - **tags**: labels for organization
 - **description**: environment purpose
 - **hypervisor** / **hypervisor_config**: hypervisor selection and per-hypervisor
@@ -116,6 +116,78 @@ Optional Fields
   (or a matching ``vm_format``), ``qemu`` for everything else, including recipes.
 - **vm_sha256**: required for a URL disk; for a local ``path`` disk it is checked
   on load when present.
+
+.. _postsetup-steps:
+
+Post-setup steps
+================
+
+``postsetupinstallations`` is a list of commands that run in the guest after boot and
+before the experiment, on **every run**:
+
+.. code-block:: yaml
+
+   postsetupinstallations:
+     - name: disable wizard
+       command: "gsettings set org.gnome.desktop.screensaver lock-enabled false"
+     - name: install tool
+       command: "apt-get install -y jq"
+       admin: true               # root instead of the VM user
+       timeout: 1800             # seconds (default 600)
+     - name: best effort cleanup
+       command: "rm -rf ~/.cache/thumbnails"
+       allow_failure: true       # a failure only warns
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 12 70
+
+   * - Field
+     - Default
+     - Meaning
+   * - ``name``
+     - required
+     - Step name, used in progress output, errors and the log.
+   * - ``command``
+     - required
+     - The command to run.
+   * - ``description``
+     - empty
+     - Free text for the operator.
+   * - ``cwd``
+     - empty
+     - Working directory for the command.
+   * - ``shell``
+     - ``false``
+     - Run the command through a dedicated shell.
+   * - ``admin``
+     - ``false``
+     - ``false``: the step runs as the VM user. ``true``: root via ``sudo`` on Linux,
+       elevated on Windows (Windows steps run elevated in any case).
+   * - ``allow_failure``
+     - ``false``
+     - ``false``: a failed step fails the run. ``true``: the failure is logged as a
+       warning and the run continues with the next step.
+   * - ``timeout``
+     - ``600``
+     - Seconds the step may run; must be greater than 0.
+
+Rules that hold on every execution path (normal run, host tests, the host-side backend,
+and ``adare dev start``, which runs them too unless ``--no-postsetup`` is given):
+
+- Steps run in **file order**, with the same rights.
+- A step **fails** on a non-zero exit code, a timeout, or a transport error. Without
+  ``allow_failure`` the run fails with a message naming the step, its exit code, its
+  duration and the last ~20 lines of stderr/stdout; with it, a warning is logged and
+  the run continues.
+- Every step's command, rights, exit code, duration, stdout and stderr are written to
+  ``<run>/logs/postsetup.log``.
+- **Unknown keys in a step are a load error** (``postsetupinstallations step 2
+  ("disable wizard"): unknown key 'admn'``), so a typo cannot silently drop a setting.
+
+``adare env extend`` accepts the same options: ``--admin``, ``--allow-failure`` and
+``--timeout SECONDS`` apply to every ``--install`` given on that command line; steps
+that need different settings go in a ``--from-file`` YAML list.
 
 A disk-image (non-recipe) environment needs an ``os`` block. ``vagrantbox``-only
 environments are no longer supported and are refused on load.

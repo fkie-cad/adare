@@ -145,6 +145,11 @@ MIGRATIONS: list[Migration] = [
         scope='project',
         module=f'{_PACKAGE}.add_superseded_to_playbook_item',
     ),
+    Migration(
+        name='add_postsetup_step_options',
+        scope='global',
+        module=f'{_PACKAGE}.add_postsetup_step_options',
+    ),
 ]
 
 # Applied-migration names per database URL. Keeps auto-apply at one SELECT per

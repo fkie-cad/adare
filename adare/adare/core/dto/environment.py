@@ -89,7 +89,7 @@ class EnvironmentExtendRequest:
     Request DTO for extending an environment (or VM) into a new environment
     that reuses the same base disk plus additional post-setup installations.
 
-    Declarative mode (default) is driven by `installs`/`from_file`/`shell`/`cwd`.
+    Declarative mode (default) is driven by `installs`/`from_file`/`shell`/`cwd`/`admin`/`allow_failure`/`timeout`.
     Interactive mode (`interactive`, QEMU only) boots the base in a GUI window;
     `console` additionally opens the recording REPL, and the Mode-B-only fields
     (`ram`, `cpus`, `disk_name`) tune the boot window and flattened disk name.
@@ -101,6 +101,10 @@ class EnvironmentExtendRequest:
     from_file: Path | None = None
     shell: bool = False
     cwd: str | None = None
+    # Applied to every --install entry (per-step settings go in --from-file).
+    admin: bool = False
+    allow_failure: bool = False
+    timeout: float | None = None
     interactive: bool = False
     console: bool = False
     ram: int | None = None

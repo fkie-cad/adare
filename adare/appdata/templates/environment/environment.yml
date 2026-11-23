@@ -12,9 +12,18 @@ os:
 # hypervisor_config:
 #   boot_mode: auto  # Options: 'auto' (arch-aware: x86_64 Linux->BIOS, Windows/ARM->UEFI), 'uefi', 'bios'
 
+# Commands run in the guest before every experiment run, in file order.
+# Per step: name, command (required); description, cwd, shell (optional) and
+#   admin: true          run as root / elevated instead of as the VM user (default: false)
+#   allow_failure: true  a failing step only warns, the run continues (default: false)
+#   timeout: 900         seconds the step may run (default: 600)
+# Unknown keys are a load error. Output of every step: <run>/logs/postsetup.log
 # postsetupinstallations:
 #   - name: "jinja2"
 #     command: "pip3 install jinja2"
 #     description: "tool to use templating in python"
 #   - name: "datefinder"
 #     command: "pip3 install datefinder"
+#     admin: true
+#     allow_failure: true
+#     timeout: 300

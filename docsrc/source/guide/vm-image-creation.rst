@@ -579,8 +579,9 @@ environment instead of building immediately:
    # writes Prefetch/registry/MFT entries into the artifact set under
    # measurement, which is a forensic contamination. For software installs, use
    # `recipe.provision` above instead.
-   # postsetupinstallations:
-   #   - {name: my-tool, command: "...", description: "..."}
+   # postsetupinstallations (run in file order; options: admin, allow_failure,
+   # timeout -- see "Post-setup steps" in the environments guide):
+   #   - {name: my-tool, command: "...", description: "...", admin: true, timeout: 900}
 
 Build lifecycle
 ---------------
