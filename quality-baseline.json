@@ -1,10 +1,10 @@
 {
   "ruff": {
     "B007": 8,
-    "B904": 12,
+    "B904": 8,
     "B905": 18,
-    "BLE001": 123,
-    "C901": 84,
+    "BLE001": 119,
+    "C901": 83,
     "E402": 171,
     "RET504": 7,
     "S110": 15,
@@ -48,6 +48,6 @@
     "adare/tests/unit/testfunctions/test_csv.py": 1241,
     "adare/tests/unit/testfunctions/test_standard.py": 1123,
     "adare/tests/unit/testfunctions/test_xml.py": 1314,
-    "adarelib/adarelib/common/variables.py": 1367
+    "adarelib/adarelib/common/variables.py": 1293
   }
 }

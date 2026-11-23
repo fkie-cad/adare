@@ -45,9 +45,7 @@ class AutomaticVariables:
         cls._add_user_variables(registry, target_os, target_user)
         cls._add_system_variables(registry, target_os)
 
-        log.info(
-            f"CLAUDE: Created automatic variables for OS='{target_os}', user='{target_user}': {list(registry.variables.keys())}"
-        )
+        log.debug(f"Created {len(registry.variables)} automatic variables for OS='{target_os}', user='{target_user}'")
 
         return registry
 
@@ -281,18 +279,10 @@ class AutomaticVariables:
         for name, var in automatic_vars.variables.items():
             merged.add(name, var)
 
-        log.info(
-            f"CLAUDE: Added {len(automatic_vars.variables)} automatic variables: {list(automatic_vars.variables.keys())}"
-        )
-
         # Then add/override with user variables
         for name, var in user_vars.variables.items():
             if name in merged.variables:
-                log.info(f"CLAUDE: User variable '{name}' overrides automatic variable")
+                log.debug(f"User variable '{name}' overrides automatic variable")
             merged.add(name, var)
-
-        log.info(
-            f"CLAUDE: Final merged registry has {len(merged.variables)} variables: {list(merged.variables.keys())}"
-        )
 
         return merged

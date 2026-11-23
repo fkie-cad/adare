@@ -236,6 +236,9 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   A pattern that is missing or only occurs earlier is FAILED and named in the details.
 
 ### Changed
+- Removed the leftover `CLAUDE:` debug logs (adarelib variables, adarevm MFT / Linux snapshot /
+  Windows icons, OCR): pure traces are gone, real diagnostics keep their level and progress
+  traces moved to debug, so INFO output is quieter.
 - The `testfunction_search` chat tool returns `{match, results: [cards], known_gaps}` instead
   of a list of full entries; `adare test search` defaults to 5 results.
 - `adare experiment run` exit codes (adare): `0` only when every run passed, `1` when any
@@ -301,6 +304,13 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   paths (browser profiles, office suites, registry keys); a unit test keeps it that way.
 
 ### Fixed
+- Timestamp variables (adarelib): a time zone, timestamp text or `format` that cannot be applied
+  is now a playbook error naming the variable, instead of a silently wrong or raw value. A
+  `timezone: +02:00` style offset was never applied (the value stayed naive and was read as UTC
+  or local time); it now is, like a zone name. An unknown zone or malformed offset, an unparsable
+  timestamp (it used to come through as its raw text) and a non-string `format` raise
+  `ValidationError` when the playbook loads. `ValidationError` is now a `ValueError`, so
+  `playbook validate` and `experiment run` report it as a playbook error.
 - `adare experiment create` wrote a `metadata.yml` whose `environments:` held only comments
   (null), so `experiment run` and `experiment add-env` rejected the new experiment. The
   skeleton now writes `environments: []`, and a null list in an existing `metadata.yml` loads as

@@ -90,7 +90,7 @@ class NTFSVolumeReader:
         self._handle = None
 
         device_path = f"\\\\.\\{volume}"
-        log.info(f"CLAUDE: Opening volume device: {device_path}")
+        log.debug(f"Opening volume device: {device_path}")
 
         GENERIC_READ = 0x80000000
         FILE_SHARE_READ = 0x00000001
@@ -194,8 +194,8 @@ class NTFSBootSector:
         self.cluster_size = self.bytes_per_sector * self.sectors_per_cluster
         self.mft_offset = self.mft_cluster_number * self.cluster_size
 
-        log.info(
-            f"CLAUDE: NTFS boot sector parsed — "
+        log.debug(
+            f"NTFS boot sector parsed — "
             f"bytes/sector={self.bytes_per_sector}, "
             f"sectors/cluster={self.sectors_per_cluster}, "
             f"cluster_size={self.cluster_size}, "
@@ -534,7 +534,6 @@ class MFTParser:
 
                 runs = parse_data_runs(run_data)
                 if runs:
-                    log.info(f"CLAUDE: Parsed {len(runs)} data run(s) from MFT entry 0")
                     return runs
 
             attr_offset += attr_length
@@ -569,7 +568,7 @@ class MFTParser:
         total_bytes = total_clusters * cluster_size
         total_entries = total_bytes // record_size
         log.info(
-            f"CLAUDE: MFT spans {total_clusters} clusters "
+            f"MFT spans {total_clusters} clusters "
             f"({total_bytes / (1024 * 1024):.1f} MB), "
             f"~{total_entries} entries across {len(data_runs)} run(s)"
         )
@@ -578,7 +577,7 @@ class MFTParser:
         records = {}
         record_number = 0
 
-        for run_idx, (cluster_offset, cluster_count) in enumerate(data_runs):
+        for cluster_offset, cluster_count in data_runs:
             run_byte_offset = cluster_offset * cluster_size
             run_byte_length = cluster_count * cluster_size
             bytes_read_in_run = 0
@@ -609,14 +608,7 @@ class MFTParser:
 
                 bytes_read_in_run += len(chunk)
 
-            if record_number % 50000 > 0 and run_idx == len(data_runs) - 1:
-                log.info(f"CLAUDE: Processed {record_number} MFT records, {len(records)} valid")
-
-            # Progress logging after each run
-            if len(data_runs) > 1:
-                log.info(f"CLAUDE: Completed data run {run_idx + 1}/{len(data_runs)}")
-
-        log.info(f"CLAUDE: MFT parsing complete. Total records: {record_number}, Valid: {len(records)}")
+        log.info(f"MFT parsing complete. Total records: {record_number}, Valid: {len(records)}")
         return records
 
 
@@ -715,7 +707,6 @@ def reconstruct_paths_memoized(
     # Restore recursion limit
     sys.setrecursionlimit(old_limit)
 
-    log.info(f"CLAUDE: Path reconstruction complete. Total files: {len(result)}")
     return result
 
 
@@ -785,12 +776,11 @@ class MFTReader:
                 error_msg = "Administrator privileges required for MFT reading. Please run adarevm as Administrator."
                 return (False, error_msg)
 
-            log.info("CLAUDE: Running with Administrator privileges — MFT access enabled")
             return (True, "")
 
         except (AttributeError, OSError) as e:
             error_msg = f"Failed to check admin privileges: {e}"
-            log.error(f"CLAUDE: {error_msg}")
+            log.error(error_msg)
             return (False, error_msg)
 
     @staticmethod
@@ -811,9 +801,9 @@ class MFTReader:
         Returns:
             Dict mapping file paths to metadata with enhanced format
         """
-        log.info(f"CLAUDE: Starting MFT snapshot for volume {volume}")
+        log.debug(f"Starting MFT snapshot for volume {volume}")
         if root_path:
-            log.info(f"CLAUDE: Path filter: {root_path}")
+            log.debug(f"Path filter: {root_path}")
 
         # Step 1: Check admin privileges
         is_admin, error_msg = MFTReader.check_admin_privileges()
@@ -829,8 +819,7 @@ class MFTReader:
             records = MFTParser.parse_mft_from_volume(reader, boot_sector)
 
         # Step 4: Reconstruct paths with memoization
-        log.info("CLAUDE: Reconstructing file paths...")
         result = reconstruct_paths_memoized(records, root_path)
 
-        log.info(f"CLAUDE: MFT snapshot complete. Total files: {len(result)}")
+        log.info(f"MFT snapshot complete. Total files: {len(result)}")
         return result
