@@ -76,6 +76,10 @@ CASES = {
     'sqlite.query_result': {'query': 'SELECT 1'},
     'sqlite.row_count': {'query': 'SELECT 1', 'expected_count': 1},
     'excel.row_count': {'entry': ['a'], 'expected_count': 1},
+    'binary.struct_value_matches': {'offset': 0, 'value_format': 'u8', 'expected_value': 0},
+    'binary.pattern_count': {'pattern': 'a', 'expected_count': 0},
+    'binary.pair_value_matches': {'key': 'a', 'expected_value': 'b'},
+    'binary.pair_count': {'key': 'a', 'expected_count': 0},
 }
 TWO_PATHS = {'csv.compare_files', 'excel.compare_sheets', 'excel.compare_files'}
 
