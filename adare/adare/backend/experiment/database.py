@@ -561,6 +561,10 @@ def get_experiment_environment_name(project_path: Path, experiment_name: str) ->
             raise NoEnvironmentError(
                 log,
                 f'experiment {experiment} has no environment',
+                possible_solutions=[
+                    'specify the environment with -e <environment>',
+                    f'or add one to the experiment with: adare experiment add-env {experiment_name} <environment>',
+                ],
             )
         # Several versions of one environment (``env load --force``) are still one
         # environment; count names, not ids.
