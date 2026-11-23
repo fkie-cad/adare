@@ -6,10 +6,15 @@ common system-state queries used by testfunctions.
 """
 
 import contextlib
+import json
 import logging
+import shlex
+from dataclasses import dataclass
 
 from adare.hypervisor.base.models import CommandResult
+from adare.hypervisor.qemu.guest_clock import GuestClockError, read_guest_time, read_guest_utc_offset
 
+from .guest_file_proxy import is_not_found_error
 from .vm_operation_proxy import VMOperationProxy
 
 log = logging.getLogger(__name__)
@@ -18,6 +23,47 @@ log = logging.getLogger(__name__)
 def _ps_quote(value: str) -> str:
     """PowerShell single-quoted string literal (no expansion; ``'`` is doubled)."""
     return "'" + value.replace("'", "''") + "'"
+
+
+# .NET RegistryValueKind -> the canonical REG_* names the guest agent reports.
+_REGISTRY_KINDS = {
+    'string': 'REG_SZ',
+    'expandstring': 'REG_EXPAND_SZ',
+    'binary': 'REG_BINARY',
+    'dword': 'REG_DWORD',
+    'multistring': 'REG_MULTI_SZ',
+    'qword': 'REG_QWORD',
+}
+
+
+def _typed_registry_value(kind: str, data):
+    """JSON ``data`` of a registry value of .NET kind ``kind`` as the Python value ``winreg`` gives."""
+    kind = kind.lower()
+    if kind == 'binary':
+        return bytes(data) if isinstance(data, list) else b''
+    if kind == 'multistring':
+        return list(data) if isinstance(data, list) else [data]
+    if kind in ('dword', 'qword') and isinstance(data, int):
+        # .NET reads the data signed; winreg returns it unsigned
+        return data & (0xFFFFFFFF if kind == 'dword' else 0xFFFFFFFFFFFFFFFF)
+    return data
+
+
+@dataclass(frozen=True)
+class GuestClock:
+    """The guest's wall clock: epoch seconds now, and its UTC offset in seconds (``None`` = unknown)."""
+
+    now: float
+    utc_offset_seconds: int | None = None
+
+
+def raise_for_stat_failure(guest_path: str, result: CommandResult) -> None:
+    """Raise for a failed ``stat``: ``FileNotFoundError`` when the guest says the path is absent,
+    ``RuntimeError`` for anything else (permission denied, I/O error): that says nothing about absence."""
+    message = (result.stderr or result.stdout or '').strip()
+    if is_not_found_error(message):
+        raise FileNotFoundError(f'{guest_path} does not exist on guest: {message}')
+    raise RuntimeError(f'cannot examine {guest_path} on guest: {message or f"exit code {result.returncode}"}')
 
 
 class GuestCommandProxy(VMOperationProxy):
@@ -55,26 +101,33 @@ class GuestCommandProxy(VMOperationProxy):
         """
         return await self.vm.run_command(command, silent=silent, admin=admin, cwd=cwd)
 
-    async def is_process_running(self, process_name: str) -> bool:
-        """Check if a process is running on the guest.
+    async def list_processes(self, process_name: str) -> list[str]:
+        """PIDs of the processes matching ``process_name`` on the guest.
 
-        Args:
-            process_name: Process name to search for
+        Linux: ``pgrep -f`` like the guest agent, so the name is an extended regex matched against
+        the full command line. The shell running this command carries the pattern in its own command
+        line and would match itself, so its PID is left out. Windows: ``Get-Process -Name``.
 
-        Returns:
-            True if at least one matching process is found
+        Raises:
+            RuntimeError: the guest could not run the command
         """
         if self.is_windows:
-            cmd = f'Get-Process -Name "{process_name}" -ErrorAction SilentlyContinue | Measure-Object | Select-Object -ExpandProperty Count'
+            quoted = _ps_quote(process_name)
+            cmd = f'(Get-Process -Name {quoted} -ErrorAction SilentlyContinue).Id'
             result = await self.run(cmd, silent=True)
-            try:
-                return int(result.stdout.strip()) > 0
-            except ValueError:
-                return False
-        else:
-            cmd = f"pgrep -x '{process_name}' > /dev/null 2>&1 && echo RUNNING || echo STOPPED"
-            result = await self.run(cmd, silent=True)
-            return 'RUNNING' in result.stdout
+            return [line.strip() for line in result.stdout.splitlines() if line.strip().isdigit()]
+        cmd = f'echo "SELF:$$"; pgrep -f -- {shlex.quote(process_name)}'
+        result = await self.run(cmd, silent=True)
+        if result.returncode not in (0, 1):
+            # 1 = no match; anything else (2: invalid regex, 3: fatal) is not "not running"
+            raise RuntimeError(f'pgrep failed (exit {result.returncode}): {(result.stderr or "").strip()}')
+        lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        own = next((line[5:] for line in lines if line.startswith('SELF:')), None)
+        return [line for line in lines if line.isdigit() and line != own]
+
+    async def is_process_running(self, process_name: str) -> bool:
+        """True if at least one process matches ``process_name`` (see :meth:`list_processes`)."""
+        return bool(await self.list_processes(process_name))
 
     async def get_service_status(self, service_name: str) -> str:
         """Get the status of a system service on the guest.
@@ -93,25 +146,50 @@ class GuestCommandProxy(VMOperationProxy):
         result = await self.run(cmd, silent=True)
         return result.stdout.strip()
 
-    async def user_exists(self, username: str) -> bool:
-        """Check if a user account exists on the guest.
+    async def get_user_info(self, username: str) -> dict | None:
+        """The account ``username`` as ``{'uid': int, 'home': str}``, or ``None`` if there is none.
 
-        Args:
-            username: Username to check
+        Linux: ``getent passwd``, the same user database as ``pwd.getpwnam`` (NSS sources count).
+        Windows has no UID/home in ``Get-LocalUser``: ``{}`` when the account exists.
 
-        Returns:
-            True if user exists
+        Raises:
+            RuntimeError: the answer could not be read
         """
         if self.is_windows:
             cmd = (
-                f'if (Get-LocalUser -Name "{username}" -ErrorAction SilentlyContinue) '
+                f'if (Get-LocalUser -Name {_ps_quote(username)} -ErrorAction SilentlyContinue) '
                 f'{{ echo "EXISTS" }} else {{ echo "MISSING" }}'
             )
-        else:
-            cmd = f"id '{username}' > /dev/null 2>&1 && echo EXISTS || echo MISSING"
+            result = await self.run(cmd, silent=True)
+            return {} if 'EXISTS' in result.stdout else None
+        result = await self.run(f'getent passwd -- {shlex.quote(username)}', silent=True)
+        if result.returncode == 2:  # key not found
+            return None
+        fields = result.stdout.strip().split(':')
+        if result.returncode != 0 or len(fields) < 6 or not fields[2].isdigit():
+            raise RuntimeError(f'getent passwd failed (exit {result.returncode}): {(result.stderr or "").strip()}')
+        return {'uid': int(fields[2]), 'home': fields[5]}
 
-        result = await self.run(cmd, silent=True)
-        return 'EXISTS' in result.stdout
+    async def user_exists(self, username: str) -> bool:
+        """True if the account exists on the guest."""
+        return await self.get_user_info(username) is not None
+
+    async def get_guest_clock(self) -> GuestClock | None:
+        """The guest's clock through QGA, or ``None`` when the guest agent cannot tell."""
+        try:
+            now = await read_guest_time(self.vm)
+        except (GuestClockError, AttributeError, KeyError, ValueError) as e:
+            log.warning(f"GuestCommandProxy: guest clock unavailable: {e}")
+            return None
+        offset = None
+        try:
+            text = await read_guest_utc_offset(self.vm)
+            sign = -1 if text.startswith('-') else 1
+            hours, minutes = text[1:].split(':')
+            offset = sign * (int(hours) * 3600 + int(minutes) * 60)
+        except (GuestClockError, KeyError, ValueError) as e:  # older qemu-ga lacks guest-get-timezone
+            log.debug(f"GuestCommandProxy: guest timezone unavailable: {e}")
+        return GuestClock(now, offset)
 
     async def get_file_stat(self, guest_path: str) -> dict:
         """Get file stat information from guest.
@@ -181,41 +259,57 @@ class GuestCommandProxy(VMOperationProxy):
         result = await self.run(cmd, silent=True)
         return 'EXISTS' in result.stdout
 
-    async def registry_value_get(self, key_path: str, value_name: str) -> tuple[bool, str | None, str | None]:
-        """Get a Windows registry value.
+    async def registry_value_get(self, key_path: str, value_name: str) -> tuple[bool, object, str | None]:
+        """Get a Windows registry value with its Python type, as ``winreg`` would return it.
+
+        The data comes back as JSON (``ConvertTo-Json``) and is typed by the value kind:
+        DWORD/QWORD -> ``int``, String/ExpandString -> ``str`` (variables NOT expanded, as
+        ``winreg``), Binary -> ``bytes``, MultiString -> ``list[str]``.
 
         Args:
             key_path: Full registry key path
-            value_name: Value name within the key
+            value_name: Value name within the key (``''`` is the default value)
 
         Returns:
-            Tuple of (exists: bool, value: str or None, type_name: str or None)
+            ``(exists, typed value or None, canonical type name or None)``; the type name is
+            ``REG_SZ``, ``REG_EXPAND_SZ``, ``REG_BINARY``, ``REG_DWORD``, ``REG_MULTI_SZ``,
+            ``REG_QWORD`` (``REG_NONE`` for others)
+
+        Raises:
+            RuntimeError: the guest's answer could not be read
         """
         ps_path = self._to_powershell_registry_path(key_path)
         cmd = (
             f'try {{ '
-            f'$val = Get-ItemProperty -Path "Registry::{ps_path}" -Name "{value_name}" -ErrorAction Stop; '
-            f'$raw = $val."{value_name}"; '
-            f'$kind = (Get-Item "Registry::{ps_path}").GetValueKind("{value_name}"); '
-            f'"VALUE:" + [string]$raw; '
-            f'"TYPE:" + [string]$kind '
+            f'$key = Get-Item -LiteralPath "Registry::{ps_path}" -ErrorAction Stop; '
+            f'if ($key.GetValueNames() -notcontains {_ps_quote(value_name)}) {{ echo "NOTFOUND" }} else {{ '
+            f'$kind = $key.GetValueKind({_ps_quote(value_name)}); '
+            f'$raw = $key.GetValue({_ps_quote(value_name)}, $null, '
+            f'[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames); '
+            f'"TYPE:" + [string]$kind; '
+            f'"VALUE:" + (ConvertTo-Json -Compress -InputObject $raw) }} '
             f'}} catch {{ echo "NOTFOUND" }}'
         )
         result = await self.run(cmd, silent=True)
         output = result.stdout.strip()
 
-        if 'NOTFOUND' in output:
+        if 'NOTFOUND' in output.splitlines():
             return False, None, None
 
-        value = None
-        type_name = None
+        kind = None
+        encoded = None
         for line in output.splitlines():
-            if line.startswith('VALUE:'):
-                value = line[6:]
-            elif line.startswith('TYPE:'):
-                type_name = line[5:]
-
-        return True, value, type_name
+            if line.startswith('TYPE:'):
+                kind = line[5:].strip()
+            elif line.startswith('VALUE:'):
+                encoded = line[6:]
+        if kind is None or encoded is None:
+            raise RuntimeError(f'unreadable registry answer for {key_path}\\{value_name}: {output[:200]!r}')
+        try:
+            data = json.loads(encoded)
+        except ValueError as e:
+            raise RuntimeError(f'unreadable registry data for {key_path}\\{value_name}: {e}') from e
+        return True, _typed_registry_value(kind, data), _REGISTRY_KINDS.get(kind.lower(), 'REG_NONE')
 
     async def get_file_permissions(self, guest_path: str) -> dict:
         """Get file permission details from guest.
@@ -225,6 +319,10 @@ class GuestCommandProxy(VMOperationProxy):
 
         Returns:
             Dict with keys: permissions (octal str), owner, group
+
+        Raises:
+            FileNotFoundError: the guest says the path does not exist
+            RuntimeError: the path could not be examined for another reason
         """
         if self.is_windows:
             cmd = f'$acl = Get-Acl -LiteralPath "{guest_path}"; "OWNER:" + $acl.Owner; "GROUP:" + $acl.Group'
@@ -235,7 +333,7 @@ class GuestCommandProxy(VMOperationProxy):
         info = {}
         if result.returncode != 0:
             log.warning(f"GuestCommandProxy: get_file_permissions failed for {guest_path}: {result.stderr}")
-            return info
+            raise_for_stat_failure(guest_path, result)
 
         for part in result.stdout.strip().replace('\n', ' ').split():
             if ':' not in part:
@@ -259,6 +357,10 @@ class GuestCommandProxy(VMOperationProxy):
 
         Returns:
             Dict with keys: mtime, atime, ctime (as float epoch seconds)
+
+        Raises:
+            FileNotFoundError: the guest says the path does not exist
+            RuntimeError: the path could not be examined for another reason
         """
         if self.is_windows:
             cmd = (
@@ -274,7 +376,7 @@ class GuestCommandProxy(VMOperationProxy):
         timestamps = {}
         if result.returncode != 0:
             log.warning(f"GuestCommandProxy: get_file_timestamps failed for {guest_path}: {result.stderr}")
-            return timestamps
+            raise_for_stat_failure(guest_path, result)
 
         for part in result.stdout.strip().replace('\n', ' ').split():
             if ':' not in part:
