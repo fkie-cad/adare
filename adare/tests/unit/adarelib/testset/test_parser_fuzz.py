@@ -34,7 +34,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from adarelib.testset import archive, binary, lz4, snappy, sqlite_wal
+from adarelib.testset import archive, binary, lz4, snappy, sqlite_freespace, sqlite_wal
 
 pytestmark = pytest.mark.unit
 
@@ -254,6 +254,54 @@ def _parse_wal(data: bytes):
 
 
 # ---------------------------------------------------------------------------
+# SQLite free space (a database with deleted rows: freelist, freeblocks, overflow pages)
+# ---------------------------------------------------------------------------
+
+_FREESPACE_PAGE = 512
+
+
+def _freespace_seed() -> list[bytes]:
+    with tempfile.TemporaryDirectory() as tmp:
+        db = os.path.join(tmp, 'app.db')
+        conn = sqlite3.connect(db)
+        try:
+            conn.execute(f'PRAGMA page_size={_FREESPACE_PAGE}')
+            conn.execute('PRAGMA secure_delete=OFF')
+            conn.execute('CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)')
+            conn.executemany('INSERT INTO items VALUES (?, ?)', [(i, f'entry-{i}' * 4) for i in range(60)])
+            conn.execute('INSERT INTO items VALUES (100, ?)', ('large' * 400,))  # overflow pages
+            conn.commit()
+            conn.execute('DELETE FROM items WHERE id % 3 = 0 OR id = 100')  # freeblocks + freelist
+            conn.commit()
+        finally:
+            conn.close()
+        with open(db, 'rb') as f:
+            return [f.read()]
+
+
+def _parse_free_space(data: bytes):
+    space = sqlite_freespace.parse_free_space(data)
+    for region in space.regions:
+        assert 0 <= region.start < region.end <= len(data), region
+        assert region.kind in sqlite_freespace.REGION_KINDS
+    return space
+
+
+# header: page size, reserved bytes, page count, first freelist trunk, freelist count; then the
+# b-tree header of page 2 (first freeblock, cell count, cell content start)
+_FREESPACE_FIELDS = (
+    Field(16, 2, 'big'),
+    Field(20, 1),
+    Field(28, 4, 'big'),
+    Field(32, 4, 'big'),
+    Field(36, 4, 'big'),
+    Field(_FREESPACE_PAGE + 1, 2, 'big'),
+    Field(_FREESPACE_PAGE + 3, 2, 'big'),
+    Field(_FREESPACE_PAGE + 5, 2, 'big'),
+)
+
+
+# ---------------------------------------------------------------------------
 # Archives (tar, zip, gzip, tar.gz, bz2)
 # ---------------------------------------------------------------------------
 
@@ -352,10 +400,13 @@ CORPORA: list[Corpus] = [
         lambda d: _resolve(d, ['']),
         (archive.ArchiveError,),
     ),
-    # Integration hook: the SQLite free-space parser (sqlite_freespace.py) goes here, e.g.
-    #   Corpus('sqlite-freespace', _db_with_deleted_rows_seed,
-    #          lambda d: <parse the db bytes via a temp file, like _parse_wal>,
-    #          (sqlite_freespace.<its documented error>,), fields=(Field(16, 2, 'big'),)),
+    Corpus(
+        'sqlite-freespace',
+        _freespace_seed,
+        _parse_free_space,
+        (sqlite_freespace.SqliteFreeSpaceError,),
+        fields=_FREESPACE_FIELDS,
+    ),
 ]
 
 
