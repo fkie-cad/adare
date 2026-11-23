@@ -192,6 +192,10 @@ class GuestToHostTestExecutor:
         finally:
             for name, guest_value in originals.items():
                 object.__setattr__(parameter, name, guest_value)
+        dst = getattr(parameter, 'dst', None)
+        if display and isinstance(dst, str) and not has_archive_separator(dst):
+            # details that name both files (values_compare) show dst's local copy too
+            display[str(self.guest_file._guest_path_to_local(dst))] = dst
         if display:
             result.details = [_replace_paths(d, display) for d in result.details]
         return result

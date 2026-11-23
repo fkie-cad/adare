@@ -18,6 +18,7 @@ Stubbed (the narrowest layers that need a VM or an installed ADARE home):
 """
 
 import asyncio
+import datetime
 import io
 import json
 import sqlite3
@@ -37,6 +38,7 @@ from adare.backend.hostside.guestfs import GuestFileNotFound, GuestFS, PatchedGu
 from adare.backend.hostside.testing import GuestFSFileProxy, HostsideTestExecutor
 from adare.types.playbook import ActionTestAction, parse_playbook
 from adarelib.common.automatic_variables import AutomaticVariables
+from adarelib.common.variables import Variable, VariableType
 from adarelib.constants import StatusEnum
 from adarelib.testset.testfunction import import_basictest_subclasses
 
@@ -95,7 +97,13 @@ GUEST_FILES = {
     '/home/user/logs/b.log': b'two\n',
     '/home/user/logs/c.txt': b'not a log\n',
     '/home/user/notes.txt': b'secret token, another secret, SECRET',
-    '/home/user/backup.zip': _zip({'conf/app.json': json.dumps({'version': '2.4.1'}).encode()}),
+    '/home/user/backup.zip': _zip(
+        {
+            'conf/app.json': json.dumps({'version': '2.4.1'}).encode(),
+            'conf/stats.json': json.dumps({'first_ms': UNIX_S * 1000 + 1}).encode(),
+        }
+    ),
+    '/home/user/data/settings.before.json': json.dumps({'items': DOC['items'][:2] + [{'ms': UNIX_S * 1000}]}).encode(),
     '/home/user/data/state.db': WAL_DB,
     '/home/user/data/state.db-wal': WAL_LOG,
     '/home/user/blobs.zip': _zip({'data/header.bin': HEADER_BIN}),
@@ -194,6 +202,38 @@ tests:
       dst: /home/user/gone.zip!/conf/app.json
       key_path: version
       expected_value: 2.4.1
+  - name: saved_variable_ordered
+    function: json.value_matches
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[0].ms
+      expected_value: "{{ ms_before }}"
+      comparison_type: greater
+  - name: saved_timestamp_ordered
+    function: json.value_matches
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[0].ms
+      expected_value: "{{ started }}"
+      comparison_type: greater
+      timestamp_epoch: 1970
+      timestamp_unit: ms
+  - name: values_compare_other_dst
+    function: json.values_compare
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[2].ms
+      other_dst: /home/user/data/settings.before.json
+      other_key_path: items[2].ms
+      comparison_type: greater
+  - name: values_compare_other_archive_member
+    function: json.values_compare
+    parameter:
+      dst: /home/user/data/settings.json
+      key_path: items[0].ms
+      other_dst: /home/user/backup.zip!/conf/stats.json
+      other_key_path: first_ms
+      comparison_type: less
   - name: sqlite_wal_added
     function: sqlite.row_count
     parameter:
@@ -287,8 +327,15 @@ def chain(tmp_path, monkeypatch, collection):
     actions.set_test_execution_mode(execution_base.TestExecutionMode.HOST)
     actions.set_guest_to_host_test_executor(executor)
 
-    def run(name):
-        return asyncio.run(actions.execute_test(ActionTestAction(name=name), None, None))
+    def run(name, context=None, saved_timestamps=None):
+        """``context``: what save_variable / command capture put in the execution context;
+        ``saved_timestamps``: {variable: unix seconds} saved as execute_save_timestamp saves them."""
+        context = dict(context or {})
+        for variable, unix_s in (saved_timestamps or {}).items():
+            context[variable] = unix_s
+            moment = datetime.datetime.fromtimestamp(unix_s, datetime.UTC)
+            playbook.variables.add(variable, Variable(moment, VariableType.TIMESTAMP, metadata={'timezone': 'UTC'}))
+        return asyncio.run(actions.execute_test(ActionTestAction(name=name), None, None, execution_context=context))
 
     yield run
     executor.cleanup()
@@ -315,6 +362,8 @@ def _status(result):
         ('archive_member_missing', StatusEnum.ERROR),
         ('missing_file', StatusEnum.ERROR),
         ('missing_archive', StatusEnum.ERROR),
+        ('values_compare_other_dst', StatusEnum.SUCCESS),
+        ('values_compare_other_archive_member', StatusEnum.SUCCESS),
         ('sqlite_wal_added', StatusEnum.SUCCESS),
         ('sqlite_main_file', StatusEnum.SUCCESS),
         ('wal_frames_of_the_wal_itself', StatusEnum.SUCCESS),
@@ -415,3 +464,66 @@ def test_wal_given_as_dst_has_no_companion_probes(chain, monkeypatch):
     assert _status(chain('wal_frames_of_the_wal_itself')) == StatusEnum.SUCCESS
     assert seen['pulled'] == ['/home/user/data/state.db-wal']
     assert not [p for p in seen['probed'] if p.endswith(('-wal-wal', '-wal-journal'))]
+
+
+def test_values_compare_pulls_both_files(chain, monkeypatch):
+    seen = _guest_access(monkeypatch)
+
+    result = chain('values_compare_other_dst')
+
+    assert _status(result) == StatusEnum.SUCCESS, result.message
+    assert sorted(seen['pulled']) == ['/home/user/data/settings.before.json', '/home/user/data/settings.json']
+
+
+def test_other_dst_is_restored_after_the_run(chain, monkeypatch):
+    instances = []
+    original = HostsideTestExecutor.execute_test
+
+    async def spy(self, test_name, test_function, test_instance):
+        instances.append(test_instance)
+        return await original(self, test_name, test_function, test_instance)
+
+    monkeypatch.setattr(HostsideTestExecutor, 'execute_test', spy)
+
+    chain('values_compare_other_archive_member')
+
+    assert instances[0].parameter.other_dst == '/home/user/backup.zip!/conf/stats.json'
+
+
+def test_values_compare_details_name_guest_paths(chain):
+    details = ' '.join(chain('values_compare_other_archive_member').data['result']['details'])
+
+    assert '/home/user/data/settings.json' in details and '/home/user/backup.zip!/conf/stats.json' in details
+    assert 'adare_hostside_test_' not in details
+
+
+def test_saved_variable_reaches_an_ordered_comparison(chain):
+    """save_variable / capture values are filled in before the test runs; unset is an ERROR."""
+    assert _status(chain('saved_variable_ordered', {'ms_before': UNIX_S * 1000 - 1})) == StatusEnum.SUCCESS
+    assert _status(chain('saved_variable_ordered', {'ms_before': UNIX_S * 1000})) == StatusEnum.FAILED
+    assert _status(chain('saved_variable_ordered')) == StatusEnum.ERROR
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='the runtime context fills save_timestamp in as Unix seconds, read with the field epoch/unit (open)',
+)
+def test_saved_timestamp_reaches_an_ordered_comparison(chain, monkeypatch):
+    """A save_timestamp variable arrives as a placeholder with timestamp metadata and is compared in order."""
+    seen = {}
+    original = HostsideTestExecutor.execute_test
+
+    async def spy(self, test_name, test_function, test_instance):
+        seen['expected_value'] = test_instance.parameter.expected_value
+        seen['metadata'] = dict(test_instance.variable_metadata or {})
+        return await original(self, test_name, test_function, test_instance)
+
+    monkeypatch.setattr(HostsideTestExecutor, 'execute_test', spy)
+
+    before = chain('saved_timestamp_ordered', saved_timestamps={'started': UNIX_S - 60})
+    after = chain('saved_timestamp_ordered', saved_timestamps={'started': UNIX_S + 60})
+
+    assert _status(before) == StatusEnum.SUCCESS, before.data['result']['details']
+    assert _status(after) == StatusEnum.FAILED, after.data['result']['details']
+    placeholder = seen['expected_value'].strip('{} ')
+    assert seen['metadata'][placeholder]['type'] == 'timestamp'
