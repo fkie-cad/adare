@@ -13,13 +13,17 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime, timedelta, timezone, tzinfo
-from typing import Any
+from typing import TYPE_CHECKING
 
 from adarelib.event.event import TestResult
 from adarelib.testset.archive import has_archive_separator
 from adarelib.testset.basictest import BasicTest
 from adarelib.testset.content import parse_duration
 from adarelib.testset.fileinfo import parse_permissions
+
+if TYPE_CHECKING:
+    from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
+    from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
 
 log = logging.getLogger(__name__)
 
@@ -87,8 +91,8 @@ class QgaProbeTests:
     Expects ``self.guest_command`` (the command proxy) and ``self.guest_file`` (the file proxy).
     """
 
-    guest_command: Any
-    guest_file: Any
+    guest_command: GuestCommandProxy
+    guest_file: GuestFileProxy
 
     @staticmethod
     def _pull_error(test_name: str, guest_path: str, error: Exception) -> TestResult:

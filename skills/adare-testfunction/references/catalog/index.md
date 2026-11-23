@@ -117,7 +117,7 @@ examples, and `features.md` (or `adare test feature <id>`) for shared syntax.
 
 ## Visual (`catalog/visual.md`)
 
-- `visual.count_equals` [ui, count · screen] counting visible items (e.g. 3 files on the desktop).
+- `visual.count_equals` [ui, count, absent · screen] counting visible items (e.g. 3 files on the desktop).
 - `visual.count_max` [ui, count, absent · screen] "no more than N items visible"; `max: 0` behaves like visual.not_exists.
 - `visual.count_min` [ui, count · screen] "at least N items visible".
 - `visual.exists` [ui, exists · screen] confirming a GUI state (dialog shown, file icon on the desktop).

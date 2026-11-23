@@ -165,7 +165,7 @@ asserts: state, count · formats: system · runs: guest agent or host test mode;
 - Linux guests only. Runs in the guest agent, or in host test mode as a QGA command; not in the hostside backend.
 - `process_name` is an extended regex matched against the FULL command line (`pgrep -f`): `someapp` also matches `/usr/lib/someapp/someapp --worker` and an editor that has `someapp.conf` open. Anchor it (`^/usr/bin/someapp`) to be strict.
 - A pattern such as `python` can match the guest agent itself.
-- Host test mode behaves differently: it runs `pgrep -x`, an exact process name (not the command line), and ignores `min_instances` (one process passes).
+- Host test mode matches the same way (`pgrep -f` over QGA, its own shell left out of the count) and honours `min_instances`.
 - It does not check the user, the arguments or how long the process has run.
 
 **Use cases:**
@@ -312,8 +312,7 @@ asserts: state, exists · formats: system · runs: guest agent or host test mode
 - ERROR: the guest is not Linux, or the Python `pwd` module is missing
 
 **Limits:**
-- Linux guests only. In the guest agent it asks the user database (`pwd.getpwnam`, so NSS sources such as LDAP count); in host test mode it runs `id`; in the hostside backend it reads `/etc/passwd` of the disk image.
-- In host test mode and in the hostside backend only the name is checked: `uid` and `home_dir` are ignored.
+- Linux guests only. In the guest agent it asks the user database (`pwd.getpwnam`, so NSS sources such as LDAP count); in host test mode it runs `getent passwd` (the same user database); in the hostside backend it reads `/etc/passwd` of the disk image, so accounts from NSS sources such as LDAP are not seen. `uid` and `home_dir` are checked in all three.
 - `username` is exact and case-sensitive; `home_dir` is compared as a string (a trailing `/` matters).
 - It does not check groups, the shell, the password or whether the account is locked.
 

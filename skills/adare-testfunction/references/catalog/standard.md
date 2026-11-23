@@ -1007,9 +1007,10 @@ Pass when the permission bits (and optional owner/group) of `dst` match exactly.
 
 asserts: metadata · formats: file, directory · runs: guest agent or host test mode; hostside; no dry-run · os: any
 
+**Supports:** Globs in dst (`glob_dst`)
+
 **Does not support:**
-- Globs in dst (`glob_dst`): Globs resolve only when the test runs in the guest agent; host test mode reads `dst` as a literal path. Name the file.
-- Files inside archives and compressed files (`archive_dst`): An archive member would be a temporary extracted copy with its own mode and owner; host test mode does not read archives.
+- Files inside archives and compressed files (`archive_dst`): An archive member would be a temporary extracted copy with its own mode and owner; host test mode refuses an archive path with an error (name the archive file itself).
 
 **Not for:**
 - a file exists → `standard.file_exists`
@@ -1024,7 +1025,7 @@ asserts: metadata · formats: file, directory · runs: guest agent or host test 
 **Outcomes:**
 - PASSED: `st_mode & 0o777` equals `expected_permissions` and the given owner and group match
 - FAILED: the path was examined and the mode, owner or group differs (each is listed)
-- ERROR: the path does not exist; a glob matches no path or more than one (guest agent)
+- ERROR: the path does not exist; a glob matches no path or more than one
 - ERROR: an empty or invalid `expected_permissions`
 - ERROR: the path cannot be examined (permission denied, I/O error)
 
@@ -1033,7 +1034,6 @@ asserts: metadata · formats: file, directory · runs: guest agent or host test 
 - Only the nine permission bits; setuid, setgid and sticky are ignored.
 - Quote `expected_permissions` in YAML: unquoted `0644` is read as the decimal number 420.
 - Owner and group are names, not numeric ids.
-- In host test mode a missing path fails instead of erroring.
 
 **Use cases:**
 - A private file stays private: A key or credential file has mode `600` and belongs to the user.
@@ -1173,9 +1173,10 @@ Pass when the chosen timestamp of file `dst` satisfies `comparison_type`.
 
 asserts: metadata, order · formats: file · runs: guest agent or host test mode; hostside; no dry-run · os: any
 
+**Supports:** Globs in dst (`glob_dst`)
+
 **Does not support:**
-- Globs in dst (`glob_dst`): Globs resolve only when the test runs in the guest agent; host test mode reads `dst` as a literal path. Name the file.
-- Files inside archives and compressed files (`archive_dst`): An archive member would be a temporary extracted copy with its own times; host test mode does not read archives.
+- Files inside archives and compressed files (`archive_dst`): An archive member would be a temporary extracted copy with its own times; host test mode refuses an archive path with an error (name the archive file itself).
 - Times as expected values (!timestamp) (`timestamp_tag`): `expected_time`, `start_time` and `end_time` are epoch seconds or date strings, not `!timestamp` tags.
 - Ordered comparison of numbers and times (`ordered_comparison`): `comparison_type` here is `equals`, `before`, `after`, `between` or `within_last` (see choices), with `tolerance_seconds`.
 
@@ -1198,7 +1199,7 @@ asserts: metadata, order · formats: file · runs: guest agent or host test mode
 **Outcomes:**
 - PASSED: the chosen timestamp satisfies `comparison_type`
 - FAILED: the timestamp was read and the comparison does not hold
-- ERROR: the file does not exist; a glob matches no file or more than one (guest agent)
+- ERROR: the file does not exist; a glob matches no file or more than one
 - ERROR: a missing or unparseable `expected_time` / `start_time` / `end_time` / `within_duration`
 - ERROR: an unknown `timestamp_type` or `comparison_type`
 
@@ -1207,7 +1208,7 @@ asserts: metadata, order · formats: file · runs: guest agent or host test mode
 - Date strings without a zone are read in local time, a trailing `Z` too; epoch seconds avoid the ambiguity.
 - `equals` without `tolerance_seconds` means 0 s, which rarely matches sub-second file system times.
 - `before` / `after` are strict, `between` includes both bounds.
-- In host test mode the times come from a guest command: a missing file fails instead of erroring, and date strings and `within_last` use the host clock and time zone.
+- In host test mode the times come from a guest command, and the guest clock and time zone (QGA) stand for "now" and for date strings without a zone, as in the agent. If the guest does not answer, the host clock and zone are used and the result says so. In the hostside backend the times are the image's inode times, "now" is the host clock and the zone is the image's.
 - Access times are often not updated (`relatime`, `noatime`, Windows defaults).
 
 **Use cases:**

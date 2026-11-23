@@ -12,11 +12,12 @@ Pass when the text, icon or image is found exactly `n` times on the screenshot.
 
 **Use for:** counting visible items (e.g. 3 files on the desktop). Icon/image matches are capped at 10 by the CV call, so counts above 10 cannot be observed.
 
-asserts: ui, count · formats: screen · runs: host, against the live VM screen; not hostside; no dry-run · os: any
+asserts: ui, count, absent · formats: screen · runs: host, against the live VM screen; not hostside; no dry-run · os: any
+
+**Supports:** Negative tests (absence) (`negative`)
 
 **Does not support:**
 - Counts with a comparison (`count_comparison`): Takes `n` (exact); there is no `expected_count` / `comparison_type`: use visual.count_min or visual.count_max for bounds.
-- Negative tests (absence) (`negative`): `n: 0` is not recognised as a negative test (no INCONCLUSIVE check); use visual.not_exists or visual.count_max with `max: 0`.
 
 **Not for:**
 - how many files are in a folder → `standard.file_count`
@@ -31,13 +32,14 @@ asserts: ui, count · formats: screen · runs: host, against the live VM screen;
 | n | `int` | `None` | Required exact number of matches (`None` -> error). |
 
 **Outcomes:**
-- PASSED: the text, icon or image is found exactly `n` times
+- PASSED: the text, icon or image is found exactly `n` times (`n: 0`: not at all; a negative test, INCONCLUSIVE without proof of the act)
 - FAILED: the screenshot was searched and the number of matches differs
 - ERROR: none of `text`, `icon`, `image` is given, or `n` is missing
 - ERROR: the `image` file does not exist on the host; the `icon` name is unknown or cannot be extracted
 - ERROR: no window matches `window`; the screenshot or the CV server fails
 
 **Limits:**
+- `n: 0` is a negative test: a pass only means "not visible now" and is INCONCLUSIVE when a GUI action before it failed or failed its `verify:` (under `effect_check: prove` also a skipped or unchanged one), or when a `controls:` test did not pass. Prove the act with an earlier visual.exists as a control (see visual.not_exists). With `expect_to_fail` it asserts presence and is not negative.
 - Icon and image matches are capped at 10, so a count above 10 cannot be observed (`n: 11` never passes).
 - Text counts OCR text boxes that contain the string: two occurrences in one box count once, and OCR may merge neighbouring words into one box.
 - Overlapping icon matches are merged, but a similar-looking icon nearby can add a match: prefer a small `window` or a distinctive template.
@@ -70,6 +72,17 @@ tests:
     n: 1
 ```
 
+*none left, as a negative test* → PASSED. Pair it with a control (`controls:`) that proves the file icon was there before the delete.
+
+```yaml
+tests:
+- name: none_left_as_a_negative_test
+  function: visual.count_equals
+  parameter:
+    image: icons/odt_file.png
+    n: 0
+```
+
 *without n it is an error* → ERROR
 
 ```yaml
@@ -79,6 +92,9 @@ tests:
   parameter:
     icon: folder
 ```
+
+**Related:**
+- `visual.not_exists`: the same as `n: 0`, and clearer
 
 ## `visual.count_max`
 

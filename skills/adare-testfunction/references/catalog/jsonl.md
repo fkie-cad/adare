@@ -451,7 +451,7 @@ asserts: exists, value, order · formats: jsonl · runs: guest agent, host test 
 | parameter | type | default | description |
 |---|---|---|---|
 | **dst** | `str` | `''` | Guest path to the JSONL file (one JSON document per line; blank lines are skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails. |
-| **key_path** | `str` | `''` | Dot path inside each line's object, e.g. `event.type`; `*` expands object values, `name[*]` array elements. No numeric indexes. For multi-value paths one matching element suffices. |
+| **key_path** | `str` | `''` | Dot path inside each line's object, e.g. `event.type`; `*` expands object values, `name[*]` array elements, `name[n]` one element (`-1` = last). For multi-value paths one matching element suffices. |
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Value to find; see `regex_match` for how it is compared. |
 | regex_match | `bool` | `False` | Treat string expected values as regexes searched (`re.search`) in `str(value)`; the value `"*"` then means "key exists". Without it, values are compared with type-sensitive `==`; `!re`/`!timestamp` tags always work. |
 | skip_malformed | `bool` | `True` | `True` (default) ignores lines that are not valid JSON; `False` makes the first malformed line an error. |

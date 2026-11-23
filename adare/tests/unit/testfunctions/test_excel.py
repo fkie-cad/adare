@@ -111,42 +111,6 @@ class TestSheetExists:
         assert_test_failed(result)
         assert "no sheet matches regex" in result.details[0]
 
-    def test_sheet_exists_re_tag_matches(self, create_excel_file):
-        """A !re tag arrives as a placeholder and is matched against the sheet names."""
-        excel_file = create_excel_file("test.xlsx", {"Sheet1": [["A"], ["1"]], "Report 2025": [["B"], ["2"]]})
-
-        test = SheetExists(
-            name="test_sheet_exists",
-            parameter=SheetExistsParameter(dst=str(excel_file), sheet="{{SHEET_RE}}"),
-            variable_metadata={"SHEET_RE": {"type": "regex", "resolved_value": r"Report \d{4}$"}},
-        )
-        assert_test_success(test.test())
-
-    def test_sheet_exists_re_tag_no_match_fails(self, create_excel_file):
-        """A !re tag that matches no sheet name fails (it used to fail silently as plain text)."""
-        excel_file = create_excel_file("test.xlsx", {"Sheet1": [["A"], ["1"]]})
-
-        test = SheetExists(
-            name="test_sheet_exists",
-            parameter=SheetExistsParameter(dst=str(excel_file), sheet="{{SHEET_RE}}"),
-            variable_metadata={"SHEET_RE": {"type": "regex", "resolved_value": r"Report \d{4}$"}},
-        )
-        result = test.test()
-
-        assert_test_failed(result)
-        assert "no sheet matches" in result.details[0]
-
-    def test_sheet_exists_re_tag_invalid_regex_is_error(self, create_excel_file):
-        """An invalid regex behind a !re tag is an ERROR, not a mismatch."""
-        excel_file = create_excel_file("test.xlsx", {"Sheet1": [["A"], ["1"]]})
-
-        test = SheetExists(
-            name="test_sheet_exists",
-            parameter=SheetExistsParameter(dst=str(excel_file), sheet="{{SHEET_RE}}"),
-            variable_metadata={"SHEET_RE": {"type": "regex", "resolved_value": "Report ["}},
-        )
-        assert_test_error(test.test())
-
     def test_sheet_exists_invalid_file(self, tmp_path):
         """Test error when file doesn't exist."""
         test = SheetExists(

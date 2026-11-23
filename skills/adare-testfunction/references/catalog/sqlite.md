@@ -174,7 +174,7 @@ asserts: exists, absent, value, count · formats: sqlite · runs: guest agent, h
 | **dst** | `str` |  | Guest path to the database; a glob must match exactly one file (otherwise an error). A missing file is an error. |
 | **query** | `str` |  | SQL to execute, e.g. `SELECT name FROM items WHERE name LIKE '%example%'`. A SQL error (syntax, unknown table, unreadable database) is an error. |
 | expected_count | `int \| None` | `None` | Number of rows the query must return, compared with `comparison_type`; `None` skips the check. Use `0` to assert a row is gone. A negative number or a non-integer is an error. |
-| expected_result | `list \| None` | `None` | Exact expected rows as a list of `{column: value}` mappings, in query order; `None` skips the check. Placeholders compare the stringified result. |
+| expected_result | `list \| None` | `None` | Exact expected rows as a list of `{column: value}` mappings, in query order; `None` skips the check. A `!re` / `!timestamp` cell is compared with the typed value of that cell: `!re` with its text (`str(value)`, so an INTEGER column matches digits), `!timestamp` with `epoch` / `unit` with the number. A NULL never matches a placeholder; every other cell must equal the value. |
 | comparison_type | `str` | `'equals'` | `equals` (default), `greater`, `less`, `greater_equal` or `less_equal` for `expected_count`; other values are an error. Allowed: `equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 | view | `str` | `'current'` | Which state of the database the query sees, compared with `expected_count` / `expected_result`; all views come from one snapshot (the files are copied once). `current` (default): the database as SQLite sees it, the `-wal` replayed. `main_file`: the main database file alone, the `-wal` left out. `wal_added`: the result rows of `current` that are not in `main_file`; `wal_removed`: the rows of `main_file` not in `current` (multiset difference of whole rows, in query order). Select identifying columns for the differences: a changed row appears in both. `commit:N`: the `-wal` replayed through its N-th transaction (`commit:1` the first, `commit:-1` the last, `commit:0` = `main_file`); an N beyond the commits in the `-wal`, or any N but 0 without a `-wal`, is an error. A `-journal` is used in every view, so a hot rollback journal is rolled back. Details name the view, the `-wal` sha256 and, for `commit:N`, the WAL frame it stops at. Other values are an error. |
 
@@ -189,7 +189,7 @@ asserts: exists, absent, value, count · formats: sqlite · runs: guest agent, h
 
 **Limits:**
 - `expected_result` is compared as a whole: every row, in query order, with every selected column. Add `ORDER BY` for a stable order.
-- `!re`, `!timestamp` and placeholders in `expected_result` compare the result as text (`[{'col': 'value'}]`): a placeholder stands for a quoted text value, so an INTEGER column fails against it. Select the column as text: `CAST(visited AS TEXT) AS visited`.
+- `!re` and `!timestamp` cells in `expected_result` are compared with the typed value of that cell, so an INTEGER column needs no `CAST`: `!timestamp` with `epoch` / `unit` reads the number, `!re` matches its text (`str(value)`, the digits of an INTEGER). A NULL never matches a placeholder. The rest of the row (other columns, row count and order) must still equal the result.
 - Differences (`wal_added` / `wal_removed`) compare whole rows; select identifying columns, a changed row appears in both.
 - `dst` inside an archive (`backup.zip!/app/data.db`) also extracts the `-wal` / `-journal` members next to it, so the views work there too.
 - The rows read are reported in the details, cut after 2000 characters.
@@ -199,7 +199,7 @@ asserts: exists, absent, value, count · formats: sqlite · runs: guest agent, h
 - A record was written: A history entry, bookmark or setting row with the expected values after an action.
 - A record is gone: `expected_count: 0` on a query for the deleted row.
 - A change is still only in the write-ahead log: `view: wal_added` shows rows committed to the `-wal` but not yet checkpointed into the main file; `view: wal_removed` rows deleted there that the main file still holds.
-- A time stored as a number: `!timestamp` with `epoch` / `unit` and the times saved around the action, on a column selected as text.
+- A time stored as a number: `!timestamp` with `epoch` / `unit` and the times saved around the action, directly on the INTEGER column (no `CAST`).
 
 **Examples:**
 
@@ -301,7 +301,7 @@ tests:
     expected_result: [{id: 1, name: kept}, {id: 3, name: example}]
 ```
 
-*visit time between two saved timestamps* → PASSED. The INTEGER column is selected as text, so the placeholder matches it.
+*visit time between two saved timestamps* → PASSED. The INTEGER column is compared as the number it is; no `CAST` is needed.
 
 ```yaml
 tests:
@@ -309,9 +309,22 @@ tests:
   function: sqlite.query_result
   parameter:
     dst: /home/user/app/data.db
-    query: SELECT CAST(visited AS TEXT) AS visited FROM visits WHERE url = 'https://example.org/'
+    query: SELECT visited FROM visits WHERE url = 'https://example.org/'
     expected_result:
     - visited: !timestamp {after: '{{before_visit}}', before: '{{after_visit}}', epoch: 1970, unit: s}
+```
+
+*a visit time outside the saved interval fails* → FAILED. The boundary of the previous example. The stored number is read, found before the lower bound, and the test fails.
+
+```yaml
+tests:
+- name: a_visit_time_outside_the_saved_interval_fails
+  function: sqlite.query_result
+  parameter:
+    dst: /home/user/app/data.db
+    query: SELECT visited FROM visits WHERE url = 'https://example.org/'
+    expected_result:
+    - visited: !timestamp {after: '2026-01-01T12:00:00Z', before: '2026-01-01T12:00:10Z', epoch: 1970, unit: s}
 ```
 
 *a URL by pattern* → PASSED

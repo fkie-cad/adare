@@ -33,9 +33,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
+# --- HELPER FUNCTIONS ---
 
 
 def _unresolved_path_error(label: str, path: str, status: str) -> TestResult:
@@ -56,9 +54,7 @@ def _unresolved_path_error(label: str, path: str, status: str) -> TestResult:
     )
 
 
-# ============================================================================
-# TESTFUNCTION 1: sheet_exists
-# ============================================================================
+# --- TESTFUNCTION 1: sheet_exists ---
 
 
 @testfunction(
@@ -130,9 +126,7 @@ def sheet_exists(ctx: TestContext, dst: str, sheet: str, regex_match: bool = Fal
         return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
-# ============================================================================
-# TESTFUNCTION 2: cell_value_matches
-# ============================================================================
+# --- TESTFUNCTION 2: cell_value_matches ---
 
 
 def _compare_cell(ctx, actual_value: str, expected_value, regex_match: bool, ordered, where: str) -> TestResult:
@@ -299,9 +293,7 @@ def cell_value_matches(
         return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
-# ============================================================================
-# TESTFUNCTION 3: contains_row
-# ============================================================================
+# --- TESTFUNCTION 3: contains_row ---
 
 
 @testfunction(
@@ -463,9 +455,7 @@ def row_count(
     return TestResult.success(details) if ok else TestResult.failed(details)
 
 
-# ============================================================================
-# TESTFUNCTION 4: validate_columns
-# ============================================================================
+# --- TESTFUNCTION 4: validate_columns ---
 
 
 @testfunction(
@@ -560,9 +550,7 @@ def validate_columns(
         return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
-# ============================================================================
-# TESTFUNCTION 5: compare_rows
-# ============================================================================
+# --- TESTFUNCTION 5: compare_rows ---
 
 
 @testfunction(
@@ -696,9 +684,7 @@ def compare_rows(
         return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
-# ============================================================================
-# TESTFUNCTION 6: compare_sheets
-# ============================================================================
+# --- TESTFUNCTION 6: compare_sheets ---
 
 
 @testfunction(
@@ -803,9 +789,7 @@ def compare_sheets(
         return TestResult.execution_error(e, "Cannot parse Excel files")
 
 
-# ============================================================================
-# TESTFUNCTION 7: compare_files
-# ============================================================================
+# --- TESTFUNCTION 7: compare_files ---
 
 
 @testfunction(

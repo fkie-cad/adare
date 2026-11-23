@@ -179,9 +179,9 @@ def test_undocumented_installed_copy_borrows_docs_only_when_code_is_identical(tm
 
 def test_differing_installed_copy_shows_the_bundled_contract_with_a_note(tmp_path):
     """Installed code that differs from the bundled copy still gets the bundled contract, flagged."""
+    from adare.backend.testfunction.catalog import Hit
     from adare.backend.testfunction.contract import Library
     from adare.backend.testfunction.contract_render import function_markdown
-    from adare.backend.testfunction.catalog import Hit
     from adare.backend.testfunction.search_cards import card
 
     code = "@testfunction(name='file_exists', description='d')\ndef file_exists(ctx, dst: str):\n    return {value}\n"

@@ -294,6 +294,32 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   paths (browser profiles, office suites, registry keys); a unit test keeps it that way.
 
 ### Fixed
+- `xml.element_text_matches` / `attribute_matches`: an unquoted number (`expected_value: 41`)
+  equals the text `41` (it never matched); an invalid `wildcard_mode` is an ERROR even when one
+  element matches. `xml.xpath_result_matches` with `text`/`number` FAILS on a missing element
+  (it read as `''` / `0.0`, so `expected_value: 0` passed on absence), and an empty element is
+  no number. `xml.namespace_matches` finds every `xmlns:prefix` declaration, not only the
+  root's namespace, and a missing `expected_namespaces` is an ERROR instead of a crash.
+- `excel.sheet_exists`: a `!re` tag in `sheet` is matched against the sheet names; it was
+  compared as plain text and failed silently.
+- `sqlite.query_result`: `!re` / `!timestamp` cells in `expected_result` are compared with the
+  typed cell value, so they match INTEGER columns without `CAST(... AS TEXT)`; a NULL never
+  matches a placeholder.
+- `!timestamp` without `format` (adarelib, additive): an EXIF date `2024:01:02 03:04:06` is
+  read with its date; it was read as today at 03:04:06. A malformed colon date is an ERROR.
+- `windows.registry_value_matches`: type names are canonical (`REG_DWORD`, `REG_QWORD`; they
+  were reported as `REG_DWORD_LITTLE_ENDIAN` / `UNKNOWN_TYPE_11`, so `value_type: REG_DWORD`
+  never matched); the old names are still accepted in `value_type`.
+- `visual.count_equals` with `n: 0` is a negative test (INCONCLUSIVE without proof of the act).
+- Host test mode (QGA) gives the agent's results: `file_permissions` / `file_timestamps` are
+  an ERROR for a missing file (were FAILED), resolve globs, refuse archive members, and use
+  the guest clock for `within_last` and zone-less dates; `process_running` matches the full
+  command line (`pgrep -f`) and honours `min_instances`; `user_exists` checks `uid` and
+  `home_dir`; `registry_value_matches` compares typed values with canonical type names.
+- `--backend hostside`: `user_exists` checks `uid` / `home_dir`, metadata of a missing file is
+  an ERROR, and `visual.*` tests are refused before the run (no screen after shutdown).
+- `adare test info` / `test search` show the bundled contract of a collection whose installed
+  code differs from it, with a note to run `adare test sync` (they showed none).
 - Playbook test checks also run for playbooks with `!re` / `!timestamp` values (they were
   skipped because the YAML was read without the playbook's tags).
 - Archive members (adarelib): a zip whose member name is flagged UTF-8 but is not valid UTF-8,

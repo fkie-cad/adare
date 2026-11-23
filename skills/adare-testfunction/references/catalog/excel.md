@@ -828,10 +828,7 @@ Pass when workbook `dst` (.xlsx, read with openpyxl) has a sheet named `sheet`.
 
 asserts: exists · formats: excel · runs: guest agent, host test mode or hostside; dry-run on a local file · os: any
 
-**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`)
-
-**Does not support:**
-- Regex values (!re) (`regex_tag`): A `!re` tag as `sheet` is compared as plain text and never matches; use `regex_match: true` with a plain pattern.
+**Supports:** Files inside archives and compressed files (`archive_dst`), Globs in dst (`glob_dst`), Regex values (!re) (`regex_tag`)
 
 **Not for:**
 - a value in a cell of the sheet → `excel.cell_value_matches`
@@ -841,18 +838,18 @@ asserts: exists · formats: excel · runs: guest agent, host test mode or hostsi
 | parameter | type | default | description |
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error. |
-| **sheet** | `str` |  | Exact, case-sensitive sheet name, or a regex if `regex_match`. |
+| **sheet** | `str` |  | Exact, case-sensitive sheet name, or a regex if `regex_match`. A `!re` tag is matched against each sheet name with `re.match` (anchored at the start; add `$` to anchor the end); an invalid pattern is an error. |
 | regex_match | `bool` | `False` | Treat `sheet` as a Python regex searched in each sheet name (`re.search`, unanchored; `^...$` for the whole name); an invalid regex is an error. |
 
 **Outcomes:**
-- PASSED: a sheet is named `sheet` (exact, case-sensitive) or, with `regex_match`, a sheet name matches the regex
-- FAILED: the workbook was read and no sheet has the name, or the workbook has no sheets
+- PASSED: a sheet is named `sheet` (exact, case-sensitive) or, with `regex_match` or a `!re` tag, a sheet name matches the regex
+- FAILED: the workbook was read and no sheet has the name (or matches the `!re` tag), or the workbook has no sheets
 - ERROR: the file does not exist or is a directory; a glob matches no file or more than one
 - ERROR: the file cannot be read or is no valid .xlsx workbook
-- ERROR: an invalid regex with `regex_match`
+- ERROR: an invalid regex with `regex_match` or behind a `!re` tag; an unknown placeholder
 
 **Limits:**
-- `regex_match` uses `re.search` (unanchored); write `^...$` for the whole name.
+- `regex_match` uses `re.search` (unanchored); write `^...$` for the whole name. A `!re` tag uses `re.match` (anchored at the start only).
 - A deleted or renamed sheet is asserted with `expect_to_fail: true` on the old name; there is no sheet count.
 
 **Use cases:**
@@ -914,6 +911,17 @@ tests:
   parameter:
     dst: /home/user/Documents/budget.xlsx
     sheet: Q3
+```
+
+*a !re tag matches the sheet names* → PASSED
+
+```yaml
+tests:
+- name: a_re_tag_matches_the_sheet_names
+  function: excel.sheet_exists
+  parameter:
+    dst: /home/user/Documents/budget.xlsx
+    sheet: !re 'Q[0-9]$'
 ```
 
 *an invalid regex is an error* → ERROR

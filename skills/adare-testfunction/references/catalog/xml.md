@@ -2,7 +2,7 @@
 
 <!-- Generated; do not edit by hand. -->
 
-XML files, also XML inside office documents (`report.docx!/docProps/core.xml`): whether an element exists, how many there are, the text or an attribute of an element, two values of one file compared as numbers or times, and the namespace of the root element. Elements are selected with the ElementTree `ElementPath` subset of XPath, the same parser on every guest.
+XML files, also XML inside office documents (`report.docx!/docProps/core.xml`): whether an element exists, how many there are, the text or an attribute of an element, two values of one file compared as numbers or times, and the namespace declarations of a file. Elements are selected with the ElementTree `ElementPath` subset of XPath, the same parser on every guest.
 
 ## `xml.attribute_matches`
 
@@ -31,7 +31,7 @@ asserts: value, order · formats: xml · runs: guest agent, host test mode or ho
 | **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | **xpath** | `str` |  | ElementTree `ElementPath` subset, evaluated on the root element: `//tag` (any depth), `/root/child` (first step must be the root tag), `child/grandchild`, predicates `[@attr='v']`, `[tag='v']`, `[@attr]`. Any `(`, `::`, `..` or `\|` (even inside a quoted value) is an execution error, so no functions such as `text()`. |
 | **attribute** | `str` |  | Attribute name; namespaced attributes need the `{uri}name` form. |
-| **expected_value** | `str` |  | Exact expected value, or a regex with `regex_match`; a single `!re`/`!timestamp` tag is matched by type. |
+| **expected_value** | `str` |  | Exact expected value (an unquoted number such as `3` is compared as its text `'3'`), or a regex with `regex_match`; a single `!re`/`!timestamp` tag is matched by type. |
 | regex_match | `bool` | `False` | Search `expected_value` as a Python regex (`re.search`, unanchored). |
 | case_sensitive | `bool` | `True` | `False` compares lower-cased / uses `re.IGNORECASE`. |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in `xpath` (`{ns: 'http://...'}` + `//ns:item`); `{uri}tag` also works without it. |
@@ -57,7 +57,7 @@ asserts: value, order · formats: xml · runs: guest agent, host test mode or ho
 **Limits:**
 - Only the first selected element is checked.
 - A namespaced attribute needs the `{uri}name` form; `namespaces` applies to `xpath` only.
-- Without ordered mode an unquoted YAML number (`3`) never equals the attribute text: quote it (`'3'`), or set `value_type: number`.
+- Without ordered mode an unquoted YAML number (`3`) is compared as its text (`'3'`); use `value_type: number` to compare by value.
 - XPath rules as in xml.element_exists.
 
 **Use cases:**
@@ -66,7 +66,7 @@ asserts: value, order · formats: xml · runs: guest agent, host test mode or ho
 
 **Examples:**
 
-*visit count of an entry* → PASSED
+*visit count of an entry* → PASSED. The unquoted number `3` is compared as the text `3`.
 
 ```yaml
 tests:
@@ -76,7 +76,7 @@ tests:
     dst: /home/user/.config/app/settings.xml
     xpath: //entry[@ref='item-1']
     attribute: visits
-    expected_value: '3'
+    expected_value: 3
 ```
 
 *entry modified after a point in time* → PASSED
@@ -328,10 +328,10 @@ asserts: value, order · formats: xml · runs: guest agent, host test mode or ho
 |---|---|---|---|
 | **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | **xpath** | `str` |  | ElementTree `ElementPath` subset, evaluated on the root element: `//tag` (any depth), `/root/child` (first step must be the root tag), `child/grandchild`, predicates `[@attr='v']`, `[tag='v']`, `[@attr]`. Any `(`, `::`, `..` or `\|` (even inside a quoted value) is an execution error, so no functions such as `text()`. No match fails. |
-| **expected_value** | `str` |  | Required. Exact expected text (`''` for an empty element), or a regex with `regex_match`. A single `!re`/`!timestamp` tag is matched by type (`case_sensitive` then ignored); an invalid regex is an error. |
+| **expected_value** | `str` |  | Required. Exact expected text (`''` for an empty element; an unquoted number such as `41` is compared as its text `'41'`), or a regex with `regex_match`. A single `!re`/`!timestamp` tag is matched by type (`case_sensitive` then ignored); an invalid regex is an error. |
 | regex_match | `bool` | `False` | Search `expected_value` as a Python regex (`re.search`, unanchored). |
 | case_sensitive | `bool` | `True` | `False` compares lower-cased / uses `re.IGNORECASE`. |
-| wildcard_mode | `str` | `'any'` | For several matched elements: `any` (default) or `all` must match; other values are an execution error (only checked when several elements match). Allowed: `any`, `all`. |
+| wildcard_mode | `str` | `'any'` | For several matched elements: `any` (default) or `all` must match; any other value is an error, whatever number of elements match. Allowed: `any`, `all`. |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in `xpath` (`{ns: 'http://...'}` + `//ns:item`); `{uri}tag` also works without it. |
 | comparison_type | `str` | `'equals'` | `equals` (default), `not_equals`, `greater`, `less`, `greater_equal` or `less_equal`. Anything but `equals`, or any parameter below, compares the value with `expected_value` as a number or point in time (ordered mode; `less` = earlier); `!re` / `regex_match` are then errors, a lone `{{ name }}` is the saved variable; a value that is no number or timestamp is an error. Allowed: `equals`, `not_equals`, `greater`, `less`, `greater_equal`, `less_equal`. |
 | value_type | `str` | `'auto'` | `auto` (default; numbers if both sides are numbers, else timestamps), `number` or `timestamp`. Allowed: `auto`, `number`, `timestamp`. |
@@ -348,15 +348,15 @@ asserts: value, order · formats: xml · runs: guest agent, host test mode or ho
 - FAILED: the file was read and `xpath` selects nothing, or the text does not match
 - ERROR: the file does not exist or is a directory; a glob matches no file or more than one
 - ERROR: the file is no well-formed XML; an XPath outside the ElementPath subset
-- ERROR: an invalid regex or placeholder; an invalid `wildcard_mode` when several elements match
+- ERROR: an invalid regex or placeholder; an invalid `wildcard_mode` (also when one or no element matches)
 - ERROR: in ordered mode, a text that is no number or timestamp, or a `!re` or `regex_match` with it, text around a `{{ name }}` or a saved variable that is no number or time
 - ERROR: bad ordered parameters (`comparison_type`, `value_type`, `timestamp_epoch`, ...)
 
 **Limits:**
 - The text is `element.text`, the text before the first child element, not stripped; an element with no text gives `''`.
-- Without ordered mode an unquoted YAML number (`41`) is not converted to text and never equals the element text: quote it (`'41'`), or set `value_type: number`.
+- Without ordered mode an unquoted YAML number (`41`) is compared as its text (`'41'`); `41.0` is `'41.0'`, so it does not equal the text `41`. Use `value_type: number` to compare by value.
 - `regex_match` uses `re.search` (unanchored); a `!re` tag uses `re.match` (anchored at the start).
-- `wildcard_mode` is only checked when several elements match.
+- `wildcard_mode` is validated before the file is read, but only used when several elements match.
 - XPath rules as in xml.element_exists.
 
 **Use cases:**
@@ -433,11 +433,11 @@ tests:
       dcterms: http://purl.org/dc/terms/
 ```
 
-*an unquoted number never equals the text* → FAILED. The element text is `41`, but `expected_value: 41` is a number. Quote it, or set `value_type: number`.
+*an unquoted number equals the text* → PASSED. The element text is `41`; `expected_value: 41` is compared as the text `41`, so quoting is not needed.
 
 ```yaml
 tests:
-- name: an_unquoted_number_never_equals_the_text
+- name: an_unquoted_number_equals_the_text
   function: xml.element_text_matches
   parameter:
     dst: /home/user/.config/app/settings.xml
@@ -455,6 +455,19 @@ tests:
     dst: /home/user/.config/app/settings.xml
     xpath: ./general/font
     expected_value: Sans
+```
+
+*an invalid wildcard_mode is an error* → ERROR. Only one element matches, and the invalid mode is an error all the same.
+
+```yaml
+tests:
+- name: an_invalid_wildcard_mode_is_an_error
+  function: xml.element_text_matches
+  parameter:
+    dst: /home/user/.config/app/settings.xml
+    xpath: ./general/language
+    expected_value: de_DE
+    wildcard_mode: some
 ```
 
 *a text that is no number is an error in ordered mode* → ERROR
@@ -479,7 +492,7 @@ tests if XML namespace declarations match expected namespaces
 
 Pass when the namespaces detected in `dst` contain (or equal) `expected_namespaces`.
 
-**Use for:** checking which XML dialect/schema version a file uses. Only the root element's own namespace is detected, under prefix `''`: ElementTree drops `xmlns:*` attributes, so other declared prefixes are never seen and expecting them fails.
+**Use for:** checking which XML dialect/schema version a file uses. Every `xmlns` / `xmlns:prefix` declaration in the file is detected (default namespace under prefix `''`), also on nested elements; a prefix declared twice with different URIs keeps its first URI.
 
 asserts: value · formats: xml · runs: guest agent, host test mode or hostside; dry-run on a local file · os: any
 
@@ -503,11 +516,12 @@ asserts: value · formats: xml · runs: guest agent, host test mode or hostside;
 - ERROR: `expected_namespaces` missing; an unknown `check_mode`
 
 **Limits:**
-- Only the namespace of the root element is detected, under prefix `''`, even when the root is written with a prefix. Other `xmlns:prefix` declarations are never seen: expecting them fails.
+- Every `xmlns` / `xmlns:prefix` declaration in the file is detected, also on nested elements; the default namespace is under prefix `''`. A root element written with a prefix does not create a `''` entry.
+- A prefix declared several times with different URIs keeps its first URI. Declarations are what is detected, not whether any element uses them.
 - Prefixes and URIs compare exactly (case-sensitive).
 
 **Use cases:**
-- Which dialect or schema version a file uses: The root namespace of an SVG, an office part or a settings file written by a newer version.
+- Which dialect or schema version a file uses: The namespaces of an SVG, an office part or a settings file written by a newer version.
 
 **Examples:**
 
@@ -523,11 +537,23 @@ tests:
       '': http://www.w3.org/2000/svg
 ```
 
-*exact also passes with other declared prefixes* → PASSED. `xmlns:xlink` is declared, but only the root namespace is detected.
+*a prefixed declaration is found* → PASSED. `dc` is declared on the root of an office `core.xml`, next to `cp`, `dcterms` and `xsi`.
 
 ```yaml
 tests:
-- name: exact_also_passes_with_other_declared_prefixes
+- name: a_prefixed_declaration_is_found
+  function: xml.namespace_matches
+  parameter:
+    dst: /home/user/Documents/report.docx!/docProps/core.xml
+    expected_namespaces:
+      dc: http://purl.org/dc/elements/1.1/
+```
+
+*exact needs every declared namespace* → FAILED. `xmlns:xlink` is declared as well, so the default namespace alone is not equal.
+
+```yaml
+tests:
+- name: exact_needs_every_declared_namespace
   function: xml.namespace_matches
   parameter:
     dst: /home/user/Pictures/logo.svg
@@ -536,16 +562,14 @@ tests:
     check_mode: exact
 ```
 
-*a declared prefix is not detected* → FAILED. The file declares `xmlns:xlink`; the test fails anyway.
+*a missing expected_namespaces is an error* → ERROR
 
 ```yaml
 tests:
-- name: a_declared_prefix_is_not_detected
+- name: a_missing_expected_namespaces_is_an_error
   function: xml.namespace_matches
   parameter:
     dst: /home/user/Pictures/logo.svg
-    expected_namespaces:
-      xlink: http://www.w3.org/1999/xlink
 ```
 
 ## `xml.values_compare`
@@ -702,18 +726,18 @@ asserts: value, exists · formats: xml · runs: guest agent, host test mode or h
 | **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an execution error. |
 | **xpath** | `str` |  | ElementTree `ElementPath` subset, evaluated on the root element: `//tag` (any depth), `/root/child` (first step must be the root tag), `child/grandchild`, predicates `[@attr='v']`, `[tag='v']`, `[@attr]`. Any `(`, `::`, `..` or `\|` (even inside a quoted value) is an execution error, so no functions such as `text()`. |
 | **expected_value** | `str \| int \| float \| bool` |  | Required. Converted per `result_type`: `str()`, `float()` or `bool()`. Note `bool('false')` is True -- use unquoted YAML `true`/`false`. |
-| result_type | `str` | `'text'` | `text` (default; first element's `.text`, `''` if none), `number` (`float` of that text; no match -> 0.0, non-numeric -> execution error) or `boolean` (whether anything matched). Other values are an execution error. Allowed: `text`, `number`, `boolean`. |
+| result_type | `str` | `'text'` | `text` (default; first element's `.text`, `''` if empty), `number` (`float` of that text; non-numeric or empty -> execution error) or `boolean` (whether anything matched). Other values are an execution error. With `text` or `number` an xpath that selects no element fails (it never equals any `expected_value`); `boolean` tests that. Allowed: `text`, `number`, `boolean`. |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in `xpath` (`{ns: 'http://...'}` + `//ns:item`); `{uri}tag` also works without it. |
 
 **Outcomes:**
 - PASSED: the result of `xpath` as `result_type` equals `expected_value`
-- FAILED: the file was read and the result differs
+- FAILED: the file was read and the result differs, or (`text` / `number`) `xpath` selects no element
 - ERROR: the file does not exist or is a directory; a glob matches no file or more than one
 - ERROR: the file is no well-formed XML; an XPath outside the ElementPath subset
-- ERROR: `result_type: number` and the first element's text is no number; an unknown `result_type`
+- ERROR: `result_type: number` and the first element's text is no number (an empty element too); an unknown `result_type`
 
 **Limits:**
-- `text` and `number` use the first selected element only; with no match `text` is `''` and `number` is `0.0` (so `expected_value: 0` passes on a missing element).
+- `text` and `number` use the first selected element only. With no match there is no value and the test fails, whatever `expected_value` is (`0` and `''` included); an element that exists with empty text is `''` for `text` and an error for `number`.
 - `boolean` is whether `xpath` selects anything. `expected_value` is converted with `bool()`: a quoted `'false'` is true, write unquoted `false`.
 - XPath rules as in xml.element_exists.
 
@@ -732,6 +756,19 @@ tests:
     dst: /home/user/.config/app/settings.xml
     xpath: ./counters/opened
     expected_value: 41
+    result_type: number
+```
+
+*a missing element never equals 0* → FAILED. No element is selected, so there is no value: `expected_value: 0` fails instead of passing on absence.
+
+```yaml
+tests:
+- name: a_missing_element_never_equals_0
+  function: xml.xpath_result_matches
+  parameter:
+    dst: /home/user/.config/app/settings.xml
+    xpath: ./counters/printed
+    expected_value: 0
     result_type: number
 ```
 

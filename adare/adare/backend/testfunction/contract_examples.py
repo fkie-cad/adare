@@ -80,7 +80,7 @@ def _tar_spec(kind: str, value: Any) -> bytes:
 def _naive_utc(value: Any) -> Any:
     """``value`` with every timezone-aware datetime as naive UTC (plistlib's binary writer refuses aware ones)."""
     if isinstance(value, datetime.datetime) and value.tzinfo is not None:
-        return value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return value.astimezone(datetime.UTC).replace(tzinfo=None)
     if isinstance(value, dict):
         return {k: _naive_utc(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):

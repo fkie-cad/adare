@@ -114,7 +114,7 @@ asserts: state, value · formats: registry · runs: guest agent or host test mod
 | **key_path** | `str` |  | `HIVE/sub/key` (see windows.registry_key_exists), `/` or `\` separators. |
 | **value_name** | `str` |  | Name of the value; `''` selects the key's default value. |
 | **expected_value** | `str \| int \| bytes` |  | Compared with Python `==` against the `winreg` data, so the type matters: REG_DWORD/QWORD -> int, REG_SZ/REG_EXPAND_SZ -> str (unexpanded), REG_BINARY -> bytes. REG_MULTI_SZ (a list) can never match. A `{{ }}` placeholder still present at run time is resolved, and all-digit results become int. |
-| value_type | `str \| None` | `None` | Optional type name check, case-insensitive, e.g. `REG_SZ`. REG_DWORD values are reported as `REG_DWORD_LITTLE_ENDIAN` and REG_QWORD as `UNKNOWN_TYPE_11`, so use those strings (`REG_DWORD` never matches). `None` skips the check. |
+| value_type | `str \| None` | `None` | Optional type name check, case-insensitive, e.g. `REG_SZ`. Canonical names: REG_NONE, REG_SZ, REG_EXPAND_SZ, REG_BINARY, REG_DWORD, REG_DWORD_BIG_ENDIAN, REG_LINK, REG_MULTI_SZ, REG_RESOURCE_LIST, REG_FULL_RESOURCE_DESCRIPTOR, REG_RESOURCE_REQUIREMENTS_LIST, REG_QWORD. The legacy aliases `REG_DWORD_LITTLE_ENDIAN` and `REG_QWORD_LITTLE_ENDIAN` (and `UNKNOWN_TYPE_11`, the name earlier versions reported) are accepted for REG_DWORD / REG_QWORD. `None` skips the check. |
 
 **Outcomes:**
 - PASSED: the value `value_name` under `key_path` equals `expected_value` (and has type `value_type`, when given)
@@ -131,8 +131,8 @@ asserts: state, value · formats: registry · runs: guest agent or host test mod
 - Windows guests only. Runs in the guest agent, or in host test mode as PowerShell over QGA; hives and separators as in windows.registry_key_exists.
 - `value_name: ''` selects the default value of the key.
 - In the guest agent the type of `expected_value` matters: `REG_DWORD` / `REG_QWORD` data is an int (write `1`, not `'1'`), `REG_SZ` / `REG_EXPAND_SZ` a string (unexpanded, `%USERPROFILE%` stays), `REG_BINARY` bytes. A placeholder that resolves to digits becomes an int.
-- In the guest agent `value_type` names come from `winreg`: a `REG_DWORD` is reported as `REG_DWORD_LITTLE_ENDIAN` and a `REG_QWORD` as `UNKNOWN_TYPE_11`, so `value_type: REG_DWORD` never matches there.
-- Host test mode behaves differently: it compares the text PowerShell prints for the data with the text of `expected_value` (`1` equals `'1'`), and reports `REG_DWORD` / `REG_QWORD` under those names.
+- `value_type` uses the canonical names: `REG_NONE`, `REG_SZ`, `REG_EXPAND_SZ`, `REG_BINARY`, `REG_DWORD`, `REG_DWORD_BIG_ENDIAN`, `REG_LINK`, `REG_MULTI_SZ`, `REG_RESOURCE_LIST`, `REG_FULL_RESOURCE_DESCRIPTOR`, `REG_RESOURCE_REQUIREMENTS_LIST`, `REG_QWORD` (case-insensitive). The guest agent reports a `REG_DWORD` / `REG_QWORD` under these names and also accepts the legacy aliases `REG_DWORD_LITTLE_ENDIAN` / `REG_QWORD_LITTLE_ENDIAN` (and `UNKNOWN_TYPE_11`) for them.
+- Host test mode (PowerShell over QGA) compares and names the same way: DWORD/QWORD data is an int, strings are not expanded, `value_type` accepts the canonical and the legacy names and the report uses the canonical ones.
 - `HKCU` is the hive of the user the test runs as (the agent's user; in host test mode the account QGA commands run as), not necessarily the user who did the GUI actions.
 
 **Use cases:**
@@ -191,11 +191,11 @@ tests:
     expected_value: '1'
 ```
 
-*REG_DWORD as type name fails in the guest agent* → FAILED. Use `REG_DWORD_LITTLE_ENDIAN` there, or leave `value_type` out and let the int type check it.
+*a DWORD with a type check* → PASSED. `REG_DWORD` is the canonical name; the legacy alias `REG_DWORD_LITTLE_ENDIAN` is accepted too. A `REG_QWORD` works the same way.
 
 ```yaml
 tests:
-- name: reg_dword_as_type_name_fails_in_the_guest_agent
+- name: a_dword_with_a_type_check
   function: windows.registry_value_matches
   parameter:
     key_path: 'HKCU\Software\ExampleVendor\ExampleApp\Settings'
