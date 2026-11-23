@@ -97,7 +97,7 @@ class TestLineMatches:
         test = LineMatches(
             name="test_any",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file), conditions={"name": "Bob", "age": 25}, match_mode="any"
+                dst=str(jsonl_file), conditions={"name": "Bob", "age": 25}, wildcard_mode="any"
             ),
         )
         result = test.test()
@@ -113,7 +113,7 @@ class TestLineMatches:
         test = LineMatches(
             name="test_any",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file), conditions={"name": "Charlie", "age": 35}, match_mode="any"
+                dst=str(jsonl_file), conditions={"name": "Charlie", "age": 35}, wildcard_mode="any"
             ),
         )
         result = test.test()
@@ -135,7 +135,7 @@ class TestLineMatches:
         test = LineMatches(
             name="test_all",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file), conditions={"status": "active", "verified": True}, match_mode="all"
+                dst=str(jsonl_file), conditions={"status": "active", "verified": True}, wildcard_mode="all"
             ),
         )
         result = test.test()
@@ -152,7 +152,7 @@ class TestLineMatches:
 
         test = LineMatches(
             name="test_all",
-            parameter=LineMatchesParameter(dst=str(jsonl_file), conditions={"status": "active"}, match_mode="all"),
+            parameter=LineMatchesParameter(dst=str(jsonl_file), conditions={"status": "active"}, wildcard_mode="all"),
         )
         result = test.test()
 
@@ -168,7 +168,9 @@ class TestLineMatches:
 
         test = LineMatches(
             name="test_nested",
-            parameter=LineMatchesParameter(dst=str(jsonl_file), conditions={"user.profile.age": 30}, match_mode="any"),
+            parameter=LineMatchesParameter(
+                dst=str(jsonl_file), conditions={"user.profile.age": 30}, wildcard_mode="any"
+            ),
         )
         result = test.test()
 
@@ -184,7 +186,7 @@ class TestLineMatches:
         test = LineMatches(
             name="test_wildcard",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file), conditions={"users[*].name": "Alice"}, match_mode="any"
+                dst=str(jsonl_file), conditions={"users[*].name": "Alice"}, wildcard_mode="any"
             ),
         )
         result = test.test()
@@ -204,7 +206,7 @@ class TestLineMatches:
         test = LineMatches(
             name="test_wildcard_keys",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file), conditions={"config.*.enabled": True}, match_mode="any"
+                dst=str(jsonl_file), conditions={"config.*.enabled": True}, wildcard_mode="any"
             ),
         )
         result = test.test()
@@ -220,7 +222,7 @@ class TestLineMatches:
         test = LineMatches(
             name="test_regex",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file), conditions={"email": r".*@example\.com"}, match_mode="any", regex_match=True
+                dst=str(jsonl_file), conditions={"email": r".*@example\.com"}, wildcard_mode="any", regex_match=True
             ),
         )
         result = test.test()
@@ -234,7 +236,7 @@ class TestLineMatches:
         test = LineMatches(
             name="test_malformed",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file), conditions={"name": "Bob"}, match_mode="any", skip_malformed=True
+                dst=str(jsonl_file), conditions={"name": "Bob"}, wildcard_mode="any", skip_malformed=True
             ),
         )
         result = test.test()
@@ -248,12 +250,12 @@ class TestLineMatches:
         test = LineMatches(
             name="test_malformed",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file), conditions={"name": "Bob"}, match_mode="any", skip_malformed=False
+                dst=str(jsonl_file), conditions={"name": "Bob"}, wildcard_mode="any", skip_malformed=False
             ),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Malformed JSON" in result.details[0]
 
     def test_line_matches_empty_file(self, create_jsonl_file):
@@ -262,7 +264,7 @@ class TestLineMatches:
 
         test = LineMatches(
             name="test_empty",
-            parameter=LineMatchesParameter(dst=str(jsonl_file), conditions={"name": "Alice"}, match_mode="any"),
+            parameter=LineMatchesParameter(dst=str(jsonl_file), conditions={"name": "Alice"}, wildcard_mode="any"),
         )
         result = test.test()
 
@@ -274,12 +276,12 @@ class TestLineMatches:
         test = LineMatches(
             name="test_not_found",
             parameter=LineMatchesParameter(
-                dst=str(tmp_path / "nonexistent.jsonl"), conditions={"name": "Alice"}, match_mode="any"
+                dst=str(tmp_path / "nonexistent.jsonl"), conditions={"name": "Alice"}, wildcard_mode="any"
             ),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_line_matches_with_placeholder(self, create_jsonl_file, variable_metadata_simple):
@@ -291,7 +293,7 @@ class TestLineMatches:
         test = LineMatches(
             name="test_placeholder",
             parameter=LineMatchesParameter(
-                dst=str(jsonl_file), conditions={"name": "Alice", "value": "{{VAR1}}"}, match_mode="any"
+                dst=str(jsonl_file), conditions={"name": "Alice", "value": "{{VAR1}}"}, wildcard_mode="any"
             ),
             variable_metadata=variable_metadata_simple,
         )
@@ -299,18 +301,18 @@ class TestLineMatches:
 
         assert_test_success(result)
 
-    def test_line_matches_invalid_match_mode(self, create_jsonl_file):
-        """Test with invalid match_mode value."""
+    def test_line_matches_invalid_wildcard_mode(self, create_jsonl_file):
+        """Test with invalid wildcard_mode value."""
         jsonl_file = create_jsonl_file("test.jsonl", [{"name": "Alice"}])
 
         test = LineMatches(
             name="test_invalid_mode",
-            parameter=LineMatchesParameter(dst=str(jsonl_file), conditions={"name": "Alice"}, match_mode="invalid"),
+            parameter=LineMatchesParameter(dst=str(jsonl_file), conditions={"name": "Alice"}, wildcard_mode="invalid"),
         )
         result = test.test()
 
         assert result.status == StatusEnum.ERROR
-        assert "Invalid match_mode" in result.details[0]
+        assert "Invalid wildcard_mode" in result.details[0]
 
 
 # ============================================================================
@@ -498,7 +500,7 @@ class TestLineCount:
         assert_test_success(result)
 
     def test_line_count_empty_file(self, create_jsonl_file):
-        """Test with empty file."""
+        """A 0-byte file has 0 lines, so expected_count 0 passes."""
         jsonl_file = create_jsonl_file("empty.jsonl", [])
 
         test = LineCount(
@@ -507,8 +509,8 @@ class TestLineCount:
         )
         result = test.test()
 
-        assert_test_failed(result)
-        assert "empty" in result.details[0]
+        assert_test_success(result)
+        assert "Found 0 matching lines" in result.details[0]
 
 
 # ============================================================================
@@ -580,6 +582,20 @@ class TestValueInAnyLine:
         result = test.test()
 
         assert_test_success(result)
+
+    def test_value_in_any_line_numeric_index(self, create_jsonl_file):
+        """A numeric index (``tags[1]``, ``tags[-1]``) selects one array element."""
+        jsonl_file = create_jsonl_file("test.jsonl", [{"tags": ["python", "java", "go"]}])
+
+        def run(key_path, expected):
+            return ValueInAnyLine(
+                name="test_index",
+                parameter=ValueInAnyLineParameter(dst=str(jsonl_file), key_path=key_path, expected_value=expected),
+            ).test()
+
+        assert_test_success(run("tags[1]", "java"))
+        assert_test_success(run("tags[-1]", "go"))
+        assert_test_failed(run("tags[1]", "python"))
 
     def test_value_in_any_line_wildcard_objects(self, create_jsonl_file):
         """Test with wildcard object key access."""
@@ -687,7 +703,7 @@ class TestValueInAnyLine:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Malformed JSON" in result.details[0]
 
     def test_value_in_any_line_empty_file(self, create_jsonl_file):
@@ -713,7 +729,7 @@ class TestValueInAnyLine:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_value_in_any_line_numeric_values(self, create_jsonl_file):
@@ -739,3 +755,107 @@ class TestValueInAnyLine:
         result = test.test()
 
         assert_test_success(result)
+
+
+# ============================================================================
+# LineCount comparison_type
+# ============================================================================
+
+
+def _count(path, **params):
+    return LineCount(name="t", parameter=LineCountParameter(dst=str(path), **params)).test()
+
+
+@pytest.fixture
+def three_active(create_jsonl_file):
+    return create_jsonl_file("c.jsonl", [{"status": "active"}] * 3 + [{"status": "inactive"}])
+
+
+@pytest.mark.parametrize(
+    ("expected_count", "comparison_type", "status"),
+    [
+        (3, "equals", StatusEnum.SUCCESS),
+        (2, "greater", StatusEnum.SUCCESS),
+        (3, "greater", StatusEnum.FAILED),
+        (4, "less", StatusEnum.SUCCESS),
+        (3, "less", StatusEnum.FAILED),
+        (3, "greater_equal", StatusEnum.SUCCESS),
+        (4, "greater_equal", StatusEnum.FAILED),
+        (3, "less_equal", StatusEnum.SUCCESS),
+        (2, "less_equal", StatusEnum.FAILED),
+    ],
+)
+def test_line_count_comparison_type(three_active, expected_count, comparison_type, status):
+    result = _count(
+        three_active, conditions={"status": "active"}, expected_count=expected_count, comparison_type=comparison_type
+    )
+
+    assert result.status == status, result.details
+    assert "Found 3 matching lines" in result.details[0]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"expected_count": {"min": 1}, "comparison_type": "greater"},
+        {"expected_count": None, "comparison_type": "less"},
+        {"expected_count": 1, "comparison_type": "roughly"},
+        {"expected_count": -1},
+        {"expected_count": True},
+    ],
+)
+def test_line_count_bad_comparison_parameters_are_errors(three_active, params):
+    assert _count(three_active, **params).status == StatusEnum.ERROR
+
+
+def test_line_count_range_with_equals_still_works(three_active):
+    result = _count(three_active, expected_count={"min": 1, "max": 3}, comparison_type="equals")
+
+    assert result.status == StatusEnum.FAILED  # 4 valid lines, no conditions
+
+
+# ============================================================================
+# value_in_any_line: ordered comparisons
+# ============================================================================
+
+
+class TestValueInAnyLineOrdered:
+    def _run(self, path, expected_value, **params):
+        parameter = ValueInAnyLineParameter(dst=str(path), key_path="ts", expected_value=expected_value, **params)
+        return ValueInAnyLine(name="t", parameter=parameter).test()
+
+    @pytest.fixture
+    def log_file(self, create_jsonl_file):
+        return create_jsonl_file("log.jsonl", [{"ts": 1772359200000}, {"ts": 1772359260000}, {"other": 1}])
+
+    def test_any_line_later_than(self, log_file):
+        params = {"timestamp_epoch": 1970, "timestamp_unit": "ms", "comparison_type": "greater"}
+        assert_test_success(self._run(log_file, "2026-03-01T10:00:30Z", **params))
+        assert_test_failed(self._run(log_file, "2026-03-01T10:01:00Z", **params))
+
+    def test_number_compare_and_errors(self, log_file, create_jsonl_file):
+        assert_test_success(self._run(log_file, 1772359200001, comparison_type="less"))
+        assert_test_error(self._run(log_file, "1", comparison_type="less", regex_match=True))
+        bad = create_jsonl_file("bad.jsonl", [{"ts": 1}, {"ts": "late"}])
+        assert_test_error(self._run(bad, 5, comparison_type="greater"))
+
+
+# --- round 2: value_decode, values_compare with other_dst --------------------------------
+
+
+def test_value_in_any_line_value_decode(tmp_path):
+    path = tmp_path / 'r2.jsonl'
+    path.write_text('{"event": {"payload": "eyJpZCI6IDd9"}}\n{"event": {"payload": "eyJpZCI6IDl9"}}\n')
+
+    def run(**params):
+        parameter = ValueInAnyLineParameter(dst=str(path), key_path='event.payload', **params)
+        return ValueInAnyLine(name='t', parameter=parameter).test()
+
+    assert run(expected_value=9, value_decode=['base64', 'json'], decoded_key_path='id').status == StatusEnum.SUCCESS
+    assert run(expected_value=10, value_decode=['base64', 'json'], decoded_key_path='id').status == StatusEnum.FAILED
+    assert (
+        run(expected_value=8, comparison_type='greater', value_decode=['base64', 'json'], decoded_key_path='id').status
+        == StatusEnum.SUCCESS
+    )
+    assert run(expected_value=9, value_decode='json', decoded_key_path='id').status == StatusEnum.ERROR
+    assert run(expected_value=9, value_decode='sideways').status == StatusEnum.ERROR

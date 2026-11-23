@@ -159,7 +159,8 @@ Every decorated test function receives ``ctx`` as its first argument. This is a 
 
 **File resolution:**
 
-- ``ctx.resolve_globfilepath(path, match_mode="single", return_list=False)`` — Resolve glob patterns to file paths
+- ``ctx.resolve_globfilepath(path, match_mode="single", return_list=False)`` — Resolve glob patterns to file paths. It also resolves a file inside an archive
+  (``backup.tar.gz!/etc/app.json``; see :doc:`/guide/archives`)
 
 **Placeholder/variable support:**
 
@@ -210,6 +211,61 @@ Use ``ctx.fail_if()`` and ``ctx.error_if()`` for failure/error conditions — th
 
 Uncaught exceptions are automatically converted to ``TestResult.execution_error()``.
 
+Failed or error?
+~~~~~~~~~~~~~~~~
+
+Pick the status by one question: *did the test look at the evidence?*
+
+- **FAILED**: the test read the evidence and the condition does not hold (value differs,
+  row or key absent, count wrong, an existing 0-byte file where content is expected).
+- **ERROR**: the test could not read the evidence, so it has no answer: ``dst`` does not
+  exist, a glob matches no file or more than one, the file cannot be opened (permissions,
+  I/O), or its content cannot be parsed (invalid JSON/CSV/XML, corrupt workbook or database).
+  Invalid parameters are errors too: a wrong type, an empty list, both or neither of two
+  options, an unknown mode, an invalid regex, more placeholders than the test supports.
+
+``expect_to_fail`` inverts only SUCCESS and FAILED; an ERROR stays an ERROR. A test that
+reports a missing file as FAILED therefore lets a wrong path, a typo or a failed host-mode
+pull *pass* every negative test written with it. Report it as an error:
+
+.. code-block:: python
+
+   dst_path, status = ctx.resolve_globfilepath(dst)
+   ctx.error_if(not dst_path, f'file {dst} not found ({status})')
+   try:
+       with open(dst_path) as f:
+           data = json.load(f)
+   except FileNotFoundError:
+       return TestResult.error([f'file {dst_path} does not exist'])
+   except json.JSONDecodeError as e:
+       return TestResult.error([f'invalid JSON in {dst_path}: {e}'])
+   except OSError as e:
+       return TestResult.execution_error(e, f'cannot read {dst_path}')
+   ctx.fail_if('key' not in data, 'key "key" does not exist')
+
+The one exception is a test whose subject *is* existence (``standard.file_exists``,
+``standard.file_does_not_exist``, ``dir_exists``): there a missing path is the finding, so
+it passes or fails. Playbook authors who want "the file is gone" use those, not a content
+test with ``expect_to_fail``. A related case: a missing sheet in the workbook under test is
+a finding (FAILED), but a missing sheet in a *reference* workbook is an error, because
+nothing was compared.
+
+Keep docstring examples neutral and made up (``/home/user/data/app.db``,
+``/home/user/data/list.xml``), never a real application's paths or table names: agents read
+the docstrings to pick tests, and an example must not tell them where an application keeps
+its traces (enforced by ``tests/unit/testfunctions/test_neutral_docstrings.py``).
+
+Files inside archives
+~~~~~~~~~~~~~~~~~~~~~
+
+A testfunction gets archive support without any code of its own, as long as it resolves
+every path parameter with ``ctx.resolve_globfilepath``. For ``backup.tar.gz!/etc/app.json``
+the call returns a temporary file that holds the extracted member. An absent member gives
+a path that does not exist, like a missing plain file. An unusable archive gives an empty
+path and a status, so ``ctx.error_if(not dst_path, ...)`` turns it into ERROR. ADARE adds
+the provenance line to the result, shows the archive path instead of the temp path in
+messages, and removes the temp file after the test. See :doc:`/guide/archives`.
+
 Parameters
 ----------
 
@@ -250,6 +306,52 @@ hash, so documenting never creates a new version.
 
 Do not add new ``@testfunction(...)`` keyword arguments for metadata. Guests may
 run an older ``adarelib`` that rejects them.
+
+Contract: what it can and cannot do
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Next to ``<name>.py``, a ``contract.yaml`` states per function what it asserts, which formats
+it reads, which shared features it supports (and which it refuses, with what to do instead),
+goals it is *not* for (with the function to use), when it passes, fails or errors, its
+limits, the allowed values of enumerated parameters, use cases and examples. The vocabulary
+(assertion kinds, formats, feature ids) and the known gaps are in
+``appdata/testfunctions/library.yaml``; ``adare test feature`` lists them.
+
+.. code-block:: yaml
+
+   collection:
+     title: My app files
+     summary: What the collection reads and how.
+   functions:
+     my_test:
+       asserts: [count]
+       formats: [text]
+       features: [archive_dst, glob_dst, count_comparison]
+       not_for:
+         - goal: one exact line
+           use: standard.file_content_contains
+       outcomes:
+         passed: at least ``count`` lines match
+         failed: the file was read and fewer lines match
+         error: [the file does not exist, an invalid regex]
+       limits: [Reads the whole file into memory.]
+       examples:
+         - title: two log entries
+           files:
+             /home/user/app.log: {text: "login ok\nlogin ok\n"}
+           parameter: {path: /home/user/app.log, count: 2}
+
+The same source is rendered everywhere: ``adare test search`` (short cards with the
+features, refusals and redirects), ``adare test info`` (the whole contract), the agent tools,
+the agent skill's references and, for the bundled collections, the reference pages of these
+docs (``.. adare-testfunction:: <collection>.<function>``). ``adare test validate`` reports a
+contract that disagrees with the code or the vocabulary, and the examples run offline with
+``python scripts/check_contract.py <collection>``: ``files:`` builds the example's files from
+a short spec (text, hex, JSON, SQLite statements, zip/tar members, workbooks, images, ...),
+and the outcome must be the example's ``expect`` (``passed``, ``failed`` or ``error``). The
+full field list is in ``skills/adare-testfunction/references/authoring-contract.md``.
+
+A contract changes no version: like the docstring, it is not part of the function's hash.
 
 Category
 --------

@@ -7,6 +7,7 @@ Handles routing test execution to either VM-side, host-side, or host-mode test e
 import logging
 from pathlib import Path
 
+from adare.exceptions import TemplateResolutionError
 from adare.types.playbook import ActionTestAction
 
 from .base import ActionResult, TestExecutionMode
@@ -87,6 +88,11 @@ class TestActionsExecutor:
             )
             if not resolved_test:
                 return ActionResult(success=False, message=f"Test '{action.name}' not found in playbook tests")
+            # dst: {archive, member} -> 'archive!/member' before any path (guest, host mode,
+            # host side) sees it: every testfunction types dst as str.
+            from adarelib.testset.archive import normalize_test_parameters
+
+            resolved_test = normalize_test_parameters(resolved_test)
 
             # Check if this is a host-side test (visual tests with execute_on_host=True)
             test_class = self.test_loader.get_test_class(action.name)
@@ -108,6 +114,18 @@ class TestActionsExecutor:
 
             return judge_negative_test(self.effect_ledger, action.name, resolved_test, test_class, result)
 
+        except TemplateResolutionError as e:
+            # The test cannot be evaluated: ERROR for this test only, the run goes on
+            from adare.backend.experiment.test_result_processor import TestResultProcessor
+
+            return TestResultProcessor.process_test_result(
+                action.name,
+                {
+                    'status': 'error',
+                    'message': f"Test '{action.name}' could not be run",
+                    'result': {'status': TestResultProcessor.STATUS_ERROR, 'details': [e.message]},
+                },
+            )
         except ValueError as e:
             log.error(f"Test execution failed: {e}")
             return ActionResult(success=False, message=str(e))

@@ -1,30 +1,49 @@
 XML
-=================
+===
 
-The XML testfunctions allow testing XML files with support for XPath queries, namespace handling, regex matching, and timestamp tolerance.
+.. role:: status-tested
+   :class: status-tested
 
-All XML testfunctions support:
+:Status: :status-tested:`● Tested`
+:Functions: 7
+:Category: XML Data
 
-* **XPath expressions** for element selection
-* **Namespace support** via optional namespaces parameter
-* **Placeholder system** for regex patterns and timestamp tolerance (using ``{{ placeholder_name }}``)
-* **Case sensitivity** control in text/attribute matching
-* **Wildcard modes** (any/all) for multiple element matching
+.. adare-testfunction-collection:: xml
 
-Features:
+XPath and Namespaces
+--------------------
 
-* **Regex Support**: Use ``regex_match: true`` or placeholders like ``{{ regex_pattern }}``
-* **Timestamp Tolerance**: Use placeholders like ``{{ timestamp_with_tolerance }}`` for flexible timestamp comparison
-* **Multiple Elements**: Handle multiple matching elements with ``wildcard_mode`` (any/all)
-* **Namespaces**: Support XML namespaces with prefix mapping
+Every ``xpath`` is the ``ElementPath`` subset of XPath from the Python standard library, the same
+parser on every guest, evaluated on the root element:
 
-.. csv-table:: 
+* ``//tag`` (any depth), ``./child/grandchild`` or ``child/grandchild`` (relative to the root),
+  ``/root/child`` (the first step must be the root tag; another root matches nothing), ``*``.
+* Predicates ``[@attr]``, ``[@attr='v']``, ``[tag='v']`` and positions such as ``[1]``.
+* An expression with ``(``, ``::``, ``..`` or ``|``, even inside a quoted value, is an error
+  instead of matching nothing: no functions (``text()``, ``contains()``), axes or unions.
+
+Prefixed names need a ``namespaces`` map (``{dc: 'http://purl.org/dc/elements/1.1/'}`` with
+``./dc:creator``); ``{uri}tag`` works without it. A default namespace has no prefix in the
+file, so give it one in ``namespaces``. Office documents are zip containers: their metadata
+is read through ``report.docx!/docProps/core.xml``.
+
+"Text" is ``element.text``: the text before the element's first child, not stripped.
+
+Test Functions
+--------------
+
+.. csv-table::
    :file: ../../../_static/tables/testfunctions_xml.csv
-   :widths: 30, 5, 45, 20
+   :widths: 20, 10, 40, 30
    :header-rows: 1
+   :class: sdtable
+   :name: xml-functions-table
+
+
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
+   :hidden:
 
    element_exists
    element_text_matches
@@ -32,3 +51,4 @@ Features:
    element_count
    xpath_result_matches
    namespace_matches
+   values_compare

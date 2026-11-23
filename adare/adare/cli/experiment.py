@@ -401,12 +401,53 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
     # The summary already shows the failure status clearly
 
 
+def unlisted_environment_message(experiment_name: str, environment_name: str, experiment) -> str:
+    """Warning for ``experiment run -e`` on an environment the experiment does not list.
+
+    An explicit ``-e`` is allowed either way (the run registers the environment); an experiment
+    that lists no environment at all gets the hint to add one.
+    """
+    if not any(env is not None for env in experiment.environments):
+        return (
+            f'WARNING: experiment "{experiment_name}" lists no environments in its metadata.yml; '
+            f'add "{environment_name}" with: adare experiment add-env {experiment_name} {environment_name}'
+        )
+    return f'WARNING: environment "{environment_name}" is not listed in {experiment_name}/metadata.yml'
+
+
+def _single_run_summary(
+    experiment_name, environment_name, was_interrupted, was_successful, verdict, run_started, run_ended
+):
+    """A one-result ``BatchRunSummary`` for a single-environment ``experiment run``."""
+    from adare.backend.experiment.batch_runner import BatchRunSummary, ExperimentResult
+    from adare.backend.experiment.run import INCONCLUSIVE_MESSAGE, run_status
+    from adarelib.constants import StatusEnum
+
+    status = run_status(was_interrupted, was_successful, verdict)
+    error_msg = {
+        StatusEnum.INTERRUPTED: "User interrupted",
+        StatusEnum.SUCCESS: None,
+        StatusEnum.INCONCLUSIVE: INCONCLUSIVE_MESSAGE,
+    }.get(status, "Experiment failed (see the run log)")
+    result = ExperimentResult(
+        environment=environment_name,
+        experiment=experiment_name,
+        status=status,
+        duration=run_ended - run_started,
+        error_message=error_msg,
+        run_ulid=None,
+        start_time=run_started,
+        end_time=run_ended,
+    )
+    return BatchRunSummary(results=[result], total_combinations=1, total_duration=run_ended - run_started)
+
+
 def exec_experiment_run(arguments):
     import sys
 
     from adare.backend.experiment.commands import experiment_load
     from adare.backend.experiment.run import experiment_run
-    from adare.cli.errors import EXIT_ERROR, report_exception
+    from adare.cli.errors import EXIT_INTERRUPTED, report_exception
     from adare.exceptions import LoggedException
 
     disable_printing = False
@@ -477,17 +518,14 @@ def exec_experiment_run(arguments):
                     # Use existing Rich formatting for pure Rich output
                     summary.print_summary()
 
-                # Exit with appropriate code (1 when any run failed; was 255)
-                if summary.failed_runs > 0:
-                    sys.exit(EXIT_ERROR)
-                else:
-                    sys.exit(0)
+                # 0 all passed, 1 any run did not pass, 130 interrupted
+                sys.exit(summary.exit_code)
 
             except LoggedException as e:
                 sys.exit(report_exception(e))
             except KeyboardInterrupt:
                 log.info("Batch execution interrupted by user")
-                sys.exit(0)
+                sys.exit(EXIT_INTERRUPTED)
             return
 
         # Single environment run (existing logic)
@@ -505,6 +543,7 @@ def exec_experiment_run(arguments):
                     original_console_level = handler.level
                     break
             set_console_log_level(logging.CRITICAL)
+        exit_code = None
         try:
             # Same load in test and production mode: a changed experiment is reloaded in
             # place (finished fake runs deleted) or, when it has production runs, refused.
@@ -546,9 +585,7 @@ def exec_experiment_run(arguments):
                         )
 
                     # Environment is unlisted - print warning but continue
-                    log.warning(
-                        f'WARNING: environment "{environment_name}" is not listed in {experiment_name}/metadata.yml'
-                    )
+                    log.warning(unlisted_environment_message(experiment_name, environment_name, experiment))
                     log.warning('         Running experiment anyway as explicitly requested via -e flag')
 
             # Build kwargs, including file_log_level if specified
@@ -584,52 +621,27 @@ def exec_experiment_run(arguments):
             )
             run_ended = datetime.now(UTC)
 
-            # Handle output formatting for single runs
+            summary = _single_run_summary(
+                experiment_name, environment_name, was_interrupted, was_successful, verdict, run_started, run_ended
+            )
+            exit_code = summary.exit_code
 
-            from adare.backend.experiment.batch_runner import BatchRunSummary, ExperimentResult
             from adare.run import get_formatter_from_context
-            from adarelib.constants import StatusEnum
 
             formatter, output_file, dual_output = get_formatter_from_context()
-
             if dual_output or formatter.format_type.value != 'rich':
-                # Create a summary for single run (similar to batch run format)
-                from adare.backend.experiment.run import INCONCLUSIVE_MESSAGE, run_status
-
-                status = run_status(was_interrupted, was_successful, verdict)
-                error_msg = {
-                    StatusEnum.INTERRUPTED: "User interrupted",
-                    StatusEnum.SUCCESS: None,
-                    StatusEnum.INCONCLUSIVE: INCONCLUSIVE_MESSAGE,
-                }.get(status, "Experiment failed (see the run log)")
-
-                # Create a single result entry
-                single_result = ExperimentResult(
-                    environment=environment_name,
-                    experiment=experiment_name,
-                    status=status,
-                    duration=run_ended - run_started,
-                    error_message=error_msg,
-                    run_ulid=None,  # Would need to get this from the experiment run
-                    start_time=run_started,
-                    end_time=run_ended,
-                )
-
-                # Create summary with single result
-                summary = BatchRunSummary(
-                    results=[single_result], total_combinations=1, total_duration=run_ended - run_started
-                )
-
-                # Output using formatter
                 formatter.print_or_save(summary.to_dict(), output_file, dual_output)
         except LoggedException as e:
             sys.exit(report_exception(e))
         except KeyboardInterrupt:
             log.info("Keyboard interrupt received, shutting down gracefully...")
+            exit_code = EXIT_INTERRUPTED
         finally:
             # Restore console logging level suppressed above for the flow-console run.
             if original_console_level is not None:
                 set_console_log_level(original_console_level)
+        # 0 the run passed, 1 it did not (FAILED, INCONCLUSIVE, ...), 130 interrupted
+        sys.exit(exit_code)
     else:
         raise NoProjectFoundError(log, message='no project directory found')
 

@@ -1,0 +1,349 @@
+# Contract of the plist collection: what each function can and cannot do, and runnable
+# examples. Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run
+# in the unit suite (test_contract_examples.py); `adare test info plist.<name>` shows all of it.
+
+collection:
+  title: Property list (plist)
+  summary: >-
+    Property lists, XML or binary (the format is detected from the content), such as preference
+    files: whether a key path exists, the value at a key path, how many values there are (``0`` for
+    absence) and two values of one file compared as numbers or times. ``<date>`` values are read as
+    ISO 8601 strings in UTC without zone, ``<data>`` as lowercase hex.
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  prefs: &prefs
+    plist:
+      com.example.lastVersion: 2.4.1
+      com.example.lastLaunch: 2024-01-15T10:30:00Z
+      com.example.lastSave: 2024-01-15T10:32:00Z
+      com.example.recentDocuments:
+        - /home/user/Documents/report.txt
+        - /home/user/Documents/notes.txt
+      launchCount: 41
+      saveCount: 42
+      token: !!binary AAEC
+      window:
+        width: 1280
+        height: 800
+  # binary plist (dates without zone: the builder writes them as UTC)
+  prefs_binary: &prefs_binary
+    plist_binary:
+      launchCount: 41
+      lastLaunch: 2024-01-15 10:30:00
+      window:
+        width: 1280
+
+functions:
+  contains_key:
+    asserts: [exists]
+    formats: [plist]
+    features: [archive_dst, glob_dst, key_path]
+    not_for:
+      - goal: the value at the key path
+        use: plist.value_matches
+      - goal: a key is absent
+        use: plist.value_count
+    outcomes:
+      passed: '``key_path`` selects at least one value (an empty string or array counts)'
+      failed: the file was read and ``key_path`` selects nothing
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is no valid plist (malformed XML, corrupt binary plist, unknown element, unparsable value)
+    limits:
+      - 'Keys with dots need quotes in brackets: ``[''com.example.lastVersion'']``, also mid-path (``recent[''com.example.doc''].name``).'
+    use_cases:
+      - title: A preference was written
+        text: The key exists after the action, whatever its value.
+    related:
+      - use: plist.value_count
+        why: '``expected_count: 0`` for absence; ``expect_to_fail`` here works too, a missing file stays an error'
+    examples:
+      - title: a key with dots
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.lastVersion']"
+      - title: a nested key in a binary plist
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs_binary
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: window.width
+      - title: an absent key fails
+        text: To assert absence use plist.value_count with ``expected_count`` 0, which passes.
+        expect: failed
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.lastExport']"
+      - title: a file that is no plist is an error
+        expect: error
+        files:
+          /home/user/Library/Preferences/com.example.app.plist:
+            text: 'lastVersion = 2.4.1'
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: lastVersion
+
+  value_matches:
+    asserts: [value, order]
+    formats: [plist]
+    features: [archive_dst, glob_dst, key_path, wildcard_mode, regex_tag, placeholder, timestamp_tag, ordered_comparison, value_decode]
+    not_for:
+      - goal: a key or value is absent
+        use: plist.value_count
+      - goal: two values of one file compared with each other
+        use: plist.values_compare
+    outcomes:
+      passed: 'the value at ``key_path`` (several: ``any`` one, or ``all``) equals or matches ``expected_value``'
+      failed: the file was read and ``key_path`` selects nothing or an empty array, or the value(s) do not match
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is no valid plist
+        - an invalid regex or placeholder; an invalid ``wildcard_mode``
+        - in ordered mode, a value that is no number or timestamp, or a ``!re`` or ``regex_match`` with it, text around a ``{{ name }}`` or a saved variable that is no number or time
+        - bad ordered parameters (``comparison_type``, ``value_type``, ``timestamp_epoch``, ...)
+    limits:
+      - 'Equality is Python ``==`` and type-sensitive: ``41`` is not ``''41''``. ``!re``, placeholders and ``regex_match`` compare ``str(value)``.'
+      - '``<date>`` is an ISO 8601 string without zone (UTC): ``2024-01-15T10:30:00``; ``<data>`` is lowercase hex (``000102``); integers, reals and booleans stay numbers and booleans.'
+      - A path that selects one array compares its elements one by one.
+    choices:
+      wildcard_mode: [any, all]
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A preference has a value
+        text: A setting changed in the GUI, a recent file path, a date of last use.
+    related:
+      - use: json.value_matches
+        why: the same for JSON files
+    examples:
+      - title: window width
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: window.width
+          expected_value: 1280
+      - title: a date as ISO string
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.lastLaunch']"
+          expected_value: '2024-01-15T10:30:00'
+      - title: data as hex
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: token
+          expected_value: '000102'
+      - title: a recent document by regex
+        text: The path selects an array, so each element is compared; ``any`` passes on one.
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.recentDocuments']"
+          expected_value: 'report\.txt$'
+          regex_match: true
+      - title: launched after a point in time
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.lastLaunch']"
+          expected_value: '2024-01-01T00:00:00Z'
+          comparison_type: greater
+      - title: a value in a binary plist
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs_binary
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: launchCount
+          expected_value: 41
+      - title: launched during the action
+        text: The two times are saved with ``save_timestamp`` before and after the action.
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.lastLaunch']"
+          expected_value: !timestamp {after: '{{before_launch}}', before: '{{after_launch}}'}
+      - title: a number is not its text
+        text: '``launchCount`` is an integer; the string ``''41''`` does not equal it.'
+        expect: failed
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: launchCount
+          expected_value: '41'
+      - title: an absent key fails
+        expect: failed
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.lastExport']"
+          expected_value: /home/user/Documents/report.pdf
+      - title: an invalid regex is an error
+        expect: error
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.recentDocuments']"
+          expected_value: 'report(\.txt'
+          regex_match: true
+
+  value_count:
+    asserts: [count, absent]
+    formats: [plist]
+    features: [archive_dst, glob_dst, key_path, count_comparison, negative, regex_tag, placeholder]
+    not_for:
+      - goal: the value at a key path
+        use: plist.value_matches
+    outcomes:
+      passed: the number of values at ``key_path`` (matching ``expected_value``, if given) satisfies ``comparison_type``
+      failed: the file was read and the count comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is no valid plist
+        - a negative or non-integer ``expected_count``, an unknown ``comparison_type``, an invalid regex
+    limits:
+      - 'Without ``expected_value`` every selected value counts once: ``items`` counts 1, ``items[*]`` the elements. With it, a path that selects one array counts its matching elements.'
+      - '``expected_value`` is normalised and compared as in plist.value_matches (type-sensitive, dates as ISO strings, data as hex).'
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: A key or value is absent
+        text: '``expected_count: 0`` after a delete or clean-up action.'
+      - title: How many entries a list holds
+        text: Recent items, accounts or bookmarks.
+    related:
+      - use: json.value_count
+        why: the same for JSON files
+    examples:
+      - title: two recent documents
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.recentDocuments'][*]"
+          expected_count: 2
+      - title: a document is no longer in the recent list
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.recentDocuments']"
+          expected_value: /home/user/Documents/secret.txt
+          expected_count: 0
+      - title: an absent key counts zero
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.lastExport']"
+          expected_count: 0
+      - title: at least one text document
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.recentDocuments']"
+          expected_value: '\.txt$'
+          regex_match: true
+          expected_count: 1
+          comparison_type: greater_equal
+      - title: a missing file is an error, not zero
+        expect: error
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.other.plist
+          key_path: "['com.example.recentDocuments'][*]"
+          expected_count: 0
+
+  values_compare:
+    asserts: [compare, order]
+    formats: [plist]
+    features: [archive_dst, glob_dst, key_path, ordered_comparison, value_decode, other_dst]
+    unsupported:
+      wildcard_mode: Each key path must select exactly one value (a one-element array counts as its element); several are an error.
+      regex_tag: Values compare as numbers or times only; test text with plist.value_matches.
+    not_for:
+      - goal: one value against a constant
+        use: plist.value_matches
+    outcomes:
+      passed: '``first <comparison_type> second + offset`` holds'
+      failed: the file was read and a key path selects nothing, or the comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is no valid plist
+        - a key path selects several values
+        - a value is no number or timestamp, or one is a number and the other a timestamp
+        - bad parameters (``comparison_type``, ``value_type``, ``tolerance`` with an order comparison, ``timestamp_epoch``, ...)
+    limits:
+      - '``<date>`` values are UTC.'
+    choices:
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A is earlier than B
+        text: A last-saved value later than the first-opened one, an end after a start (``comparison_type`` ``less`` / ``greater``).
+      - title: A within a few seconds of B
+        text: 'Two timestamps written by one action (``tolerance: 5``).'
+      - title: A = B + n
+        text: 'A counter one above another (``offset: 1``), or a time a fixed interval after another (``offset`` in seconds).'
+    examples:
+      - title: saved after launch
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.lastSave']"
+          other_key_path: "['com.example.lastLaunch']"
+          comparison_type: greater_equal
+      - title: saved within five minutes of launch
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: "['com.example.lastSave']"
+          other_key_path: "['com.example.lastLaunch']"
+          tolerance: 300
+      - title: one save more than launches
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: saveCount
+          other_key_path: launchCount
+          offset: 1
+      - title: a missing side fails
+        expect: failed
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: printCount
+          other_key_path: launchCount
+      - title: a side with several values is an error
+        expect: error
+        files:
+          /home/user/Library/Preferences/com.example.app.plist: *prefs
+        parameter:
+          dst: /home/user/Library/Preferences/com.example.app.plist
+          key_path: window.*
+          other_key_path: launchCount
+          comparison_type: greater

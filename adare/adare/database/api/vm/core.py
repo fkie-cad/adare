@@ -193,7 +193,7 @@ class VmCrudMixin(_Host):
             return existing_vm_by_hash
 
         # No conflicts - proceed with normal creation
-        # CLAUDE: Copy file to storage location OR use original path
+        # Copy file to storage location OR use original path
         if no_copy:
             log.info(f"Using --no-copy mode: storing reference to {file_path}")
             target_file_path = file_path.resolve()  # Store absolute path

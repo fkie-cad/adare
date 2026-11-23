@@ -1,10 +1,8 @@
 # external imports
 from pathlib import Path
 import re
-import hashlib
 import os
 import stat
-import platform
 from datetime import datetime
 from typing import Optional, Union
 
@@ -12,207 +10,18 @@ from typing import Optional, Union
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
+from adarelib.testset.compare import regex_expected_problem
+from adarelib.testset.content import detect_encoding_from_bom as _detect_encoding_from_bom
+from adarelib.testset.content import strip_bom_from_text as _strip_bom_from_text
+from adarelib.testset.content import file_hash, parse_byte_string, parse_duration
+from adarelib.testset.fileinfo import file_timestamp, owner_and_group, parse_permissions, parse_timestamp
+from adarelib.testset.archive import has_archive_separator
+from adarelib.testset.structured import COMPARISON_TYPES, compare_count, count_parameter_errors
 
 # configure logging
 import logging
 
 log = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Module-level helper functions (deduplicated)
-# =============================================================================
-
-
-def _detect_encoding_from_bom(file_path):
-    """Detect encoding from BOM, return (encoding, bom_length)"""
-    with open(file_path, 'rb') as f:
-        raw_data = f.read(4)
-
-    if raw_data.startswith(b'\xef\xbb\xbf'):
-        return 'utf-8', 3
-    if raw_data.startswith(b'\xff\xfe\x00\x00'):
-        return 'utf-32-le', 4
-    if raw_data.startswith(b'\x00\x00\xfe\xff'):
-        return 'utf-32-be', 4
-    if raw_data.startswith(b'\xff\xfe'):
-        return 'utf-16-le', 2
-    if raw_data.startswith(b'\xfe\xff'):
-        return 'utf-16-be', 2
-    return None, 0
-
-
-def _strip_bom_from_text(text, encoding):
-    """Strip BOM from text content"""
-    if (
-        encoding.lower() == 'utf-8'
-        and text.startswith('\ufeff')
-        or encoding.lower().startswith('utf-16')
-        and text.startswith('\ufeff')
-        or encoding.lower().startswith('utf-32')
-        and text.startswith('\ufeff')
-    ):
-        return text[1:]
-    return text
-
-
-def _calculate_hash(filepath, hash_type):
-    """Calculate file hash"""
-    hash_algos = {'md5': hashlib.md5, 'sha1': hashlib.sha1, 'sha256': hashlib.sha256, 'sha512': hashlib.sha512}
-
-    if hash_type.lower() not in hash_algos:
-        raise ValueError(f"Unsupported hash type: {hash_type}")
-
-    hasher = hash_algos[hash_type.lower()]()
-
-    with open(filepath, 'rb') as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hasher.update(chunk)
-
-    return hasher.hexdigest()
-
-
-def _parse_duration(duration_str):
-    """Parse duration string like '1h', '30m', '2d' to seconds"""
-    units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
-
-    if not duration_str or duration_str[-1] not in units:
-        raise ValueError(f"Invalid duration format: {duration_str}")
-
-    try:
-        value = int(duration_str[:-1])
-        unit = duration_str[-1]
-        return value * units[unit]
-    except ValueError:
-        raise ValueError(f"Invalid duration format: {duration_str}") from None
-
-
-def _parse_timestamp(timestamp, time_format=None):
-    """Parse timestamp to Unix timestamp"""
-    if isinstance(timestamp, (int, float)):
-        return float(timestamp)
-
-    timestamp = str(timestamp)
-
-    # Try parsing as number first
-    try:
-        return float(timestamp)
-    except (ValueError, TypeError):
-        pass
-
-    # Parse with custom format
-    if time_format:
-        try:
-            dt = datetime.strptime(timestamp, time_format)
-            return dt.timestamp()
-        except ValueError:
-            pass
-
-    # Try common formats
-    common_formats = [
-        '%Y-%m-%d %H:%M:%S',
-        '%Y-%m-%dT%H:%M:%S',
-        '%Y-%m-%dT%H:%M:%SZ',
-        '%Y-%m-%d',
-        '%m/%d/%Y %H:%M:%S',
-        '%m/%d/%Y',
-    ]
-
-    for fmt in common_formats:
-        try:
-            dt = datetime.strptime(timestamp, fmt)
-            return dt.timestamp()
-        except ValueError:
-            continue
-
-    raise ValueError(f"Cannot parse timestamp: {timestamp}")
-
-
-def _get_file_timestamp(filepath, timestamp_type):
-    """Get file timestamp based on type"""
-    stat_info = os.stat(filepath)
-
-    if timestamp_type == 'modified':
-        return stat_info.st_mtime
-    if timestamp_type == 'accessed':
-        return stat_info.st_atime
-    if timestamp_type == 'created':
-        # On Unix, st_ctime is not creation time but change time
-        # On Windows, it is creation time
-        if platform.system() == 'Windows':
-            return stat_info.st_ctime
-        # Try to get birth time on systems that support it
-        try:
-            return stat_info.st_birthtime
-        except AttributeError:
-            # Fall back to change time
-            return stat_info.st_ctime
-    else:
-        raise ValueError(f"Unsupported timestamp type: {timestamp_type}")
-
-
-def _parse_permissions(perm_str):
-    """Parse permission string to octal"""
-    if perm_str.isdigit():
-        # Already octal
-        return int(perm_str, 8)
-
-    # Parse symbolic notation like 'rwxr-xr-x'
-    if len(perm_str) == 9:
-        perms = 0
-        # Owner permissions
-        if perm_str[0] == 'r':
-            perms |= stat.S_IRUSR
-        if perm_str[1] == 'w':
-            perms |= stat.S_IWUSR
-        if perm_str[2] == 'x':
-            perms |= stat.S_IXUSR
-        # Group permissions
-        if perm_str[3] == 'r':
-            perms |= stat.S_IRGRP
-        if perm_str[4] == 'w':
-            perms |= stat.S_IWGRP
-        if perm_str[5] == 'x':
-            perms |= stat.S_IXGRP
-        # Other permissions
-        if perm_str[6] == 'r':
-            perms |= stat.S_IROTH
-        if perm_str[7] == 'w':
-            perms |= stat.S_IWOTH
-        if perm_str[8] == 'x':
-            perms |= stat.S_IXOTH
-        return perms
-
-    raise ValueError(f"Invalid permission format: {perm_str}")
-
-
-def _get_owner_group(filepath):
-    """Get file owner and group names"""
-    try:
-        import pwd
-        import grp
-
-        stat_info = os.stat(filepath)
-        owner = pwd.getpwuid(stat_info.st_uid).pw_name
-        group = grp.getgrgid(stat_info.st_gid).gr_name
-        return owner, group
-    except ImportError:
-        # Windows doesn't have pwd/grp modules
-        return None, None
-    except (KeyError, OSError):
-        return None, None
-
-
-def _parse_escape_sequences(text):
-    """Parse Python-style escape sequences in string to actual bytes"""
-    try:
-        # Use codecs to decode escape sequences like \x41, \n, \t, etc.
-        import codecs
-
-        return codecs.decode(text, 'unicode_escape').encode('latin1')
-    except (UnicodeDecodeError, UnicodeEncodeError):
-        # If parsing fails, fall back to UTF-8 encoding
-        return text.encode('utf-8')
 
 
 # =============================================================================
@@ -229,6 +38,7 @@ def file_exists(ctx, dst: str = '', match_mode: str = "any"):
     """Pass when a regular file exists at ``dst`` (for globs: at least one match is a file).
 
     Use for: verifying a GUI action created/saved a file. Opposite: standard.file_does_not_exist.
+    How many files match a glob: standard.file_count; an empty file: standard.file_size.
 
     Args:
         dst: Guest path to the file. Glob characters ``* ? [ ]`` are expanded with Python
@@ -444,11 +254,12 @@ def dir_content(ctx, dst: str = '', files: list = None):
           files: [report.csv, images]
     """
     try:
+        dst_param = dst
         dst, status = ctx.resolve_globfilepath(dst)
         if not dst:
             return TestResult.error(
                 [
-                    f'directory with path {dst} can\'t be used, because no unambiguous directory could be identified (because {status})'
+                    f'directory with path {dst_param} can\'t be used, because no unambiguous directory could be identified (because {status})'
                 ]
             )
 
@@ -482,7 +293,7 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
-            errors. A missing file fails.
+            errors. A missing file is an error.
         regex: Python ``re`` pattern applied with ``re.search`` to the whole file. Default
             flags: case-sensitive, ``^``/``$`` match only file start/end; use inline flags
             such as ``(?im)``. An empty pattern always passes; an invalid one errors.
@@ -496,10 +307,13 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
           dst: /home/user/notes.txt
           regex: '(?m)^Total: [0-9]+$'
     """
+    dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
         return TestResult.error(
-            [f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            [
+                f'file with path {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})'
+            ]
         )
 
     log.debug(f'dst file {dst} will be used for test')
@@ -521,7 +335,7 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
             data = _strip_bom_from_text(data, encoding)
 
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
+        return TestResult.error([f'file with path {dst} does not exist'])
     except (PermissionError, OSError, UnicodeDecodeError) as e:
         return TestResult.execution_error(e, f"Cannot read file {dst}")
 
@@ -544,15 +358,17 @@ def file_content_matches_regex(ctx, dst: str = '', regex: str = '', encoding: st
 def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = 'utf-8', strip_bom: bool = False):
     r"""Pass when the text of file ``dst`` equals ``content`` (leading/trailing whitespace ignored).
 
-    Use for: exact output checks, e.g. a tool's exit code or a saved text document.
+    Use for: exact output checks, e.g. a tool's exit code or a saved text document. That a
+    file is empty: standard.file_size with ``expected_size: 0``.
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
-            errors. A missing file fails; a failure includes a unified diff.
+            errors. A missing file is an error; a failure includes a unified diff.
         content: Expected text. Both sides are ``strip()``-ed; inner whitespace must match
             (line endings are normalised to ``\n`` by text-mode reading). ``!re``/``!timestamp``
             tags inside the value become placeholders matched by type; the literal text
-            around them must match exactly.
+            around them must match exactly. An invalid ``!re`` regex is an error even when
+            the text around it does not match.
         encoding: Python codec used to decode the file (strict). ``BOM`` detects UTF-8/16/32
             from the byte-order mark and errors if there is none.
         strip_bom: Remove a leading U+FEFF from the decoded text before comparing.
@@ -563,10 +379,16 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
           dst: '{{ out_dir }}/exit_code.txt'
           content: '0'
     """
+    problem = regex_expected_problem(ctx, [content], many_placeholders=True)
+    if problem is not None:
+        return problem
+    dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
         return TestResult.error(
-            [f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            [
+                f'file with path {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})'
+            ]
         )
 
     log.debug(f'dst file {dst} will be used for test')
@@ -588,7 +410,7 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
             data = _strip_bom_from_text(data, encoding)
 
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
+        return TestResult.error([f'file with path {dst} does not exist'])
     except (PermissionError, OSError, UnicodeDecodeError) as e:
         return TestResult.execution_error(e, f"Cannot read file {dst}")
 
@@ -635,7 +457,7 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
-            errors. A missing file fails.
+            errors. A missing file is an error.
         expected_hash: Hex digest; compared case-insensitively but otherwise exactly (no
             whitespace stripping, no prefix such as ``sha256:``).
         hash_type: ``md5``, ``sha1``, ``sha256`` (default) or ``sha512`` (case-insensitive);
@@ -647,10 +469,11 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
           dst: C:/Users/user/Downloads/setup.exe
           expected_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
     """
+    dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
         return TestResult.error(
-            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            [f'file {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})']
         )
 
     log.debug(f'dst file {dst} will be used for test')
@@ -658,18 +481,36 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
     expected_hash = expected_hash.lower()
 
     try:
-        actual_hash = _calculate_hash(dst, hash_type)
+        actual_hash = file_hash(dst, hash_type)
 
         if actual_hash == expected_hash:
             return TestResult.success([f'{hash_type.upper()} hash matches: {actual_hash}'])
         return TestResult.failed([f'{hash_type.upper()} hash mismatch. Expected: {expected_hash}, Got: {actual_hash}'])
 
     except FileNotFoundError:
-        return TestResult.failed([f'file {dst} does not exist'])
+        return TestResult.error([f'file {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read file {dst}")
     except ValueError as e:
         return TestResult.execution_error(e, "Hash calculation error")
+
+
+def _metadata_path(ctx, dst) -> tuple[str, TestResult | None]:
+    """The one path ``dst`` names, or an ERROR: no unambiguous file, or an archive member (its
+    metadata would be that of a temporary extracted copy)."""
+    if isinstance(dst, str) and has_archive_separator(dst):
+        return '', TestResult.error(
+            [
+                f'{dst} names an archive member: its times, mode and owner would be those of a temporary '
+                'extracted copy, not of the member; test the archive file itself'
+            ]
+        )
+    path, status = ctx.resolve_globfilepath(dst)
+    if not path:
+        return '', TestResult.error(
+            [f"file {dst} can't be used, because no unambiguous file could be identified (because {status})"]
+        )
+    return path, None
 
 
 @testfunction(
@@ -695,7 +536,8 @@ def file_timestamps(
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
-            errors. A missing file fails.
+            errors. A missing file is an error, and so is an archive member (``a.zip!/x``):
+            its times would be those of a temporary extracted copy.
         timestamp_type: ``modified`` (mtime, default), ``accessed`` (atime) or ``created``:
             creation time on Windows; elsewhere ``st_birthtime`` if Python exposes it, else
             ``st_ctime`` (inode change time on Linux). Other values error.
@@ -720,19 +562,17 @@ def file_timestamps(
           comparison_type: within_last
           within_duration: 10m
     """
-    dst, status = ctx.resolve_globfilepath(dst)
-    if not dst:
-        return TestResult.error(
-            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
-        )
+    dst, error = _metadata_path(ctx, dst)
+    if error is not None:
+        return error
 
     log.debug(f'dst file {dst} will be used for test')
 
     try:
-        actual_time = _get_file_timestamp(dst, timestamp_type)
+        actual_time = file_timestamp(dst, timestamp_type)
 
         if comparison_type == 'equals':
-            expected = _parse_timestamp(expected_time, time_format)
+            expected = parse_timestamp(expected_time, time_format)
 
             tolerance = tolerance_seconds or 0
             if abs(actual_time - expected) <= tolerance:
@@ -746,20 +586,20 @@ def file_timestamps(
             )
 
         if comparison_type == 'before':
-            expected = _parse_timestamp(expected_time, time_format)
+            expected = parse_timestamp(expected_time, time_format)
             if actual_time < expected:
                 return TestResult.success([f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected)}'])
             return TestResult.failed([f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected)}'])
 
         if comparison_type == 'after':
-            expected = _parse_timestamp(expected_time, time_format)
+            expected = parse_timestamp(expected_time, time_format)
             if actual_time > expected:
                 return TestResult.success([f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected)}'])
             return TestResult.failed([f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected)}'])
 
         if comparison_type == 'between':
-            start = _parse_timestamp(start_time, time_format)
-            end = _parse_timestamp(end_time, time_format)
+            start = parse_timestamp(start_time, time_format)
+            end = parse_timestamp(end_time, time_format)
             if start <= actual_time <= end:
                 return TestResult.success(
                     [
@@ -773,7 +613,7 @@ def file_timestamps(
             )
 
         if comparison_type == 'within_last':
-            duration_seconds = _parse_duration(within_duration)
+            duration_seconds = parse_duration(within_duration)
             current_time = datetime.now().timestamp()
             threshold_time = current_time - duration_seconds
 
@@ -784,7 +624,7 @@ def file_timestamps(
         return TestResult.error([f'Unsupported comparison type: {comparison_type}'])
 
     except FileNotFoundError:
-        return TestResult.failed([f'file {dst} does not exist'])
+        return TestResult.error([f'file {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot access file {dst}")
     except ValueError as e:
@@ -804,7 +644,8 @@ def file_permissions(
 
     Args:
         dst: Guest path to the file or directory. A glob must match exactly one path,
-            otherwise the test errors. A missing path fails.
+            otherwise the test errors. A missing path is an error, and so is an archive member
+            (its mode and owner would be those of a temporary extracted copy).
         expected_permissions: Octal digits (``'644'``, ``'0755'``) or 9-char symbolic
             (``rwxr-xr-x``), compared with ``st_mode & 0o777`` (no setuid/sticky). Quote it in
             YAML (unquoted ``0644`` is read as decimal 420). Empty/invalid values error.
@@ -818,18 +659,16 @@ def file_permissions(
           expected_permissions: '600'
           check_owner: user
     """
-    dst, status = ctx.resolve_globfilepath(dst)
-    if not dst:
-        return TestResult.error(
-            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
-        )
+    dst, error = _metadata_path(ctx, dst)
+    if error is not None:
+        return error
 
     log.debug(f'dst file {dst} will be used for test')
 
     try:
         stat_info = os.stat(dst)
         actual_perms = stat_info.st_mode & 0o777
-        expected_perms = _parse_permissions(expected_permissions)
+        expected_perms = parse_permissions(expected_permissions)
 
         results = []
         success = True
@@ -843,7 +682,7 @@ def file_permissions(
 
         # Check owner and group if specified
         if check_owner or check_group:
-            owner, group = _get_owner_group(dst)
+            owner, group = owner_and_group(dst)
 
             if check_owner:
                 if owner == check_owner:
@@ -864,7 +703,7 @@ def file_permissions(
         return TestResult.failed(results)
 
     except FileNotFoundError:
-        return TestResult.failed([f'file {dst} does not exist'])
+        return TestResult.error([f'file {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot access file {dst}")
     except ValueError as e:
@@ -887,15 +726,19 @@ def file_content_contains(
     r"""Pass when file ``dst`` contains ``content`` as a substring (text) or byte sequence.
 
     Use for: checking a value/marker was written into a file. For patterns use
-    standard.file_content_matches_regex.
+    standard.file_content_matches_regex; to count occurrences, search several encodings at
+    once or assert a value is gone from a binary file use text.occurrence_count.
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
-            errors. A missing file fails.
-        content: Text to find (case-sensitive). In ``bytes`` mode Python escape sequences
-            are decoded first (``\x00``, ``\n``) to latin-1 bytes. An empty value always passes.
-        content_type: ``bytes`` searches the raw file bytes; any other value (default
-            ``string``) searches the decoded text.
+            errors. A missing file is an error.
+        content: Text to find (case-sensitive). An empty value always passes. In ``bytes``
+            mode ASCII characters stand for their byte and Python escapes (``\x00``, ``\n``,
+            ``\\``) are decoded; a non-ASCII character or an unknown escape is an error (write
+            ``\xNN``, or use ``string`` mode with an ``encoding``).
+        content_type: ``string`` (default) searches the decoded text, ``bytes`` the raw file
+            bytes; other values are an error. A ``!re``/``!timestamp`` placeholder in ``content``
+            is an error (use standard.file_content_matches_regex).
         encoding: Codec for ``string`` mode; undecodable bytes are silently dropped.
             ``BOM`` detects UTF-8/16/32 from the byte-order mark and errors if there is none.
         strip_bom: Remove a leading U+FEFF from the decoded text (``string`` mode only).
@@ -906,24 +749,35 @@ def file_content_contains(
           dst: /home/user/.bash_history
           content: rm -rf ~/evidence
     """
+    if content_type not in ('string', 'bytes'):
+        return TestResult.error([f"invalid content_type {content_type!r} (allowed: string, bytes)"])
+    if isinstance(content, str) and ctx.has_placeholders(content):
+        return TestResult.error(
+            [
+                f'content {content!r} holds a !re or !timestamp placeholder, which is not supported here; '
+                'use standard.file_content_matches_regex'
+            ]
+        )
+    dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
         return TestResult.error(
-            [f'file {dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            [f'file {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})']
         )
 
     log.debug(f'dst file {dst} will be used for test')
 
+    if content_type == 'bytes':
+        try:
+            search_bytes = parse_byte_string(content)
+        except ValueError as e:
+            return TestResult.error([str(e)])
+
     try:
         if content_type == 'bytes':
-            # Read file in binary mode
             with open(dst, 'rb') as f:
                 file_data = f.read()
-
-            # Parse escape sequences in the string to get actual bytes
-            search_content = _parse_escape_sequences(content)
-
-            if search_content in file_data:
+            if search_bytes in file_data:
                 return TestResult.success(['byte pattern found in file'])
             return TestResult.failed(['byte pattern not found in file'])
 
@@ -951,6 +805,115 @@ def file_content_contains(
         return TestResult.failed(['string content not found in file'])
 
     except FileNotFoundError:
-        return TestResult.failed([f'file {dst} does not exist'])
+        return TestResult.error([f'file {dst} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read file {dst}")
+
+
+@testfunction(
+    name='file_size',
+    description='tests the size of a file in bytes',
+    category=HostModeCategory.FILE_BASED,
+)
+def file_size(ctx, dst: str, expected_size: int, comparison_type: str = 'equals'):
+    """Pass when the size in bytes of file ``dst`` satisfies ``comparison_type`` against ``expected_size``.
+
+    Use for: checking a file is empty (``expected_size: 0``), non-empty (``greater`` 0) or
+    grew/shrank past a threshold. Existence alone: standard.file_exists.
+
+    Args:
+        dst: Guest path to the file. A glob must match exactly one path; a missing file or a
+            directory is an error. An archive member (``a.zip!/p/x.db``) has its extracted size.
+        expected_size: Non-negative integer number of bytes; anything else is an error.
+        comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
+            ``less_equal``; other values are an error.
+
+    Example:
+        function: standard.file_size
+        parameter:
+          dst: /home/user/data/app.log
+          expected_size: 0
+          comparison_type: greater
+    """
+    if isinstance(expected_size, bool) or not isinstance(expected_size, int) or expected_size < 0:
+        return TestResult.error([f'expected_size must be a non-negative integer, got {expected_size!r}'])
+    if comparison_type not in COMPARISON_TYPES:
+        return TestResult.error(
+            [f"invalid comparison_type {comparison_type!r} (allowed: {', '.join(COMPARISON_TYPES)})"]
+        )
+    path, status = ctx.resolve_globfilepath(dst)
+    if not path:
+        return TestResult.error(
+            [f'file {dst} can\'t be used, because no unambiguous file could be identified ({status})']
+        )
+    try:
+        info = os.stat(path)
+    except FileNotFoundError:
+        return TestResult.error([f'file {path} does not exist'])
+    except OSError as e:
+        return TestResult.execution_error(e, f'Cannot stat file {path}')
+    if stat.S_ISDIR(info.st_mode):
+        return TestResult.error([f'{path} is a directory, not a file'])
+    ok, message = compare_count(info.st_size, expected_size, comparison_type)
+    details = [f'file {path} is {info.st_size} bytes', message.replace('count', 'size', 1)]
+    return TestResult.success(details) if ok else TestResult.failed(details)
+
+
+_FILE_COUNT_KINDS = ('file', 'dir', 'any')
+
+
+@testfunction(
+    name='file_count',
+    description='tests the number of files (or directories) matching a path or glob',
+    category=HostModeCategory.FILE_BASED,
+)
+def file_count(ctx, dst: str, expected_count: int, comparison_type: str = 'equals', kind: str = 'file'):
+    """Pass when the number of paths matching ``dst`` that are of ``kind`` satisfies ``comparison_type``.
+
+    Use for: how many files an application wrote (exactly 3 logs, at least one export) and
+    absence of a whole group of files: ``expected_count: 0``. One file: standard.file_exists.
+
+    Args:
+        dst: Guest path or glob (Python ``glob``, not recursive: ``**`` acts like ``*``;
+            ``*`` skips dotfiles), e.g. ``/home/user/logs/*.log``. No match counts 0, it is not
+            an error; an empty ``dst`` or an unresolved ``{{placeholder}}`` is. Inside an archive (``a.zip!/logs/*.log``) the matching file members are
+            counted; the archive itself must exist and be readable, otherwise an error.
+        expected_count: Non-negative integer to compare against; anything else is an error.
+        comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
+            ``less_equal``; other values are an error.
+        kind: ``file`` (default): regular files (also through a symlink); ``dir``:
+            directories; ``any``: every existing path. Archives have file members only, so
+            ``dir`` with an archive path is an error.
+
+    Example:
+        function: standard.file_count
+        parameter:
+          dst: /home/user/.cache/app/*.tmp
+          expected_count: 0
+    """
+    problems = count_parameter_errors(expected_count, comparison_type)
+    if kind not in _FILE_COUNT_KINDS:
+        problems.append(f"invalid kind {kind!r} (allowed: {', '.join(_FILE_COUNT_KINDS)})")
+    if not isinstance(dst, str) or not dst.strip() or '{{' in dst:
+        problems.append(f'dst must be a resolved path, got {dst!r}')  # else an absence test passes on it
+    in_archive = isinstance(dst, str) and has_archive_separator(dst)
+    if in_archive and kind == 'dir':
+        problems.append('kind dir cannot be counted inside an archive (members are files)')
+    if problems:
+        return TestResult.error(problems)
+    paths, status = ctx.resolve_globfilepath(dst, match_mode='any', return_list=True)
+    if status:
+        return TestResult.error([f'path {dst} cannot be used ({status})'])
+    try:
+        if kind == 'file':
+            matching = [p for p in paths if os.path.isfile(p)]
+        elif kind == 'dir':
+            matching = [p for p in paths if os.path.isdir(p)]
+        else:
+            matching = [p for p in paths if os.path.lexists(p)]
+    except OSError as e:
+        return TestResult.execution_error(e, f'Cannot check paths for {dst}')
+    ok, message = compare_count(len(matching), expected_count, comparison_type)
+    shown = ', '.join(sorted(matching)[:5]) + (', ...' if len(matching) > 5 else '')
+    details = [f'{len(matching)} {kind} path(s) match {dst}' + (f': {shown}' if matching else ''), message]
+    return TestResult.success(details) if ok else TestResult.failed(details)

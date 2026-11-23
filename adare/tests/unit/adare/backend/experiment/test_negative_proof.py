@@ -45,7 +45,14 @@ def _judge(ledger, test_def, result=None, test_class=None):
         {'function': 'visual.not_exists'},
         {'function': 'visual.count_max', 'parameter': {'max': 0}},
         {'function': 'visual.count_max', 'parameter': {'max': '0'}},
+        {'function': 'visual.count_equals', 'parameter': {'text': 'Report', 'n': 0}},
+        {'function': 'visual.count_equals', 'parameter': {'icon': 'folder', 'n': '0'}},
         {'function': 'standard.file_exists', 'expect_to_fail': True},
+        {'function': 'json.value_count', 'parameter': {'key_path': 'a', 'expected_count': 0}},
+        {'function': 'xml.element_count', 'parameter': {'expected_count': 0, 'comparison_type': 'less_equal'}},
+        {'function': 'text.occurrence_count', 'parameter': {'expected_count': 1, 'comparison_type': 'less'}},
+        {'function': 'jsonl.line_count', 'parameter': {'expected_count': {'max': 0}}},
+        {'function': 'sqlite.query_result', 'parameter': {'query': 'q', 'expected_count': 0}},
     ],
 )
 def test_negative_tests(test_def):
@@ -58,6 +65,16 @@ def test_negative_tests(test_def):
         {'function': 'standard.file_exists'},
         {'function': 'visual.count_max', 'parameter': {'max': 2}},
         {'function': 'visual.exists'},
+        {'function': 'visual.count_equals', 'parameter': {'text': 'Report', 'n': 1}},
+        {'function': 'visual.count_equals', 'parameter': {'text': 'Report'}},
+        # n: 0 and expect_to_fail asserts presence
+        {'function': 'visual.count_equals', 'parameter': {'text': 'Report', 'n': 0}, 'expect_to_fail': True},
+        {'function': 'json.value_count', 'parameter': {'expected_count': 2}},
+        {'function': 'json.value_count', 'parameter': {'expected_count': 0, 'comparison_type': 'greater'}},
+        {'function': 'jsonl.line_count', 'parameter': {'expected_count': {'min': 1}}},
+        {'function': 'jsonl.line_count', 'parameter': {}},
+        # zero expected and expect_to_fail: the test asserts presence
+        {'function': 'json.value_count', 'parameter': {'expected_count': 0}, 'expect_to_fail': True},
     ],
 )
 def test_positive_tests(test_def):
@@ -273,3 +290,17 @@ def test_error_stays_error_under_expect_to_fail():
 def test_transport_error_is_error():
     result = TestResultProcessor.process_test_result('t', {'status': 'error', 'message': 'ws closed'})
     assert not result.success and result.data['test_status'] == 'ERROR'
+
+
+def test_count_functions_need_an_explicit_zero():
+    # no testfunction defaults expected_count to 0 any more: a missing count is not an absence
+    assert not is_negative_test({'function': 'xml.element_count', 'parameter': {'xpath': 'a'}})
+    assert not is_negative_test({'function': 'xml.element_count', 'parameter': {'expected_count': 2}})
+
+
+def test_visual_count_equals_zero_is_inconclusive_after_failed_action():
+    ledger = EffectLedger()
+    ledger.record_action(_click(), SimpleNamespace(success=False, data={}))
+    test_def = {'name': 'gone', 'function': 'visual.count_equals', 'parameter': {'text': 'Report', 'n': 0}}
+    result = _judge(ledger, test_def)
+    assert result.data['test_status'] == 'INCONCLUSIVE'

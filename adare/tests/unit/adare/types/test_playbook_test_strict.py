@@ -50,3 +50,47 @@ class TestTestEntryStrictness:
     def test_minimal_test_still_parses(self, tmp_path):
         test = _parse(tmp_path, tests=[{'name': 'history', 'function': 'standard.file_exists'}]).tests[0]
         assert test.parameter == {}
+
+
+class TestArchiveDstMapping:
+    """``dst: {archive, member}`` is checked at parse time (playbook validate and load)."""
+
+    def test_valid_mapping_parses(self, tmp_path):
+        dst = {'archive': '/home/u/backup.tar.gz', 'member': 'etc/app/config.json'}
+        entry = {'name': 'cfg', 'function': 'json.value_matches', 'parameter': {'dst': dst}}
+        assert _parse(tmp_path, tests=[entry]).tests[0].parameter['dst'] == dst
+
+    @pytest.mark.parametrize(
+        ('dst', 'hint'),
+        [({'member': 'x'}, "needs 'archive'"), ({'archive': '/a.zip', 'format': 'zip'}, 'unknown key(s) format')],
+    )
+    def test_malformed_mapping_is_rejected(self, tmp_path, dst, hint):
+        entry = {'name': 'cfg', 'function': 'json.value_matches', 'parameter': {'dst': dst}}
+        with pytest.raises(ValueError, match='cfg') as exc:
+            _parse(tmp_path, tests=[entry])
+        assert hint in str(exc.value)
+
+    @pytest.mark.parametrize(
+        ('other_dst', 'hint'),
+        [
+            ({'member': 'x'}, "other_dst mapping needs 'archive'"),
+            ({'archive': '/a.zip', 'format': 'zip'}, 'unknown key(s) format in other_dst mapping'),
+            (5, 'other_dst must be a path'),
+        ],
+    )
+    def test_malformed_other_dst_is_rejected(self, tmp_path, other_dst, hint):
+        parameter = {'dst': '/data/app/state.json', 'other_dst': other_dst}
+        entry = {'name': 'cmp', 'function': 'json.values_compare', 'parameter': parameter}
+        with pytest.raises(ValueError, match='cmp') as exc:
+            _parse(tmp_path, tests=[entry])
+        assert hint in str(exc.value)
+
+    def test_valid_other_dst_forms_parse(self, tmp_path):
+        for other_dst in (
+            '/data/app/before.json',
+            '/b.tar.gz!/state.json',
+            {'archive': '/b.tar.gz', 'member': 's.json'},
+        ):
+            parameter = {'dst': '/data/app/state.json', 'other_dst': other_dst}
+            entry = {'name': 'cmp', 'function': 'json.values_compare', 'parameter': parameter}
+            assert _parse(tmp_path, tests=[entry]).tests[0].parameter['other_dst'] == other_dst

@@ -40,15 +40,9 @@ Before writing a playbook, decide what you want to verify.
 Choosing testfunctions
 ----------------------
 
-Browse the testsets to find functions that match your artifact type:
-
-- **standard** -- file existence, content matching, hash comparison, file size
-- **json** -- key existence, value assertions in JSON files
-- **csv** -- column checks, row matching in CSV/TSV files
-- **xml** -- XPath queries, element assertions
-- **sqlite** -- SQL queries against SQLite databases (application data, logs)
-- **linux** -- syslog entries, package state, service status
-- **windows** -- registry keys/values, event log entries, Prefetch files
+Pick one testfunction per finding. :doc:`choosing-testfunctions` maps goals to functions
+(and names the look-alike *not* to use); ``adare test search "<goal>"`` searches the
+catalog from the command line.
 
 Defining pass/fail criteria
 ---------------------------
@@ -91,11 +85,11 @@ A test-driven playbook has four main sections: ``settings``, ``variables``,
          dst: "{{ app_db }}"
 
      - name: entry_recorded
-       function: sqlite.query_result_contains
+       function: sqlite.row_count
        parameter:
          dst: "{{ app_db }}"
-         query: "SELECT title FROM items WHERE title LIKE '%Research%'"
-         expected: "{{ entry_title }}"
+         query: "SELECT title FROM items WHERE title = '{{ entry_title }}'"
+         expected_count: 1
 
      - name: thumbnail_stored
        function: standard.file_exists
@@ -103,42 +97,26 @@ A test-driven playbook has four main sections: ``settings``, ``variables``,
          dst: "C:\\Users\\adare\\AppData\\Roaming\\SomeApp\\data\\thumbnails.db"
 
    actions:
-     - action: gui.open_application
-       parameter:
-         name: someapp
+     # open SomeApp through the Windows Run dialog
+     - keyboard: {combination: ["win", "r"]}
+     - keyboard: {text: "someapp"}
+     - keyboard: {key: "enter"}
+     - idle: {duration: 5}
 
-     - action: gui.type_text
-       parameter:
-         text: "{{ entry_title }}"
+     - keyboard: {text: "{{ entry_title }}"}
+     - keyboard: {key: "enter"}
+     - idle: {duration: 5}
 
-     - action: keyboard.press
-       parameter:
-         key: enter
+     - test: app_db_exists
+     - test: entry_recorded
+     - test: thumbnail_stored
 
-     - action: general.wait
-       parameter:
-         seconds: 5
-
-     - action: test
-       parameter:
-         name: app_db_exists
-
-     - action: test
-       parameter:
-         name: entry_recorded
-
-     - action: test
-       parameter:
-         name: thumbnail_stored
-
-     - action: gui.close_application
-       parameter:
-         name: someapp
+     - keyboard: {combination: ["alt", "f4"]}
 
 How tests integrate with actions
 --------------------------------
 
-Tests are *declared* in the ``tests`` section and *executed* as ``test`` actions
+Tests are *declared* in the ``tests`` section and *executed* as ``- test: <name>`` actions
 within the ``actions`` sequence. This lets you control exactly when each
 assertion runs -- after the relevant action has completed but before subsequent
 actions might alter state.
@@ -149,12 +127,12 @@ You can also set per-test timeouts for long-running validations:
 
    tests:
      - name: large_db_check
-       function: sqlite.query_result_contains
+       function: sqlite.query_result
        timeout: 300
        parameter:
          dst: "/path/to/large.db"
-         query: "SELECT count(*) FROM events"
-         expected: "1000"
+         query: "SELECT count(*) AS n FROM events"
+         expected_result: [{n: 1000}]
 
 
 Running the Workflow
@@ -286,111 +264,76 @@ Step 3 -- Write the playbook
 
    tests:
      - name: entry_in_recent
-       function: sqlite.query_result_contains
+       function: sqlite.row_count
        parameter:
          dst: "{{ app_db }}"
          query: >
            SELECT i.title FROM recent r
            JOIN items i ON r.item_id = i.id
-           WHERE i.title LIKE '%Example%'
-         expected: "{{ entry_title }}"
+           WHERE i.title = '{{ entry_title }}'
+         expected_count: 1
 
      - name: pin_exists
-       function: sqlite.query_result_contains
+       function: sqlite.row_count
        parameter:
          dst: "{{ app_db }}"
          query: >
            SELECT i.title FROM pins p
            JOIN items i ON p.item_id = i.id
-           WHERE i.title LIKE '%Example%'
-         expected: "{{ entry_title }}"
+           WHERE i.title = '{{ entry_title }}'
+         expected_count: 1
 
      - name: recent_cleared
-       function: sqlite.query_result_not_contains
+       function: sqlite.row_count
        parameter:
          dst: "{{ app_db }}"
          query: >
            SELECT i.title FROM recent r
            JOIN items i ON r.item_id = i.id
-           WHERE i.title LIKE '%Example%'
-         expected: "{{ entry_title }}"
+           WHERE i.title = '{{ entry_title }}'
+         expected_count: 0
 
      - name: pin_survives_clear
-       function: sqlite.query_result_contains
+       function: sqlite.row_count
        parameter:
          dst: "{{ app_db }}"
          query: >
            SELECT i.title FROM pins p
            JOIN items i ON p.item_id = i.id
-           WHERE i.title LIKE '%Example%'
-         expected: "{{ entry_title }}"
+           WHERE i.title = '{{ entry_title }}'
+         expected_count: 1
 
    actions:
-     # --- Open SomeApp and create an entry ---
-     - action: gui.open_application
-       parameter:
-         name: someapp
-
-     - action: keyboard.hotkey
-       parameter:
-         keys: ctrl+n
-
-     - action: gui.type_text
-       parameter:
-         text: "{{ entry_title }}"
-
-     - action: keyboard.press
-       parameter:
-         key: enter
-
-     - action: general.wait
-       parameter:
-         seconds: 5
+     # --- Open SomeApp (Windows Run dialog) and create an entry ---
+     - keyboard: {combination: ["win", "r"]}
+     - keyboard: {text: "someapp"}
+     - keyboard: {key: "enter"}
+     - idle: {duration: 5}
+     - keyboard: {combination: ["ctrl", "n"]}
+     - keyboard: {text: "{{ entry_title }}"}
+     - keyboard: {key: "enter"}
+     - idle: {duration: 5}
 
      # --- Verify the entry is listed as recent ---
-     - action: test
-       parameter:
-         name: entry_in_recent
+     - test: entry_in_recent
 
      # --- Pin the entry ---
-     - action: keyboard.hotkey
-       parameter:
-         keys: ctrl+p
-
-     - action: general.wait
-       parameter:
-         seconds: 2
+     - keyboard: {combination: ["ctrl", "p"]}
+     - idle: {duration: 2}
 
      # --- Verify the pin exists ---
-     - action: test
-       parameter:
-         name: pin_exists
+     - test: pin_exists
 
      # --- Clear the recent items ---
-     - action: gui.click_text
-       parameter:
-         text: "Clear recent items"
-
-     - action: gui.click_text
-       parameter:
-         text: "Clear now"
-
-     - action: general.wait
-       parameter:
-         seconds: 3
+     - click: {target: {text: "Clear recent items"}}
+     - click: {target: {text: "Clear now"}}
+     - idle: {duration: 3}
 
      # --- Verify recent items cleared but the pin survived ---
-     - action: test
-       parameter:
-         name: recent_cleared
+     - test: recent_cleared
+     - test: pin_survives_clear
 
-     - action: test
-       parameter:
-         name: pin_survives_clear
-
-     - action: gui.close_application
-       parameter:
-         name: someapp
+     - keyboard: {combination: ["alt", "f4"]}
 
 Step 4 -- Iterate in test mode
 ------------------------------
@@ -399,7 +342,7 @@ Step 4 -- Iterate in test mode
 
    adare experiment run recent-items-analysis -e win11
 
-Review results with ``adare runs info``. Adjust wait times, fix image references,
+Review results with ``adare runs info``. Adjust ``idle`` durations or click targets,
 or refine SQL queries as needed. Repeat until all four tests pass consistently.
 
 Step 5 -- Production run

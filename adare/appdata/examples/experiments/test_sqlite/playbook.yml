@@ -32,7 +32,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT COUNT(*) as count FROM users'
-      expected_rows: 1
+      expected_count: 1
 
   - name: test_sqlite_query_specific_result
     description: 'Test sqlite_query_result with specific expected result'
@@ -48,7 +48,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT name, role FROM users ORDER BY id'
-      expected_rows: 8
+      expected_count: 8
 
   - name: test_sqlite_query_single_user
     description: 'Test sqlite_query_result with single user lookup'
@@ -56,7 +56,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT * FROM users WHERE name = "John Doe"'
-      expected_rows: 1
+      expected_count: 1
 
   - name: test_sqlite_query_no_results
     description: 'Test sqlite_query_result with query returning no results'
@@ -64,7 +64,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT * FROM users WHERE name = "Nonexistent User"'
-      expected_rows: 0
+      expected_count: 0
 
   - name: test_sqlite_query_wrong_count
     description: 'Test sqlite_query_result with wrong expected count'
@@ -73,7 +73,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT * FROM users'
-      expected_rows: 10
+      expected_count: 10
 
   # Query with joins
   - name: test_sqlite_query_join
@@ -82,7 +82,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT u.name, p.project_name FROM users u JOIN projects p ON u.id = p.user_id'
-      expected_rows: 5
+      expected_count: 5
 
   # Complex queries
   - name: test_sqlite_query_aggregation
@@ -91,7 +91,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT role, COUNT(*) as count FROM users GROUP BY role'
-      expected_rows: 3
+      expected_count: 3
 
   # Edge cases
   - name: test_sqlite_query_empty_db
@@ -100,7 +100,7 @@ tests:
     parameter:
       dst: '{{empty_db}}'
       query: 'SELECT name FROM sqlite_master WHERE type="table"'
-      expected_rows: 0
+      expected_count: 0
 
   - name: test_sqlite_query_invalid_table
     description: 'Test sqlite_query_result with invalid table'
@@ -109,7 +109,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT * FROM nonexistent_table'
-      expected_rows: 0
+      expected_count: 0
 
   - name: test_sqlite_query_file_not_found
     description: 'Test sqlite_query_result creates database file when it does not exist'
@@ -117,7 +117,7 @@ tests:
     parameter:
       dst: '{{temp_db}}'
       query: 'SELECT 1'
-      expected_rows: 1
+      expected_count: 1
 
   # Tests using pre-created database with richer data
   - name: test_shared_db_department_count
@@ -126,7 +126,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT department, COUNT(*) as count FROM users GROUP BY department ORDER BY department'
-      expected_rows: 4
+      expected_count: 4
 
   - name: test_shared_db_salary_range
     description: 'Test sqlite_query_result with salary filtering from shared DB'
@@ -142,7 +142,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT action, COUNT(*) as count FROM audit_logs WHERE success = 1 GROUP BY action ORDER BY count DESC'
-      expected_rows: 6
+      expected_count: 6
 
   - name: test_shared_db_complex_join
     description: 'Test sqlite_query_result with complex multi-table JOIN from shared DB'
@@ -150,7 +150,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT d.name as dept_name, COUNT(u.id) as user_count FROM departments d LEFT JOIN users u ON d.name = u.department GROUP BY d.name ORDER BY d.name'
-      expected_rows: 4
+      expected_count: 4
 
 actions:
   # Run all SQLite tests

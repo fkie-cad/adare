@@ -1,0 +1,356 @@
+# Contract of the ini collection: what each function can and cannot do, and runnable
+# examples. Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run
+# in the unit suite (test_contract_examples.py); `adare test info ini.<name>` shows all of it.
+
+collection:
+  title: INI
+  summary: >-
+    INI-style configuration and key files, read with a tolerant line parser that keeps what
+    applications actually write (duplicate sections and keys, keys before the first section, raw
+    values): whether a section or key exists, the value of a key and how often a key or value
+    occurs (``0`` for absence).
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  settings: &settings
+    text: |
+      ; written by an application
+      profile = default
+      [General]
+      language = de_DE
+      port = 8080
+      title = "Report" ; draft
+      last_opened=/home/user/Documents/report.txt
+      [RecentFiles]
+      file = /home/user/Documents/report.txt
+      file = /home/user/Documents/notes.txt
+      [Window] ; geometry
+      width = 1280
+      maximized
+      [RecentFiles]
+      file = /home/user/Documents/plan.txt
+  # the same kind of file in UTF-16 with a byte order mark, as Windows applications write it
+  settings_utf16: &settings_utf16
+    encoding: utf-16
+    text: "[General]\r\nlanguage = de_DE\r\n"
+
+functions:
+  section_exists:
+    asserts: [exists]
+    formats: [ini]
+    features: [archive_dst, glob_dst, encoding]
+    not_for:
+      - goal: a key in the section
+        use: ini.contains_key
+      - goal: a key is absent
+        use: ini.value_count
+    outcomes:
+      passed: the file has at least one ``[section]`` header with that name
+      failed: the file was read and has no such header (the details list the sections found)
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or decoded; an unknown ``encoding``
+    limits:
+      - The name is compared after stripping; a comment after the closing bracket is allowed (``[Window] ; geometry``).
+      - Keys before the first header belong to section ``''``, which exists here only as a header ``[]``.
+      - For an absent section use ``expect_to_fail``; a missing or unreadable file stays an error.
+    use_cases:
+      - title: A group of settings was created
+        text: A section for a new account, profile or recent file list.
+    related:
+      - use: ini.value_count
+        why: how often a key occurs in the section (``0`` for absence)
+    examples:
+      - title: section with a comment after the header
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: Window
+      - title: case-insensitive name
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: general
+          case_sensitive: false
+      - title: an absent section fails
+        expect: failed
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: Accounts
+      - title: a missing file is an error
+        expect: error
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/other.ini
+          section: General
+
+  contains_key:
+    asserts: [exists]
+    formats: [ini]
+    features: [archive_dst, glob_dst, encoding]
+    not_for:
+      - goal: the value of the key
+        use: ini.value_matches
+      - goal: a key is absent
+        use: ini.value_count
+    outcomes:
+      passed: '``section`` has a ``key = ...`` line (an empty value counts; the details show the first value)'
+      failed: the file was read and the section has no such key
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or decoded; an unknown ``encoding``
+    limits:
+      - The first ``=`` on a line splits key and value; a line without ``=`` is ignored, so a bare word is no key.
+      - A section that appears twice is searched as one.
+      - '``case_sensitive: false`` compares section and key names case-insensitively.'
+    use_cases:
+      - title: A setting was written
+        text: The key exists after the action, whatever its value.
+    related:
+      - use: ini.section_exists
+        why: only the section
+    examples:
+      - title: a key written without spaces
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: General
+          key: last_opened
+      - title: a key before the first section
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: ''
+          key: profile
+      - title: a UTF-16 file on Windows
+        text: The byte order mark selects the encoding; no ``encoding`` parameter needed.
+        files:
+          C:\Users\user\AppData\Roaming\App\settings.ini: *settings_utf16
+        parameter:
+          dst: C:\Users\user\AppData\Roaming\App\settings.ini
+          section: General
+          key: language
+      - title: a bare word is no key
+        text: '``maximized`` has no ``=``, so the parser ignores the line.'
+        expect: failed
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: Window
+          key: maximized
+
+  value_matches:
+    asserts: [value, order]
+    formats: [ini]
+    features: [archive_dst, glob_dst, encoding, wildcard_mode, regex_tag, placeholder, timestamp_tag, ordered_comparison, value_decode]
+    not_for:
+      - goal: a key or value is absent
+        use: ini.value_count
+      - goal: only that the key exists, whatever its value
+        use: ini.contains_key
+    outcomes:
+      passed: 'the value of ``key`` (several occurrences: ``any`` one, or ``all``) equals or matches ``expected_value``'
+      failed: the file was read and the key is missing or no occurrence (``all``, not every one) matches; the details list the non-matching values with line numbers
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or decoded; an unknown ``encoding``
+        - an invalid regex or placeholder; an invalid ``wildcard_mode``
+        - in ordered mode, a value that is no number or timestamp, or a ``!re`` or ``regex_match`` with it, text around a ``{{ name }}`` or a saved variable that is no number or time
+        - bad ordered parameters (``comparison_type``, ``value_type``, ``timestamp_epoch``, ...)
+    limits:
+      - 'Values are raw text, stripped: quotes, inline comments and ``%(name)s`` stay (``title = "Report" ; draft`` has the value ``"Report" ; draft``). No continuation lines.'
+      - A YAML number or boolean is compared as its text (``8080``, ``true`` / ``false``).
+      - '``case_sensitive`` applies to section and key names; values are always compared as given (use ``regex_match`` with ``(?i)``).'
+      - Occurrences in duplicate sections and duplicate keys are all compared.
+    choices:
+      wildcard_mode: [any, all]
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A setting has a value
+        text: A language, port or path after it was changed in the GUI.
+      - title: A recent file list
+        text: Repeated keys (``file = ...``) where one or every entry must match.
+    examples:
+      - title: language setting
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: General
+          key: language
+          expected_value: de_DE
+      - title: a number compares as its text
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: General
+          key: port
+          expected_value: 8080
+      - title: quotes and inline comments are part of the value
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: General
+          key: title
+          expected_value: '"Report" ; draft'
+      - title: one recent file, also in the repeated section
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: RecentFiles
+          key: file
+          expected_value: 'plan\.txt$'
+          regex_match: true
+      - title: every recent file under Documents
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: RecentFiles
+          key: file
+          expected_value: '^/home/user/Documents/'
+          regex_match: true
+          wildcard_mode: all
+      - title: a settings file inside a backup archive
+        files:
+          /home/user/backup.zip:
+            zip:
+              settings.ini: *settings
+        parameter:
+          dst: /home/user/backup.zip!/settings.ini
+          section: General
+          key: language
+          expected_value: de_DE
+      - title: port above a number
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: General
+          key: port
+          expected_value: 1024
+          comparison_type: greater
+      - title: last opened file by regex tag
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: General
+          key: last_opened
+          expected_value: !re '/home/user/Documents/.*\.txt$'
+      - title: not every recent file matches
+        expect: failed
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: RecentFiles
+          key: file
+          expected_value: 'report\.txt$'
+          regex_match: true
+          wildcard_mode: all
+      - title: an absent key fails
+        text: To assert absence use ini.value_count with ``expected_count`` 0, which passes.
+        expect: failed
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: General
+          key: theme
+          expected_value: dark
+      - title: an unknown encoding is an error
+        expect: error
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: General
+          key: language
+          expected_value: de_DE
+          encoding: utf-99
+
+  value_count:
+    asserts: [count, absent]
+    formats: [ini]
+    features: [archive_dst, glob_dst, encoding, count_comparison, negative, regex_tag, placeholder]
+    not_for:
+      - goal: the value of a key
+        use: ini.value_matches
+    outcomes:
+      passed: the number of ``key`` lines in ``section`` (matching ``expected_value``, if given) satisfies ``comparison_type``
+      failed: the file was read and the count comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or decoded; an unknown ``encoding``
+        - a negative or non-integer ``expected_count``, an unknown ``comparison_type``, an invalid regex
+    limits:
+      - Occurrences in every copy of a duplicate section are added up.
+      - '``expected_value`` follows the rules of ini.value_matches (raw text, numbers as text).'
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: A setting is absent
+        text: '``expected_count: 0`` without ``expected_value``: the key is not in the section.'
+      - title: An entry was removed from a list
+        text: '``expected_count: 0`` with ``expected_value``: no ``file = ...`` line has that path.'
+      - title: Duplicate keys
+        text: Key files that repeat a key (recent file lists) keep every occurrence.
+    examples:
+      - title: three recent files in two copies of the section
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: RecentFiles
+          key: file
+          expected_count: 3
+      - title: a file is no longer in the recent list
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: RecentFiles
+          key: file
+          expected_value: /home/user/Documents/secret.txt
+          expected_count: 0
+      - title: the key is absent
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: General
+          key: proxy
+          expected_count: 0
+      - title: a wrong count fails
+        expect: failed
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: RecentFiles
+          key: file
+          expected_count: 2
+      - title: a negative count is an error
+        expect: error
+        files:
+          /home/user/.config/app/settings.ini: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.ini
+          section: RecentFiles
+          key: file
+          expected_count: -1

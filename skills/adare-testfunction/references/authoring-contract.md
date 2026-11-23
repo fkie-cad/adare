@@ -40,7 +40,7 @@ time.
 | Category | Meaning |
 | --- | --- |
 | `FILE_BASED` | Pull the target file via QGA, rewrite `dst`, run `test()` on the host. |
-| `FILE_CONTENT` | Same as FILE_BASED, for structured files (JSON, CSV, XML, SQLite). |
+| `FILE_CONTENT` | Same as FILE_BASED, for files whose content is read (JSON, CSV, XML, SQLite, INI, images, ...). |
 | `QGA_PROBE` | Run a probe command on the guest via QGA, build the `TestResult` on the host. |
 | `HOST_NATIVE` | Already runs on the host (e.g. visual tests). |
 | `AGENT_ONLY` | Requires the in-guest agent; **not** supported in host mode (the default). |
@@ -76,9 +76,55 @@ Return one of:
   `.error([...])`, `.execution_error(exc, msg)`) for full control.
 
 Unhandled exceptions are caught by the harness and turned into an execution error, so
-prefer catching *specific* exceptions (e.g. `json.JSONDecodeError`, `OSError`) and
-returning a precise `TestResult.failed`/`.execution_error` — matches the project's
-"no generic `except Exception`" rule and gives better forensic messages.
+prefer catching *specific* exceptions (e.g. `FileNotFoundError`, `json.JSONDecodeError`,
+`OSError`) and returning a precise result — matches the project's "no generic
+`except Exception`" rule and gives better forensic messages.
+
+## Failed or error?
+
+- **failed**: the test read the evidence and the condition does not hold.
+- **error**: the test could not read the evidence: `dst` missing, a glob matching no file
+  or several, unreadable (permissions, I/O) or unparseable content (invalid JSON/CSV/XML,
+  corrupt workbook/database), or invalid parameters (wrong type, empty list, both/neither
+  of two options, unknown mode, invalid regex). Return `TestResult.error([...])` /
+  `.execution_error(exc, msg)`, never `.failed`.
+
+`expect_to_fail` inverts only success/failed; errors stay errors. A missing file reported
+as *failed* makes a wrong path, a typo or a failed pull pass every negative test. Only a
+test whose subject is existence (`standard.file_exists`, `file_does_not_exist`,
+`dir_exists`) may pass or fail on a missing path.
+
+## Shared helpers (adarelib, shipped to the guest with the agent)
+
+- `adarelib.testset.structured`: complete `contains_key` / `value_matches` / `value_count`
+  bodies for any format that loads into dicts and lists. Describe the format once with
+  `StructuredFormat(label, load, errors)` and delegate (see the plist, yaml and toml
+  collections). Also `compare_value`, `compare_count` (`equals`, `greater`, `less`,
+  `greater_equal`, `less_equal`) and `count_parameter_errors` for your own count functions.
+- `adarelib.testset.compare`: key paths (`a.b`, `*`, `[*]`, `[0]`, `['a.b']`).
+- `adarelib.testset.content`: `read_bytes_capped`, `decode_text` (BOM / UTF-16 aware).
+
+Prefer a count function (`expected_count`, `0` = absent) over a separate "absent" test.
+
+## Parameter names (use the shared ones)
+
+The bundled collections use one name per concept, so playbook authors can guess them:
+
+- `dst`: the file (globs, `archive!member`); `content`: a string to find in it.
+- `expected_value`: the value to compare (required unless the function also counts);
+  `regex_match: bool`: treat it as a Python regex searched with `re.search` (unanchored).
+- `expected_count: int` + `comparison_type` (`equals`, `greater`, `less`, `greater_equal`,
+  `less_equal`) for every count; no default for `expected_count`.
+- `wildcard_mode` (`any`/`all`) when a path selects several values; `case_sensitive: bool`.
+- `encoding: str | None = None` (auto: BOM / UTF-16 / UTF-8) for text formats.
+
+An invalid `!re` or an unknown placeholder in `expected_value` is an ERROR, never a
+failure. If a parameter or function is renamed, add the old name to
+`adarelib/adarelib/testset/renames.py` so old playbooks get "X was renamed to Y" instead
+of a bare type error.
+
+Docstring examples use neutral made-up paths (`/home/user/data/app.db`), never a real
+application's paths or table names; `test_neutral_docstrings.py` checks this.
 
 ## Minimal skeleton
 
@@ -99,3 +145,57 @@ def deleted_file_absent(ctx, dst: str):
     ctx.fail_if(bool(existing), f'{dst} still present: {existing}')
     return [f'{dst} absent — deletion confirmed']
 ```
+
+## `contract.yaml` — what the functions can and cannot do
+
+Next to `<name>.py`, a `contract.yaml` tells agents and readers what each function can and
+cannot do. `adare test search/info`, the agent tools, the skill references and the docs
+reference pages are rendered from it plus the docstring. Its examples run in ADARE's unit
+suite (bundled collections) and with `python scripts/check_contract.py <collection>`.
+`adare test validate` reports contract problems. Vocabulary (`asserts`, `formats`, feature
+ids) comes from `appdata/testfunctions/library.yaml` (`adare test feature`).
+
+```yaml
+collection:
+  title: My app files
+  summary: What the collection reads and how.
+functions:
+  report_has_title:                     # the testname (`name=` of @testfunction)
+    asserts: [value]                    # exists absent value count order compare content metadata state ui
+    formats: [json]
+    features: [archive_dst, glob_dst, key_path, regex_tag]   # shared features it supports
+    unsupported:                        # features it refuses, and what to do instead
+      ordered_comparison: 'Compares text only; use ``json.value_matches`` with ``comparison_type``.'
+    not_for:                            # goals it is confused with -> the right function
+      - goal: the title is absent
+        use: json.value_count
+    outcomes:
+      passed: the title equals ``expected_value``
+      failed: the file was read and the title differs or is missing
+      error: [the file does not exist, the file is no JSON]
+    limits: [Reads only the first report of the file.]
+    choices: {match_mode: [exact, prefix]}   # allowed values; the default must be listed
+    use_cases:
+      - title: A report was renamed
+        text: The title after the rename action.
+    examples:                           # at least one `expect: passed`; add boundaries
+      - title: title set
+        files:
+          /home/user/report.json: {json: {title: Q3}}
+        parameter: {dst: /home/user/report.json, expected_value: Q3}
+      - title: missing file is an error
+        expect: error
+        parameter: {dst: /home/user/none.json, expected_value: Q3}
+```
+
+- A file test (`dst`, category FILE_BASED/FILE_CONTENT) must declare `archive_dst` and
+  `glob_dst`, in `features` or in `unsupported`. A function with `expected_count` lists
+  `count_comparison`.
+- `files:` builds the example's files from a spec: `text` (+`encoding`), `hex`, `base64`,
+  `json`, `concat` (with `u8` … `i64be`, `f32le` … numbers), `sqlite: [sql, ...]`,
+  `zip`/`tar`/`tar.gz: {member: spec}`, `gzip`/`bzip2`/`xz: spec`, `xlsx: {sheet: rows}`,
+  `plist`/`plist_binary`, `png: {size, text}`, `jpeg: {size, exif}`, `dir: true`, `fixture: <file>`.
+  Guest paths (also `C:\...`) are mapped to a temp folder.
+- Examples of other categories, or with `!re`/`!timestamp`/`{{placeholders}}`, are rendered but
+  not run; `run: '<why>'` skips one explicitly.
+- YAML: quote prose that contains `: ` or starts with a backtick (`'...'` or a `>-` block).

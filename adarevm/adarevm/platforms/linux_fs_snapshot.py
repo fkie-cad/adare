@@ -56,11 +56,9 @@ class LinuxFSSnapshot:
         Raises:
             LinuxFSSnapshotException: If snapshot collection fails
         """
-        log.info(f"CLAUDE: Starting Linux filesystem snapshot from {root_path}")
-
         try:
             cmd = LinuxFSSnapshot._build_find_command(root_path)
-            log.debug(f"CLAUDE: Executing command: {cmd}")
+            log.debug(f"Executing command: {cmd}")
 
             # Execute find command
             result = subprocess.run(
@@ -73,7 +71,7 @@ class LinuxFSSnapshot:
 
             if result.returncode != 0 and result.returncode != 1:
                 # Return code 1 is normal (some permission denied errors)
-                log.warning(f"CLAUDE: Find command returned code {result.returncode}")
+                log.warning(f"Find command returned code {result.returncode}")
 
             # Parse output
             files = {}
@@ -97,34 +95,34 @@ class LinuxFSSnapshot:
 
                     # Progress logging for large scans
                     if line_count % 100000 == 0:
-                        log.info(f"CLAUDE: Processed {line_count} files...")
+                        log.debug(f"Processed {line_count} files...")
 
                 except ValueError as e:
                     error_count += 1
                     if error_count <= 10:  # Only log first 10 errors
-                        log.warning(f"CLAUDE: Failed to parse line: {e}")
+                        log.warning(f"Failed to parse line: {e}")
                     continue
 
-            log.info(f"CLAUDE: Linux snapshot complete: {len(files)} files collected")
+            log.info(f"Linux snapshot complete: {len(files)} files collected")
             if error_count > 0:
-                log.warning(f"CLAUDE: Skipped {error_count} files due to parsing errors")
+                log.warning(f"Skipped {error_count} files due to parsing errors")
 
             return files
 
         except subprocess.TimeoutExpired as e:
             msg = f"Snapshot collection timed out after {e.timeout} seconds"
-            log.error(f"CLAUDE: {msg}")
-            raise LinuxFSSnapshotException(msg)
+            log.error(msg)
+            raise LinuxFSSnapshotException(msg) from e
 
         except subprocess.SubprocessError as e:
             msg = f"Failed to execute find command: {e}"
-            log.error(f"CLAUDE: {msg}")
-            raise LinuxFSSnapshotException(msg)
+            log.error(msg)
+            raise LinuxFSSnapshotException(msg) from e
 
         except Exception as e:
             msg = f"Unexpected error during snapshot collection: {e}"
-            log.error(f"CLAUDE: {msg}")
-            raise LinuxFSSnapshotException(msg)
+            log.error(msg)
+            raise LinuxFSSnapshotException(msg) from e
 
     @staticmethod
     def _build_find_command(root_path: str = '/') -> str:
@@ -173,7 +171,7 @@ class LinuxFSSnapshot:
             ctime = float(ctime_str)
             size = int(size_str)
         except ValueError as e:
-            raise ValueError(f"Failed to parse numeric fields: {e}")
+            raise ValueError(f"Failed to parse numeric fields: {e}") from e
 
         return (path, mtime, atime, ctime, size)
 

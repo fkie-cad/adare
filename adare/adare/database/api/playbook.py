@@ -70,7 +70,7 @@ class PlaybookApi(ProjectDatabaseApi):
             # Read original YAML content for storage
             original_yaml_content = playbook_file_path.read_text(encoding='utf-8')
 
-            # CLAUDE: Extract VM OS and user from experiment's environment for automatic variables
+            # Extract VM OS and user from experiment's environment for automatic variables
             vm_os = None
             vm_user = None
             if experiment.environments:
@@ -658,12 +658,12 @@ class PlaybookApi(ProjectDatabaseApi):
         action_type = item.action_type
         params = item.parameters or {}
 
-        # CLAUDE: Debug logging to diagnose serialization issues
+        # Debug logging to diagnose serialization issues
         log.debug(f"Deserializing {action_type} action")
         log.debug(f"item.parameters type: {type(item.parameters)}")
         log.debug(f"params type: {type(params)}")
 
-        # CLAUDE: Defensive JSON parsing - handle case where SQLAlchemy returns string instead of dict
+        # Defensive JSON parsing - handle case where SQLAlchemy returns string instead of dict
         if isinstance(params, str):
             log.warning(f"parameters is a string (double-encoding issue), parsing JSON: {params[:100]}...")
             try:

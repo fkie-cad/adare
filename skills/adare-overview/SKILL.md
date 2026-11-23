@@ -1,6 +1,6 @@
 ---
 name: adare-overview
-description: "Start here for any ADARE task when it is unclear which ADARE skill applies, or the task spans several steps (e.g. 'build an experiment that checks whether deleting a file in Firefox leaves artifacts on Ubuntu and Windows'). Gives the mental model (project → environment → experiment → playbook → tests → run → compare), routes to the right adare-* skill, and sets the agent rules for driving the adare CLI (machine-readable output, one live VM, never --force without asking). Not this → a single well-scoped step that clearly matches one adare-* skill."
+description: "Start here for any ADARE task when it is unclear which ADARE skill applies, or the task spans several steps (e.g. 'build an experiment that checks whether deleting a file in a text editor leaves artifacts on Ubuntu and Windows'). Gives the mental model (project → environment → experiment → playbook → tests → run → compare), routes to the right adare-* skill, and sets the agent rules for driving the adare CLI (machine-readable output, one live VM, never --force without asking). Not this → a single well-scoped step that clearly matches one adare-* skill."
 ---
 
 # ADARE for agents — overview & router
@@ -46,10 +46,12 @@ the assertions) → `adare-experiment` (run on every environment, compare).
   (`adare test search "file deleted" --json`, `adare env list --json`) or set
   `ADARE_FORMAT=json` for a whole session. When stdout is piped, output defaults to
   plain tab-separated text with full IDs. Data goes to stdout and messages to stderr.
-- **Exit codes:** 0 ok, 1 error, 2 usage, 3 not found. In JSON mode errors are
+- **Exit codes:** 0 ok, 1 error, 2 usage, 3 not found, 130 interrupted. `experiment run`
+  exits 1 when any run did not pass (FAILED, ERROR, INCONCLUSIVE). In JSON mode errors are
   `{"error": {"code", "message", "hint", "solutions"}}`.
 - **Discover, don't guess.** Use `adare <group> --help`, then `--help` on the
-  subcommand. For assertions: `adare test search "<goal>"` → `adare test info <dotnotation> --example`.
+  subcommand. For assertions: `adare test search "<goal>"` (cards: supports / does not support / not for;
+  `match: weak` + known gaps when nothing fits) → `adare test info <dotnotation>` (full contract).
   Never invent a test-function name or parameter; the catalog has the exact signature.
 - **Project scope.** Experiment and run commands resolve the project from the
   current directory. `cd` into the project first. Test-function commands work anywhere.
@@ -72,5 +74,5 @@ the assertions) → `adare-experiment` (run on every environment, compare).
 Claude Code and OpenCode should use the CLI plus these skills. `adare mcp serve`
 exposes the same lifecycle as tools for hosts without a shell. `adare dev mcp -s <id>`
 gives step-by-step VM control (screenshot/click/type, record → replay). Both have
-`testfunction_search` / `list_testfunctions(query=…)` for picking assertions. Setup:
+`testfunction_search` / `testfunction_feature` / `list_testfunctions(query=…)` for picking assertions. Setup:
 `adare skills install --help`.

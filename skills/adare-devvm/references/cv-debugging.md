@@ -25,7 +25,7 @@ adare debug cv test-text "<text>" --screenshot <shot.png> [--format json|csv] [-
 
 Finds occurrences of the text string and prints their coordinates. Use this to check
 whether a `text:` target in a playbook actually resolves — and watch for the two
-classic OCR traps: **truncated labels** (a GNOME result may read "LibreOffice Wri…"
+classic OCR traps: **truncated labels** (a GNOME result may read "Acme Writ…"
 — never wait for the full name) and **duplicate on-screen text** (the same label in
 two places makes a `text:` target ambiguous).
 

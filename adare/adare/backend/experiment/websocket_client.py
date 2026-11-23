@@ -8,17 +8,16 @@ using WebSocket protocol for real-time GUI automation and test execution.
 import asyncio
 import base64
 import contextlib
-import io
 import json
 import logging
 import time
-import zipfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import websockets
 
+from adare.backend.experiment.testfunction_archive import build_testfunctions_zip
 from adare.hypervisor.port_forward import forward_connect_host
 from adarelib.websocket.protocol import (
     AUTH_HEADER,
@@ -559,30 +558,15 @@ class AdareVMClient:
 
         Returns:
             Upload result
+
+        Raises:
+            TestfunctionUploadError: If a requested file is missing or outside ``testfunctions_path``.
         """
-        # Create zip file in memory
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            if specific_files:
-                # Upload only specific files
-                for file_path in specific_files:
-                    if file_path.is_file():
-                        # Calculate relative path from testfunctions directory
-                        try:
-                            arcname = file_path.relative_to(testfunctions_path)
-                            zip_file.write(file_path, arcname)
-                        except ValueError:
-                            # File is not relative to testfunctions_path, skip it
-                            log.warning(f"Skipping file outside testfunctions directory: {file_path}")
-            else:
-                # Upload all files (original behavior)
-                for file_path in testfunctions_path.rglob('*'):
-                    if file_path.is_file():
-                        arcname = file_path.relative_to(testfunctions_path)
-                        zip_file.write(file_path, arcname)
+        # Raises TestfunctionUploadError for missing / outside files (never a partial upload)
+        zip_bytes = build_testfunctions_zip(testfunctions_path, specific_files)
 
         # Encode as base64
-        zip_data = base64.b64encode(zip_buffer.getvalue()).decode('utf-8')
+        zip_data = base64.b64encode(zip_bytes).decode('utf-8')
 
         return await self.call_tool(
             Tool.UPLOAD_TESTFUNCTIONS, {"testfunctions_data": zip_data}, timeout=300.0

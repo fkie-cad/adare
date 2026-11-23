@@ -8,7 +8,15 @@ from typing import Optional
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
-from adarelib.testset.compare import compare_row_sequences, compare_row_sets, extract_columns, row_matches_pattern
+from adarelib.testset.compare import (
+    compare_row_sequences,
+    compare_row_sets,
+    extract_columns,
+    row_matches_pattern,
+    rows_regex_problem,
+)
+from adarelib.testset.content import open_text
+from adarelib.testset.structured import compare_count, count_parameter_errors
 
 # configure logging
 import logging
@@ -43,19 +51,22 @@ def _row_to_comparable(test_instance, row: list[str], columns: list[int] | None)
     description='tests if row in a csv file exists that matches the given entry layout',
     category=HostModeCategory.FILE_CONTENT,
 )
-def contains_line(ctx: TestContext, dst: str, entry: list = None):
+def contains_line(ctx: TestContext, dst: str, entry: list = None, encoding: str | None = None):
     """Pass when at least one row of CSV file ``dst`` matches ``entry`` column by column.
 
     Use for: checking a tool's CSV output (e.g. a timeline) contains a specific record.
 
     Args:
         dst: Guest path to the CSV file. A glob must match exactly one path; no/ambiguous
-            match or a missing file fails. Parsed with the default ``csv`` dialect (comma,
-            double quotes) in the guest's default encoding; the header row is a normal row.
+            match, a missing file or a CSV parse error is an error. Parsed with the default ``csv`` dialect (comma,
+            double quotes); the header row is a normal row.
         entry: Expected row as a list, one item per column; a row must have exactly this many
             columns. Items are compared as exact, case-sensitive strings (``str(item)``), or by
             type for ``!re``/``!timestamp`` tags (``!re`` uses ``re.match``, anchored at the start).
             Required in practice: omitting it is an execution error unless the file is empty.
+        encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
+            reads UTF-8; a name (``cp1252``) reads BOM-less files with it. A BOM always wins.
+            Unknown names or undecodable content are an error.
 
     Example:
         function: csv.contains_line
@@ -63,6 +74,9 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
           dst: '{{ out_dir }}/timeline.csv'
           entry: [report.docx, !re '.*', Created]
     """
+    problem = rows_regex_problem(ctx, [entry])
+    if problem is not None:
+        return problem
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
         # List files in directory to help with debugging
@@ -75,7 +89,7 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
         except (OSError, PermissionError, FileNotFoundError) as e:
             files_info = f"Could not list directory contents: {e}"
 
-        return TestResult.failed(
+        return TestResult.error(
             [
                 f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'
             ]
@@ -94,7 +108,7 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
             # Fallback for systems where maxsize is too large
             csv.field_size_limit(10485760)  # 10MB
 
-        with open(dst_resolved) as f:
+        with open_text(dst_resolved, encoding, newline='') as f:
             reader = csv.reader(f)
             rows = list(reader)
 
@@ -118,10 +132,7 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
                 )
 
         # Log file contents for debugging when test fails
-        log.info(f"CSV file '{dst_resolved}' contents for failed test 'contains_line':")
-        for i, row in enumerate(rows):
-            log.info(f"  Row {i}: {row}")
-        log.info(f"Expected entry pattern: {entry_pattern}")
+        log.debug(f"CSV file '{dst_resolved}': no row of {len(rows)} matches {entry_pattern}")
 
         # Find the best matching rows (least number of failed columns)
         if match_results:
@@ -145,11 +156,15 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
             [f'no matching row found for pattern: {entry_pattern}', 'no rows found in CSV file to analyze']
         )
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
+        return TestResult.error([f'file with path {dst} does not exist'])
+    except LookupError as e:
+        return TestResult.error([f'unknown encoding {encoding!r}: {e}'])
+    except UnicodeDecodeError as e:
+        return TestResult.execution_error(e, f'Cannot decode CSV file {dst_resolved}')
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read CSV file {dst_resolved}")
     except csv.Error as e:
-        return TestResult.failed([f"CSV parsing error in file {dst_resolved}: {e}"])
+        return TestResult.execution_error(e, f"CSV parsing error in file {dst_resolved}")
 
 
 @testfunction(
@@ -165,6 +180,7 @@ def compare_rows(
     ignore_order: bool = False,
     allow_extra_rows: bool = False,
     allow_missing_rows: bool = False,
+    encoding: str | None = None,
 ):
     """Pass when the rows of CSV file ``dst`` match the embedded ``reference_rows``.
 
@@ -173,7 +189,7 @@ def compare_rows(
 
     Args:
         dst: Guest path to the CSV file. A glob must match exactly one path; no/ambiguous
-            match or a missing file fails. Default ``csv`` dialect; header row included.
+            match, a missing file or a CSV parse error is an error. Default ``csv`` dialect; header row included.
         reference_rows: Expected rows, a non-empty list of lists of strings (quote numbers in
             YAML). ``!re``/``!timestamp`` tags are matched by type; other cells exactly.
         columns: 0-based column indices to compare (others ignored; out-of-range indices are
@@ -184,6 +200,9 @@ def compare_rows(
             ordered mode only trailing rows count as extra).
         allow_missing_rows: Do not fail on reference rows missing from the file (in ordered
             mode only trailing rows count as missing).
+        encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
+            reads UTF-8; a name (``cp1252``) reads BOM-less files with it. A BOM always wins.
+            Unknown names or undecodable content are an error.
 
     Example:
         function: csv.compare_rows
@@ -205,7 +224,7 @@ def compare_rows(
         except (OSError, PermissionError, FileNotFoundError) as e:
             files_info = f"Could not list directory contents: {e}"
 
-        return TestResult.failed(
+        return TestResult.error(
             [
                 f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'
             ]
@@ -215,14 +234,17 @@ def compare_rows(
 
     # Validate reference_rows structure
     if not isinstance(reference_rows, list):
-        return TestResult.failed(['reference_rows must be a list of rows'])
+        return TestResult.error(['reference_rows must be a list of rows'])
 
     if not reference_rows:
-        return TestResult.failed(['reference_rows cannot be empty'])
+        return TestResult.error(['reference_rows cannot be empty'])
 
     for i, row in enumerate(reference_rows):
         if not isinstance(row, list):
-            return TestResult.failed([f'reference_rows[{i}] must be a list, got {type(row).__name__}'])
+            return TestResult.error([f'reference_rows[{i}] must be a list, got {type(row).__name__}'])
+    problem = rows_regex_problem(ctx, reference_rows)
+    if problem is not None:
+        return problem
 
     try:
         # Increase CSV field size limit to handle large fields
@@ -232,7 +254,7 @@ def compare_rows(
             csv.field_size_limit(10485760)  # 10MB
 
         # Read actual CSV
-        with open(dst_resolved) as f:
+        with open_text(dst_resolved, encoding, newline='') as f:
             reader = csv.reader(f)
             actual_rows = list(reader)
 
@@ -260,11 +282,15 @@ def compare_rows(
         )
 
     except FileNotFoundError:
-        return TestResult.failed([f'file with path {dst} does not exist'])
+        return TestResult.error([f'file with path {dst} does not exist'])
+    except LookupError as e:
+        return TestResult.error([f'unknown encoding {encoding!r}: {e}'])
+    except UnicodeDecodeError as e:
+        return TestResult.execution_error(e, f'Cannot decode CSV file {dst_resolved}')
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read CSV file {dst_resolved}")
     except csv.Error as e:
-        return TestResult.failed([f"CSV parsing error in file {dst_resolved}: {e}"])
+        return TestResult.execution_error(e, f"CSV parsing error in file {dst_resolved}")
 
 
 @testfunction(
@@ -280,6 +306,7 @@ def compare_files(
     ignore_order: bool = False,
     allow_extra_rows: bool = False,
     allow_missing_rows: bool = False,
+    encoding: str | None = None,
 ):
     """Pass when CSV file ``actual`` matches CSV file ``reference`` row by row.
 
@@ -289,12 +316,15 @@ def compare_files(
 
     Args:
         actual: Guest path to the CSV under test; a glob must match exactly one path, a
-            missing or ambiguous file fails.
+            missing or ambiguous file (or a CSV parse error) is an error.
         reference: Guest path to the reference CSV, resolved like ``actual``.
         columns: 0-based column indices to compare; ``None`` compares all columns.
         ignore_order: ``False`` (default) compares row N with row N; ``True`` matches rows as a multiset.
         allow_extra_rows: Do not fail on rows only in ``actual`` (ordered mode: trailing rows only).
         allow_missing_rows: Do not fail on rows only in ``reference`` (ordered mode: trailing rows only).
+        encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
+            reads UTF-8; a name (``cp1252``) reads BOM-less files (both) with it. A BOM always wins.
+            Unknown names or undecodable content are an error.
 
     Example:
         function: csv.compare_files
@@ -315,7 +345,7 @@ def compare_files(
         except (OSError, PermissionError, FileNotFoundError) as e:
             files_info = f"Could not list directory contents: {e}"
 
-        return TestResult.failed(
+        return TestResult.error(
             [
                 f'actual file with path {actual} can\'t be used, because no unambiguous file could be identified (because {actual_status}). {files_info}'
             ]
@@ -333,7 +363,7 @@ def compare_files(
         except (OSError, PermissionError, FileNotFoundError) as e:
             files_info = f"Could not list directory contents: {e}"
 
-        return TestResult.failed(
+        return TestResult.error(
             [
                 f'reference file with path {reference} can\'t be used, because no unambiguous file could be identified (because {reference_status}). {files_info}'
             ]
@@ -351,12 +381,12 @@ def compare_files(
             csv.field_size_limit(10485760)  # 10MB
 
         # Read actual CSV
-        with open(actual_path) as f:
+        with open_text(actual_path, encoding, newline='') as f:
             reader = csv.reader(f)
             actual_rows = list(reader)
 
         # Read reference CSV
-        with open(reference_path) as f:
+        with open_text(reference_path, encoding, newline='') as f:
             reader = csv.reader(f)
             reference_rows = list(reader)
 
@@ -387,9 +417,95 @@ def compare_files(
         # e.filename, not str(e): on Windows str(e) escapes the backslashes
         # of the path, so a substring search never matches there.
         if e.filename == actual_path:
-            return TestResult.failed([f'actual file with path {actual} does not exist'])
-        return TestResult.failed([f'reference file with path {reference} does not exist'])
+            return TestResult.error([f'actual file with path {actual} does not exist'])
+        return TestResult.error([f'reference file with path {reference} does not exist'])
+    except LookupError as e:
+        return TestResult.error([f'unknown encoding {encoding!r}: {e}'])
+    except UnicodeDecodeError as e:
+        return TestResult.execution_error(e, 'Cannot decode CSV files')
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, "Cannot read CSV files")
     except csv.Error as e:
-        return TestResult.failed([f"CSV parsing error: {e}"])
+        return TestResult.execution_error(e, "CSV parsing error")
+
+
+@testfunction(
+    name='row_count',
+    description='tests the number of rows (records) in a CSV file that match the given entry layout',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def row_count(
+    ctx: TestContext,
+    dst: str,
+    entry: list,
+    expected_count: int,
+    comparison_type: str = 'equals',
+    encoding: str | None = None,
+):
+    """Pass when the number of rows of CSV file ``dst`` matching ``entry`` satisfies ``comparison_type``.
+
+    Use for: asserting how often a record occurs (exactly one row for a file); absence of
+    a row: ``expected_count: 0`` (or ``expect_to_fail: true`` on csv.contains_line). Counts
+    CSV records, so a quoted field with a line break is one row; for physical lines use
+    text.line_count, for JSON Lines records jsonl.line_count.
+
+    Args:
+        dst: Guest path to the CSV file. A glob must match exactly one path; no/ambiguous
+            match, a missing file, undecodable content or a CSV parse error is an error.
+            Parsed like csv.contains_line (default ``csv`` dialect; the header row is a
+            normal row).
+        entry: Expected row as a list, matched exactly like csv.contains_line: one item per
+            column (a row with another column count never matches), exact case-sensitive
+            strings or ``!re``/``!timestamp`` tags. A non-list is an error.
+        expected_count: Non-negative integer to compare against; anything else is an error.
+        comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
+            ``less_equal``; other values are an error.
+        encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
+            reads UTF-8; a name (``cp1252``) reads BOM-less files with it. A BOM always wins.
+            Unknown names or undecodable content are an error.
+
+    Example:
+        function: csv.row_count
+        parameter:
+          dst: '{{ out_dir }}/timeline.csv'
+          entry: [report.txt, !re '.*', Deleted]
+          expected_count: 1
+    """
+    problems = count_parameter_errors(expected_count, comparison_type)
+    if not isinstance(entry, list):
+        problems.append(f'entry must be a list (one item per column), got {entry!r}')
+    if problems:
+        return TestResult.error(problems)
+    problem = rows_regex_problem(ctx, [entry])
+    if problem is not None:
+        return problem
+    dst_resolved, status = ctx.resolve_globfilepath(dst)
+    if not dst_resolved:
+        return TestResult.error(
+            [f"file with path {dst} can't be used, because no unambiguous file could be identified ({status})"]
+        )
+    log.debug(f'dst file {dst_resolved} will be used for test row_count')
+    try:
+        try:
+            csv.field_size_limit(sys.maxsize)
+        except OverflowError:
+            csv.field_size_limit(10485760)  # 10MB
+        total = matching = 0
+        with open_text(dst_resolved, encoding, newline='') as f:
+            for row in csv.reader(f):
+                total += 1
+                if row_matches_pattern(ctx, row, entry)[0]:
+                    matching += 1
+    except FileNotFoundError:
+        return TestResult.error([f'file with path {dst} does not exist'])
+    except LookupError as e:
+        return TestResult.error([f'unknown encoding {encoding!r}: {e}'])
+    except UnicodeDecodeError as e:
+        return TestResult.execution_error(e, f'Cannot decode CSV file {dst_resolved}')
+    except OSError as e:
+        return TestResult.execution_error(e, f'Cannot read CSV file {dst_resolved}')
+    except csv.Error as e:
+        return TestResult.execution_error(e, f'CSV parsing error in file {dst_resolved}')
+    ok, message = compare_count(matching, expected_count, comparison_type)
+    details = [f'{matching} of {total} row(s) match {entry}', message]
+    return TestResult.success(details) if ok else TestResult.failed(details)

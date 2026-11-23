@@ -1,5 +1,7 @@
 # external imports
+import collections
 import platform
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -19,6 +21,7 @@ except ImportError:
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
+from adarelib.testset.content import open_text
 
 # configure logging
 import logging
@@ -187,58 +190,76 @@ def user_exists(ctx: TestContext, username: str, uid: int = None, home_dir: str 
         return TestResult.failed([f'user {username} does not exist'])
 
 
+def _last_lines(path: str, max_lines: int) -> list[str]:
+    """The last ``max_lines`` lines of text file ``path`` (encoding auto-detected; bad bytes replaced)."""
+    with open_text(path, errors='replace') as f:
+        return [line.rstrip('\r\n') for line in collections.deque(f, maxlen=max_lines)]
+
+
 @testfunction(
     name='log_entry_exists',
-    description='tests if a log file contains entries matching a pattern (Linux only)',
-    category=HostModeCategory.QGA_PROBE,
+    description='tests if one of the last lines of a text log contains a string or matches a regex',
+    category=HostModeCategory.FILE_CONTENT,
 )
-def log_entry_exists(ctx: TestContext, log_file: str, pattern: str, max_lines: int = 1000):
-    """Pass when one of the last ``max_lines`` lines of ``log_file`` matches ``pattern`` (``grep -E``).
+def log_entry_exists(ctx: TestContext, dst: str, content: str, regex_match: bool = True, max_lines: int = 1000):
+    """Pass when one of the last ``max_lines`` lines of text log ``dst`` matches ``content``.
 
-    Use for: checking an action left a trace in a text log (syslog, auth.log, app logs). Linux
-    only; meant for plain-text logs (not the binary journal). Runs ``tail -n N -- log_file | grep -E -- pattern``
-    with both values shell-quoted, so they are taken literally (no shell expansion or command injection).
+    Use for: checking an action left a trace in a plain-text log (syslog, auth.log, app
+    logs; not the binary journal). To count entries, or to search the whole file, use
+    text.line_count.
 
     Args:
-        log_file: Guest path of a plain-text log; a missing file fails. No glob support.
-        pattern: POSIX extended regex (``grep -E``), case-sensitive.
-        max_lines: How many trailing lines to search (default 1000).
+        dst: Guest path of the log; a glob must match exactly one path, ``archive!member``
+            reads a rotated, compressed log (``/var/log/syslog.2.gz!``). A missing file is an
+            error. The encoding is detected (BOM, UTF-16, else UTF-8); undecodable bytes are
+            replaced, so binary garbage does not stop the search.
+        content: With ``regex_match`` (default) a Python regex searched in each line
+            (``re.search``, case-sensitive; ``(?i)`` for case-insensitive); an invalid regex, a
+            POSIX class (``[[:space:]]``) or a ``!re``/``!timestamp`` tag is an error. Otherwise
+            a substring a line must contain.
+        regex_match: ``True`` (default): ``content`` is a regex; ``False``: a plain substring.
+        max_lines: How many trailing lines to search (default 1000); must be positive.
 
     Example:
         function: linux.log_entry_exists
         parameter:
-          log_file: /var/log/auth.log
-          pattern: 'session opened for user alice'
+          dst: /var/log/auth.log
+          content: 'session opened for user alice'
     """
-    if platform.system() != 'Linux':
-        return TestResult.execution_error(None, "This test only runs on Linux")
-    # Handle variables
-    if ctx.has_placeholders(log_file):
-        log_file = ctx.resolve_variables(log_file)
-    if ctx.has_placeholders(pattern):
-        pattern = ctx.resolve_variables(pattern)
-
-    # Check if log file exists
-    if not Path(log_file).exists():
-        return TestResult.failed([f'log file {log_file} does not exist'])
-
-    try:
-        # Use tail to get last N lines and grep for pattern. Both values are
-        # user input: quote them so the shell can't interpret them.
-        command = f'tail -n {int(max_lines)} -- {shlex.quote(log_file)} | grep -E -- {shlex.quote(pattern)}'
-        result = subprocess.run(
-            ['bash', '-c', command],
-            capture_output=True,
-            text=True,
-            timeout=30,
+    if isinstance(max_lines, bool) or not isinstance(max_lines, int) or max_lines < 1:
+        return TestResult.error([f'max_lines must be a positive integer, got {max_lines!r}'])
+    if ctx.has_placeholders(content):
+        return TestResult.error(
+            [
+                f'content {content!r} holds a !re or !timestamp placeholder, which is not supported here; '
+                'write the pattern as plain content with regex_match: true'
+            ]
         )
-
-        if result.returncode == 0:
-            matches = result.stdout.strip().splitlines()
-            return TestResult.success([f'found {len(matches)} log entries matching pattern in {log_file}'])
-        return TestResult.failed([f'no log entries matching pattern found in {log_file}'])
-
-    except subprocess.TimeoutExpired:
-        return TestResult.execution_error(None, f"Timeout searching log file {log_file}")
-    except (subprocess.SubprocessError, OSError, ValueError) as e:
-        return TestResult.execution_error(e, f"Failed to search log file {log_file}")
+    if regex_match and '[[:' in content:
+        # grep -E syntax from before the rewrite: Python reads it as a plain character set and
+        # would silently never match
+        return TestResult.error([f'content {content!r} uses a POSIX class ([[:...:]]); write \\s, \\d or [a-z]'])
+    try:
+        regex = re.compile(content) if regex_match else None
+    except re.error as e:
+        return TestResult.error([f'invalid regex {content!r}: {e}'])
+    path, status = ctx.resolve_globfilepath(dst)
+    if not path:
+        return TestResult.error([f'log file {dst} not found ({status})'])
+    try:
+        lines = _last_lines(path, max_lines)
+    except FileNotFoundError:
+        return TestResult.error([f'log file {dst} does not exist'])
+    except IsADirectoryError:
+        return TestResult.error([f'log file {dst} is a directory'])
+    except OSError as e:
+        return TestResult.execution_error(e, f'Cannot read log file {dst}')
+    if regex is not None:
+        matches = [line for line in lines if regex.search(line)]
+    else:
+        matches = [line for line in lines if content in line]
+    if matches:
+        return TestResult.success(
+            [f'found {len(matches)} log entries matching {content!r} in {dst}', f'first: {matches[0][:300]}']
+        )
+    return TestResult.failed([f'no log entry matching {content!r} in the last {len(lines)} line(s) of {dst}'])

@@ -177,19 +177,55 @@ def test_undocumented_installed_copy_borrows_docs_only_when_code_is_identical(tm
     assert 'code_sha' not in same.to_dict()
 
 
-def test_skill_catalog_reference_is_fresh():
-    """skills/adare-testfunction/references/catalog.md must match the bundled sources.
+def test_differing_installed_copy_shows_the_bundled_contract_with_a_note(tmp_path):
+    """Installed code that differs from the bundled copy still gets the bundled contract, flagged."""
+    from adare.backend.testfunction.catalog import Hit
+    from adare.backend.testfunction.contract import Library
+    from adare.backend.testfunction.contract_render import function_markdown
+    from adare.backend.testfunction.search_cards import card
 
-    Regenerate with: adare test catalog --markdown > skills/adare-testfunction/references/catalog.md
+    code = "@testfunction(name='file_exists', description='d')\ndef file_exists(ctx, dst: str):\n    return {value}\n"
+    contract = 'collection: {title: Demo}\nfunctions:\n  file_exists:\n    asserts: [exists]\n    formats: [file]\n'
+    for root, value in (('installed', 'None'), ('bundled', 'dst'), ('identical', 'None')):
+        (tmp_path / root / 'demo').mkdir(parents=True)
+        (tmp_path / root / 'demo' / 'demo.py').write_text(code.format(value=value))
+    (tmp_path / 'bundled' / 'demo' / 'contract.yaml').write_text(contract)
+    (tmp_path / 'identical' / 'demo' / 'contract.yaml').write_text(contract)
+
+    differing = find(load_catalog([(tmp_path / 'installed', True), (tmp_path / 'bundled', False)]), 'demo.file_exists')
+    assert differing.installed and differing.contract is not None
+    assert list(differing.contract.asserts) == ['exists']
+    assert 'adare test sync' in differing.contract_note
+    assert differing.to_dict()['contract_note'] == differing.contract_note
+    assert differing.contract_note in function_markdown(differing, Library())
+    assert card(Hit(differing, 0.0, {}, ()))['note'] == differing.contract_note
+
+    same = find(load_catalog([(tmp_path / 'installed', True), (tmp_path / 'identical', False)]), 'demo.file_exists')
+    assert same.contract is not None and same.contract_note == ''
+    assert 'contract_note' not in same.to_dict()
+
+
+def test_skill_references_are_fresh():
+    """skills/adare-testfunction/references/{catalog/*.md,features.md} match the bundled sources.
+
+    Regenerate with: adare test catalog --markdown-dir skills/adare-testfunction/references
     """
     from pathlib import Path
 
-    from adare.frontend.terminal.testfunction_catalog import catalog_markdown
+    from adare.backend.testfunction.contract import load_library
+    from adare.backend.testfunction.contract_render import markdown_files
 
-    reference = Path(__file__).resolve().parents[5] / 'skills' / 'adare-testfunction' / 'references' / 'catalog.md'
-    assert reference.read_text(encoding='utf-8') == catalog_markdown(load_catalog(bundled_sources())), (
-        'stale catalog.md: run `adare test catalog --markdown > skills/adare-testfunction/references/catalog.md`'
+    root = Path(__file__).resolve().parents[5] / 'skills' / 'adare-testfunction' / 'references'
+    expected = markdown_files(load_catalog(bundled_sources()), load_library())
+    hint = 'run `adare test catalog --markdown-dir skills/adare-testfunction/references`'
+    stale = [rel for rel, text in expected.items() if not (root / rel).is_file() or (root / rel).read_text() != text]
+    extra = sorted(
+        p.relative_to(root).as_posix()
+        for p in (root / 'catalog').glob('*.md')
+        if p.relative_to(root).as_posix() not in expected
     )
+    assert not stale, f'stale skill references {stale}: {hint}'
+    assert not extra, f'skill references without a collection {extra}: delete them'
 
 
 def _write_collection(root, name, body):

@@ -7,6 +7,7 @@ A ``!timestamp`` without tolerance or interval is just a value and is resolved.
 """
 
 import logging
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -52,10 +53,14 @@ class YamlTagProcessor:
     def process_yaml_tags(
         self,
         data: Any,
-        template_context: dict[str, Any] | None = None,
-        template_resolver: TemplateResolver | None = None,
+        template_context: dict[str, Any] | None,
+        template_resolver: TemplateResolver,
     ) -> Any:
-        """Replace every tag anywhere in ``data`` (mappings and lists at any depth); returns a new structure."""
+        """Replace every tag anywhere in ``data`` (mappings and lists at any depth); returns a new structure.
+
+        ``template_resolver`` renders a templated tag value strictly: a variable that is not set raises
+        ``TemplateResolutionError`` (see ``JinjaTemplateResolver``).
+        """
         self._names_in_use = set()  # placeholder names only need to be unique within one test
         return self._process(data, template_context, template_resolver)
 
@@ -68,20 +73,40 @@ class YamlTagProcessor:
             return [self._process(item, template_context, template_resolver) for item in data]
         if isinstance(data, YamlRegexString):
             placeholder_name = self.create_placeholder_name('regex')
-            self.metadata_manager.add_regex_metadata(placeholder_name, data.string, template_context)
+            pattern = self._resolve_regex_variables(data.string, template_context)
+            self.metadata_manager.add_regex_metadata(placeholder_name, pattern, template_context)
             log.debug(f"Converted !re '{data.string}' to placeholder '{placeholder_name}'")
             return f'{{{{ {placeholder_name} }}}}'
         if isinstance(data, YamlTimestamp):
             return self._convert_timestamp(data, template_context, template_resolver)
         return data
 
+    def _resolve_regex_variables(self, pattern: str, template_context: dict[str, Any] | None) -> str:
+        """``{{ variables }}`` in a ``!re`` pattern replaced by their values, always regex-escaped
+        (a value is text to find, even one that looks like a regex). An unknown variable stays
+        as written; the comparison reports it as an ERROR."""
+        if '{{' not in pattern:
+            return pattern
+        registry = self.metadata_manager.variable_registry
+
+        def value_of(match: re.Match) -> str:
+            name = match.group(1).strip()
+            variable = registry.get(name) if hasattr(registry, 'get') else None
+            if variable is not None:
+                return re.escape(str(variable.get_string_value()))
+            if template_context and name in template_context:
+                return re.escape(str(template_context[name]))
+            return str(match.group(0))
+
+        return str(re.sub(r'\{\{([^}]+)\}\}', value_of, pattern))
+
     def _convert_timestamp(self, tag, template_context: dict[str, Any] | None, template_resolver) -> Any:
         value = tag.string
+        resolved = _render(value, template_context, template_resolver)
         if not self.tolerance_detector.has_yaml_tolerance(tag):
             # Compared exactly: the tag is just a value.
-            return _render(value, template_context, template_resolver, keep_unset=False)
+            return resolved
 
-        resolved = _render(value, template_context, template_resolver, keep_unset=True)
         placeholder_name = self._timestamp_placeholder_name(value)
         self.metadata_manager.add_timestamp_metadata(
             placeholder_name,
@@ -109,15 +134,8 @@ def _is_template(value: Any) -> bool:
     return '{{' in str(value) and '}}' in str(value)
 
 
-def _render(value: Any, template_context: dict[str, Any] | None, template_resolver, keep_unset: bool) -> Any:
-    """Resolve a templated value; with ``keep_unset``, an empty result keeps the template.
-
-    Empty means the variable is only set later in the run (``save_timestamp``); the
-    test is resolved again with the runtime context then.
-    """
-    if not _is_template(value) or not (template_resolver and template_context):
+def _render(value: Any, template_context: dict[str, Any] | None, template_resolver: TemplateResolver) -> Any:
+    """Resolve a templated value strictly; a variable that is not set raises ``TemplateResolutionError``."""
+    if not _is_template(value):
         return value
-    rendered = template_resolver(value, template_context)
-    if keep_unset and (not rendered or rendered.isspace()):
-        return value
-    return rendered
+    return template_resolver(value, template_context or {})

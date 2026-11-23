@@ -48,9 +48,7 @@ def snapshot(fs: GuestFS, excludes: tuple[str, ...] = DEFAULT_EXCLUDES) -> dict[
         if any(st.path == ex or st.path.startswith(ex + '/') for ex in excludes):
             continue
         files[st.path] = st
-    log.info(
-        f"CLAUDE: hostside fsdiff scanned {len(files)} entries of {fs.origin} in {time.monotonic() - started:.1f}s"
-    )
+    log.info(f"hostside fsdiff scanned {len(files)} entries of {fs.origin} in {time.monotonic() - started:.1f}s")
     return files
 
 

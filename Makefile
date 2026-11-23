@@ -1,5 +1,5 @@
 .DEFAULT_GOAL = help
-.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx install-skills test test-cov test-testfunctions test-testfunctions-guest test-cv test-agent test-install guest-venv lock-guest lint lint-fix lint-baseline typecheck hooks
+.PHONY: help install install-qemu update sync adare-clean docs docs-sphinx testfunction-tables install-skills test test-cov test-testfunctions test-testfunctions-guest test-adarelib-guest test-cv test-agent test-install guest-venv lock-guest lint lint-fix lint-baseline lint-baseline-deps typecheck hooks ci-hygiene release-check build smoke-live
 
 # uv owns the environments and the lock; make only names the tasks. CI calls these
 # same targets (with UV_LOCKED=1, i.e. --locked), so each command is written once,
@@ -21,10 +21,12 @@ help:
 	@echo "  install-skills  Symlink the workflow skills in skills/ into Claude Code's skill dirs (project + global)."
 	@echo "  docs            Build HTML documentation with Sphinx (warnings are errors)."
 	@echo "  docs-sphinx     Build HTML documentation with Sphinx (warnings are errors)."
+	@echo "  testfunction-tables  Regenerate the docs tables and the agent skill references from the catalog + contracts."
 	@echo "  test            Run the client unit suite (extra pytest flags: PYTEST_ARGS=...)."
 	@echo "  test-cov        Run the unit suite with coverage; fails below the floor (COV_MIN)."
 	@echo "  test-testfunctions  Run only the testfunction tests on the host Python (no libvirt needed)."
 	@echo "  test-testfunctions-guest  Run the testfunction tests on the guests' Python 3.10."
+	@echo "  test-adarelib-guest  Run the adarelib tests on the guests' Python 3.10."
 	@echo "  test-cv         Run the CV server suite."
 	@echo "  test-agent      Run the guest agent suite on the guests' Python 3.10."
 	@echo "  test-install    Run 'make install' then 'make update', and check the installed CLI."
@@ -32,8 +34,13 @@ help:
 	@echo "  lint            Format check + quality ratchet (ruff, mypy, file size) - same as CI."
 	@echo "  lint-fix        Apply ruff format and safe autofixes."
 	@echo "  lint-baseline   Lock in paid-down debt (lowers quality-baseline.json)."
+	@echo "  lint-baseline-deps  Re-measure budgets after a dependency-only bump (may raise them)."
 	@echo "  typecheck       Strict mypy on adare.core (must stay at zero errors)."
 	@echo "  hooks           Install the pre-commit hooks."
+	@echo "  ci-hygiene      Lint workflows, scan for secrets, check large files/conflict markers/tool pins (CI)."
+	@echo "  release-check   Check a release tag before/after tagging: TAG=<package>-v<version> (CI: release.yml)."
+	@echo "  build           Build one package's sdist + wheel into dist/release/: PACKAGE=<name>."
+	@echo "  smoke-live      Boot a real VM and run a small experiment (needs KVM + the env): ENV=<name>."
 	@echo "---------------------------------------"
 
 # The install scripts do the work (uv sync --locked, CLIs on PATH, appdata, DB
@@ -95,6 +102,14 @@ docs-sphinx:
 	cp paper/demo/*.mp4 $(DOCS_BUILD)/demo/
 	touch $(DOCS_BUILD)/.nojekyll
 
+# The docs' testfunction tables (docsrc/source/_static/tables/testfunctions_*.csv) are
+# generated from the catalog; a unit test fails while a committed table is stale.
+testfunction-tables:
+	$(SYNC) --package adare
+	$(RUN) python scripts/gen_testfunction_tables.py
+	$(RUN) adare test catalog --markdown-dir skills/adare-testfunction/references
+	$(RUN) python scripts/check_contract.py --all
+
 # --- Tests -------------------------------------------------------------------
 # `--package adare` keeps adare-cv-server (paddle) out; the unit suite never imports
 # it. live_vm tests are deselected by the pytest addopts.
@@ -147,6 +162,10 @@ test-agent: guest-venv
 test-testfunctions-guest: guest-venv
 	cd adare && ../$(GUEST_PY) -m pytest tests/unit/testfunctions --confcutdir=tests/unit/testfunctions -q $(PYTEST_ARGS)
 
+# adarelib (archives, decoders, placeholders, timestamps) ships in the guest wheel too.
+test-adarelib-guest: guest-venv
+	cd adare && ../$(GUEST_PY) -m pytest tests/unit/adarelib --confcutdir=tests/unit/adarelib -q $(PYTEST_ARGS)
+
 # What a user does on a fresh clone, then after a pull: CI runs it on all three OSes.
 # It is a real install (the same as running those targets yourself).
 ifeq ($(OS),Windows_NT)
@@ -182,9 +201,49 @@ lint-baseline:
 	$(LINT_SYNC)
 	$(LINT_RUN) python scripts/quality_ratchet.py --update
 
+# Only for dependency-only changes (CI runs it on Dependabot lockfile PRs): library
+# type changes move the mypy counts without any code change. adare.core must still
+# stay at zero errors. Never use this to get a code change through.
+lint-baseline-deps:
+	$(LINT_SYNC)
+	$(LINT_RUN) python scripts/quality_ratchet.py --update --allow-increase
+
 typecheck:
 	$(LINT_SYNC)
 	$(LINT_RUN) mypy adare/adare/core
 
 hooks:
 	pre-commit install
+
+# --- CI hygiene --------------------------------------------------------------
+# What pre-commit guards per commit, checked over the tracked tree (the hooks are
+# optional, and the large-file/conflict hooks do nothing outside a commit). gitleaks
+# is built with `go run` at the pre-commit rev (Go fetches its own toolchain if
+# needed); in CI's depth-1 checkout it scans the checked-out tree, locally all history.
+ACTIONLINT = uvx --from actionlint-py==1.7.12.25 actionlint
+GITLEAKS_VERSION = $(shell awk '/gitleaks\/gitleaks/ {getline; sub(/.*rev: *v?/, ""); sub(/[^0-9.].*/, ""); print}' .pre-commit-config.yaml)
+SCRIPT_PY = uv run --quiet --no-project --python 3.13
+ci-hygiene:
+	$(ACTIONLINT)
+	go run github.com/zricethezav/gitleaks/v8@v$(GITLEAKS_VERSION) git --redact --no-banner .
+	$(SCRIPT_PY) scripts/ci_hygiene.py
+
+# --- Releases ----------------------------------------------------------------
+# A release is a tag <package>-v<version> on main; release.yml runs these. Run
+# release-check before tagging too (it checks HEAD while the tag does not exist).
+release-check:
+	@test -n "$(TAG)" || { echo "usage: make release-check TAG=<package>-v<version>"; exit 2; }
+	$(SCRIPT_PY) scripts/release.py check "$(TAG)"
+
+RELEASE_DIR = dist/release
+build:
+	@test -n "$(PACKAGE)" || { echo "usage: make build PACKAGE=<adare|adarevm|adarelib|adare-cv-server>"; exit 2; }
+	rm -rf $(RELEASE_DIR)
+	uv build --package $(PACKAGE) --out-dir $(RELEASE_DIR)
+
+# --- Live VM smoke -----------------------------------------------------------
+# Boots a real VM with the installed CLI (run `make install` first). CI: live-smoke.yml
+# on the self-hosted runner; see scripts/smoke_live.py.
+ENV = ubuntu2404-x86
+smoke-live:
+	$(SCRIPT_PY) scripts/smoke_live.py --env "$(ENV)" --adare "$(INSTALLED_ADARE)"

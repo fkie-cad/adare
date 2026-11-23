@@ -166,7 +166,10 @@ def _locate_collection_pyfile(lib: str, explicit_path: str | None):
 
 
 def _parse_param_value(raw: str):
-    """Best-effort scalar coercion for --param k=v values (int/float/bool/None/str)."""
+    """Best-effort scalar coercion for --param k=v values (int/float/bool/None/str).
+
+    Lists and dicts are read by :func:`_parse_collection_params` once the parameter types are known.
+    """
     lowered = raw.strip().lower()
     if lowered in ('true', 'false'):
         return lowered == 'true'
@@ -181,6 +184,34 @@ def _parse_param_value(raw: str):
     except ValueError:
         pass
     return raw
+
+
+def _parse_collection_params(params: dict, testclass) -> dict:
+    """``[a, b]`` / ``{k: v}`` values of list/dict parameters read as YAML flow collections.
+
+    Only for those parameters: as a string, cattrs would split ``entry=[a, b]`` into characters,
+    while ``regex=[0-9]`` must stay the pattern it is.
+    """
+    import contextlib
+    import typing
+
+    import attrs
+    import yaml
+
+    parameter_class = typing.get_type_hints(testclass).get('parameter')
+    if parameter_class is None or not attrs.has(parameter_class):
+        return params
+    hints = typing.get_type_hints(parameter_class)
+    parsed = dict(params)
+    for name, value in params.items():
+        hint = hints.get(name)
+        kinds = {typing.get_origin(t) or t for t in (typing.get_args(hint) or (hint,))} | {
+            typing.get_origin(hint) or hint
+        }
+        if isinstance(value, str) and value.strip()[:1] in ('[', '{') and kinds & {list, dict}:
+            with contextlib.suppress(yaml.YAMLError):  # not valid YAML: keep the string
+                parsed[name] = yaml.safe_load(value)
+    return parsed
 
 
 def exec_validate_testfunction(arguments):
@@ -254,6 +285,10 @@ def exec_validate_testfunction(arguments):
     from adare.backend.testfunction.catalog import docstring_warnings
 
     doc_warnings = docstring_warnings(py_file) if py_file is not None else []
+    if py_file is not None:
+        from adare.backend.testfunction.contract_checks import collection_problems
+
+        doc_warnings += [f'contract: {problem}' for problem in collection_problems(py_file)]
 
     from adare.console import console
 
@@ -285,6 +320,13 @@ def exec_validate_testfunction(arguments):
     console.print()
 
 
+def _print_path_params(console, testclass, params: dict) -> None:
+    """Show the other guest paths a test reads (``host_mode_path_params``, e.g. ``other_dst``)."""
+    for name in getattr(testclass, 'host_mode_path_params', ()):
+        if params.get(name):
+            console.print(f'  {name}: {params[name]}')
+
+
 def exec_dry_run_testfunction(arguments):
     """Execute a single testfunction against a local sample path (no VM).
 
@@ -308,6 +350,10 @@ def exec_dry_run_testfunction(arguments):
             message=f'target "{target}" must be in <collection>.<function> form (e.g. mycollection.file_contains_word)',
         )
     lib, func = target.split('.', 1)
+    from adarelib.testset.renames import renamed_function
+
+    if renamed_function(target):
+        raise TestFunctionNotFoundError(log, message=f'{target} was renamed to {renamed_function(target)}')
 
     py_file = _locate_collection_pyfile(lib, getattr(arguments, 'path', None))
     if py_file is None:
@@ -350,19 +396,28 @@ def exec_dry_run_testfunction(arguments):
         key, value = pair.split('=', 1)
         params[key.strip()] = _parse_param_value(value)
 
+    from adarelib.testset.renames import rename_problems
+
+    renamed = rename_problems(target, params)
+    if renamed:
+        raise TestFunctionNotFoundError(log, message='; '.join(renamed))
+
     sample = getattr(arguments, 'file', None)
     if sample and 'dst' not in params:
         params['dst'] = sample
 
     test_dict = {
         'name': f'dryrun_{func}',
-        'parameter': params,
+        'parameter': _parse_collection_params(params, testclass),
         'description': '',
         'variable_metadata': None,
     }
 
+    from adare.backend.experiment.test_loader import register_primitive_union_hook
     from adare.console import console
 
+    # same structuring as a real run: `str | int | float` parameters pass through as given
+    register_primitive_union_hook()
     try:
         test_instance = cattrs.structure(test_dict, testclass)
     except cattrs.errors.ClassValidationError as e:
@@ -377,6 +432,7 @@ def exec_dry_run_testfunction(arguments):
     status_name = StatusEnum(result.status).name
     color = StatusEnum.get_color(result.status) or 'white'
     console.print(f'\n[bold]{target}[/bold] (sample: {sample or params.get("dst", "—")})')
+    _print_path_params(console, testclass, params)
     console.print(f'  status: [{color}]{status_name}[/{color}]')
     if result.details:
         console.print('  details:')

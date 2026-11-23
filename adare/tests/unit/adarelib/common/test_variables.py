@@ -1,5 +1,7 @@
 """Tests for adarelib.common.variables module."""
 
+import datetime
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -181,3 +183,26 @@ class TestVariableRegistry:
         assert registry.get("name").type == VariableType.STRING
         assert registry.get("count").type == VariableType.INTEGER
         assert registry.get("enabled").type == VariableType.BOOLEAN
+
+
+# ---------------------------------------------------------------------------
+# EXIF-style timestamp strings (YYYY:MM:DD HH:MM:SS) keep their date
+# ---------------------------------------------------------------------------
+
+
+class TestExifTimestampVariable:
+    """dateutil reads ``2024:01:02 03:04:06`` as today at 03:04:06; a variable must keep the date."""
+
+    def test_timestamp_variable_keeps_the_exif_date(self):
+        var = Variable(value="2024:01:02 03:04:06", type=VariableType.TIMESTAMP)
+        assert var.value == datetime.datetime(2024, 1, 2, 3, 4, 6)
+
+    def test_resolved_value_keeps_the_exif_date(self):
+        registry = VariableRegistry()
+        registry.add("shot", Variable(value="2024:01:02 03:04:06", type=VariableType.TIMESTAMP))
+        resolved = registry._get_variable_resolved_value(registry.get("shot"))
+        assert str(resolved).startswith("2024-01-02T03:04:06")
+
+    def test_exif_string_is_detected_as_a_timestamp(self):
+        assert Variable._looks_like_timestamp("2024:01:02 03:04:06")
+        assert not Variable._looks_like_timestamp("2024:13:45 03:04:06")

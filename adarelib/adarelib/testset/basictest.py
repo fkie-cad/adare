@@ -18,6 +18,15 @@ if TYPE_CHECKING:
     import datetime
 
 
+class PlaceholderError(Exception):
+    """A placeholder the test cannot evaluate: unknown name or invalid regular expression.
+
+    This is a problem of the test definition, not of the artifact, so the ``@testfunction``
+    decorator reports it as ERROR. It is deliberately not a ``ValueError``: code that treats
+    a ``ValueError`` as "this value does not match" must not swallow it.
+    """
+
+
 class HostModeCategory(str, Enum):
     """How a test should execute in host-mode (no in-guest agent)."""
 
@@ -93,6 +102,9 @@ class BasicTest:
     # Suffixes of companion files that belong to parameter.dst (e.g. SQLite '-wal');
     # host mode pulls those that exist on the guest alongside dst.
     host_mode_sidecars: ClassVar[tuple[str, ...]] = ()
+    # Parameters besides dst that hold a guest file path (e.g. 'other_dst'); host mode pulls
+    # each one that is set (with its sidecars) and rewrites it to the local copy, like dst.
+    host_mode_path_params: ClassVar[tuple[str, ...]] = ()
     # True if a pass asserts that something is ABSENT (deleted, never written, not shown).
     # The host then requires proof that the actions before the test took effect, and
     # reports an unproven pass as INCONCLUSIVE instead of SUCCESS.
@@ -196,30 +208,37 @@ class BasicTest:
         return 'tolerance' in metadata and bool(metadata['tolerance'])
 
     def compare_with_placeholder(self, placeholder_name: str, actual_value: str) -> tuple[bool, str]:
-        """Compare actual value with placeholder based on its type (regex, timestamp, string)."""
+        """Compare actual value with placeholder based on its type (regex, timestamp, string).
+
+        Raises ``PlaceholderError`` for an unknown placeholder or an invalid regular expression.
+        """
         metadata = self.get_placeholder_metadata(placeholder_name)
+        if not metadata:
+            raise PlaceholderError(f"unknown placeholder '{{{{ {placeholder_name} }}}}': it has no metadata")
         placeholder_type = metadata.get('type', 'string')
 
         if placeholder_type == 'regex':
-            import re
-
+            regex_pattern = metadata.get('resolved_value', metadata.get('raw_value'))
+            if regex_pattern is None:
+                raise PlaceholderError(f"regex placeholder '{placeholder_name}' has no pattern")
+            unresolved = re.search(r'\{\{\s*([^}]+?)\s*\}\}', regex_pattern)
+            if unresolved:
+                raise PlaceholderError(f"unknown variable '{unresolved.group(1)}' in !re pattern {regex_pattern!r}")
             try:
-                regex_pattern = metadata.get('resolved_value', metadata.get('raw_value', '.*'))
                 compiled_regex = re.compile(regex_pattern)
-                if compiled_regex.match(actual_value):
-                    return True, f"Regex match: '{actual_value}' matches pattern '{regex_pattern}'"
-                return False, f"Regex no match: '{actual_value}' doesn't match pattern '{regex_pattern}'"
             except re.error as e:
-                return False, f"Regex error: Invalid pattern '{regex_pattern}' - {e}"
+                raise PlaceholderError(f"invalid regular expression {regex_pattern!r}: {e}") from e
+            if compiled_regex.match(actual_value):
+                return True, f"Regex match: '{actual_value}' matches pattern '{regex_pattern}'"
+            return False, f"Regex no match: '{actual_value}' doesn't match pattern '{regex_pattern}'"
 
-        elif placeholder_type == 'timestamp':
+        if placeholder_type == 'timestamp':
             return self._compare_timestamp_with_tolerance(metadata, actual_value)
 
-        else:
-            # Default: exact string comparison
-            expected = metadata.get('resolved_value', '')
-            success = actual_value == expected
-            return success, f"Exact comparison: {'match' if success else 'no match'}"
+        # Default: exact string comparison
+        expected = metadata.get('resolved_value', '')
+        success = actual_value == expected
+        return success, f"Exact comparison: {'match' if success else 'no match'}"
 
     def _compare_timestamp_with_tolerance(self, metadata: dict, actual_value: str) -> tuple[bool, str]:
         """Compare timestamp values with tolerance."""
@@ -229,8 +248,10 @@ class BasicTest:
         if metadata.get('interval'):
             return self._compare_timestamp_with_interval(metadata, actual_value)
 
-        if 'tolerance' not in metadata or not metadata['tolerance']:
-            # No tolerance - do exact comparison
+        numeric = 'epoch' in metadata or 'unit' in metadata
+        if 'tolerance' not in metadata or (not metadata['tolerance'] and not numeric):
+            # No tolerance - do exact comparison (a numeric value is always converted first:
+            # `tolerance: 0` with epoch/unit is an exact comparison of the converted instant)
             expected = metadata.get('resolved_value', '')
             success = actual_value == expected
             return success, f"Exact comparison: {'match' if success else 'no match'}"
@@ -307,8 +328,8 @@ class BasicTest:
                 f"Outside tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)",
             )
 
-        except Exception as e:
-            # Fallback to string comparison
+        except (ValueError, TypeError, OverflowError, OSError) as e:
+            # an unparsable value or one side with a zone and the other without: string comparison
             expected = metadata.get('resolved_value', '')
             success = actual_value == expected
             return success, f"Tolerance comparison failed ({e}), used string comparison"
@@ -319,23 +340,40 @@ class BasicTest:
 
         lower_raw, upper_raw = (str(bound) for bound in metadata['interval'])
         if '{{' in lower_raw or '{{' in upper_raw:
-            return False, (
-                f"Interval bounds not resolved ({lower_raw}, {upper_raw}): "
+            # nothing was compared: a test-definition problem, an ERROR (never an absence pass)
+            raise PlaceholderError(
+                f"interval bounds not resolved ({lower_raw}, {upper_raw}): "
                 "save both timestamps with save_timestamp before running the test"
             )
         try:
-            actual = self._parse_timestamp_with_format(actual_value, metadata)
             lower = _parse_bound(lower_raw)
             upper = _parse_bound(upper_raw)
+        except (ValueError, OverflowError, OSError) as e:
+            raise PlaceholderError(f"cannot parse interval bounds ({lower_raw}, {upper_raw}): {e}") from e
+        try:
+            actual = self._parse_timestamp_with_format(actual_value, metadata)
         except (ValueError, OverflowError, OSError) as e:
             return False, f"Interval comparison failed: could not parse timestamps ({e})"
         return check_interval(actual, lower, upper, float(metadata.get('precision') or 0))
 
+    def parse_expected_timestamp(self, timestamp: str | int | float, metadata: dict) -> 'datetime.datetime':
+        """The point in time of a saved timestamp (the expected side of a comparison).
+
+        Reads ``timestamp`` like a ``!timestamp`` placeholder's value: ``format`` and
+        ``localtime`` of ``metadata`` apply, a value without a zone is UTC unless ``localtime``.
+
+        :raises ValueError: (or ``OverflowError`` / ``OSError``) a value that is no timestamp
+        """
+        return self._parse_timestamp_with_format(timestamp, metadata, is_expected=True)
+
     def _parse_timestamp_with_format(
-        self, timestamp_str: str, metadata: dict, is_expected: bool = False
+        self, timestamp_str: str | int | float, metadata: dict, is_expected: bool = False
     ) -> 'datetime.datetime':
         """
         Parse timestamp using format metadata.
+
+        With ``metadata['epoch']`` / ``metadata['unit']`` the actual value must be numeric and is
+        converted from that epoch and unit (``ValueError`` otherwise); the expected value is not.
 
         Behavior:
         - is_expected == True (host/template/expected side):
@@ -355,9 +393,7 @@ class BasicTest:
         """
         import datetime
 
-        from dateutil import parser as _parser
-
-        from adarelib.testset.timeinterval import parse_utc_offset
+        from adarelib.testset.timeinterval import parse_timestamp_text, parse_utc_offset
 
         # "Local" means the guest's local time. The host records the guest's UTC
         # offset (guest_utc_offset); without it, fall back to the timezone of the
@@ -408,6 +444,17 @@ class BasicTest:
             # Convert aware/UTC to system local for display/consistency.
             return dt.astimezone(_SYSTEM_TZ)
 
+        if not is_expected and ('epoch' in metadata or 'unit' in metadata):
+            # A numeric artifact value counted from an epoch in a unit (FILETIME, Unix ms, ...).
+            # The result is wall time; _finalize reads it as UTC, or as guest local time with localtime.
+            from adarelib.testset.yaml.customtags import numeric_timestamp_to_datetime
+
+            dt = numeric_timestamp_to_datetime(timestamp_str, metadata.get('epoch', 1970), metadata.get('unit', 's'))
+            return _finalize(dt)
+
+        if isinstance(timestamp_str, (int, float)) and not isinstance(timestamp_str, bool):
+            timestamp_str = str(timestamp_str)  # e.g. a numeric SQLite column or JSON value
+
         fmt = metadata.get('format')
 
         # Check if it's a Unix timestamp first
@@ -449,7 +496,7 @@ class BasicTest:
                 pass
 
         # Flexible parsing fallback
-        dt = _parser.parse(timestamp_str)
+        dt = parse_timestamp_text(timestamp_str)
         return _finalize(dt)
 
     def _handle_placeholders_comparison(self, actual_content: str, expected_template: str) -> tuple[bool, str]:
@@ -565,11 +612,11 @@ def _parse_bound(value: str) -> 'datetime.datetime':
     """Parse an interval bound: Unix seconds or ISO 8601, naive meaning UTC (save_timestamp values)."""
     import datetime
 
-    from dateutil import parser as _parser
+    from adarelib.testset.timeinterval import parse_timestamp_text
 
     try:
         return datetime.datetime.fromtimestamp(float(value), datetime.timezone.utc)
     except ValueError:
         pass
-    dt = _parser.parse(value)
+    dt = parse_timestamp_text(value)
     return dt if dt.tzinfo else dt.replace(tzinfo=datetime.timezone.utc)

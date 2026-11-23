@@ -2,7 +2,7 @@
 
 Used by ``adare exp playbook validate`` / ``playbook_validate`` (not by the run-time
 parser). Errors are structural mistakes that cannot work (a ``- test:`` naming an
-undefined test, duplicate test names). Catalog findings are warnings: the catalog
+undefined test, duplicate test names, a renamed testfunction or parameter). Catalog findings are warnings: the catalog
 reflects this machine's collections, which may differ from where the playbook runs.
 """
 
@@ -10,6 +10,8 @@ import difflib
 from typing import Any
 
 import yaml
+
+from adarelib.testset.renames import rename_problems
 
 
 def _test_refs(node: Any) -> list[str]:
@@ -59,6 +61,14 @@ def _check_against_catalog(test: dict, entries: list) -> list[str]:
         for p in entry.params:
             if p.required and p.name not in given:
                 warnings.append(f'test "{name}": missing required parameter "{p.name}" for {function}')
+        choices = entry.contract.choices if entry.contract else {}
+        for param, value in given.items():
+            allowed = choices.get(param)
+            if allowed and isinstance(value, (str, int, float)) and '{{' not in str(value) and value not in allowed:
+                warnings.append(
+                    f'test "{name}": {param}={value!r} is not allowed for {function}'
+                    f' (one of: {", ".join(map(str, allowed))}; see `adare test info {function}`)'
+                )
     return warnings
 
 
@@ -111,9 +121,12 @@ def _control_cycles(graph: dict[str, list[str]]) -> list[str]:
 
 def check_playbook_tests(playbook_yaml: str, entries: list | None = None) -> tuple[list[str], list[str]]:
     """Return ``(errors, warnings)`` for the playbook's tests; unparsable YAML yields none."""
+    from adarelib.testset.yaml.customloader import get_custom_loader
+
     try:
-        data = yaml.safe_load(playbook_yaml)
-    except yaml.YAMLError:
+        # the playbook loader: tests with !re / !timestamp values are checked too
+        data = yaml.load(playbook_yaml, Loader=get_custom_loader())  # noqa: S506 - SafeLoader subclass
+    except (yaml.YAMLError, ValueError):
         return [], []  # the schema validator reports parse errors
     if not isinstance(data, dict):
         return [], []
@@ -127,11 +140,15 @@ def check_playbook_tests(playbook_yaml: str, entries: list | None = None) -> tup
             errors.append(f'`- test: {ref}` refers to no entry in `tests:`{_suggest(ref, names)}')
     errors += _check_controls(tests, names, refs)
 
+    renamed = {id(t): rename_problems(t.get('function'), t.get('parameter')) for t in tests}
+    errors += [f'test "{t.get("name", "?")}": {msg}' for t in tests for msg in renamed[id(t)]]
+
     if not tests:
         return errors, []
     if entries is None:
         from adare.backend.testfunction.catalog import load_catalog
 
         entries = load_catalog()
-    warnings = [w for t in tests for w in _check_against_catalog(t, entries)]
+    # a test with a renamed function/parameter already has a precise error
+    warnings = [w for t in tests if not renamed[id(t)] for w in _check_against_catalog(t, entries)]
     return errors, warnings

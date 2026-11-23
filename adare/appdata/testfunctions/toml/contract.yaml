@@ -1,0 +1,334 @@
+# Contract of the toml collection: what each function can and cannot do, and runnable
+# examples. Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run
+# in the unit suite (test_contract_examples.py); `adare test info toml.<name>` shows all of it.
+
+collection:
+  title: TOML
+  summary: >-
+    TOML files (``tomllib``, or ``tomli`` on Python 3.10): settings and state files. The
+    functions check that a key path exists, what its value is (also as a number or point in
+    time), how many values a path selects (``0`` = absent) and how two values of one file
+    relate. Tables are mappings (``[server]`` with ``port`` is ``server.port``) and an array of
+    tables (``[[items]]``) is an array. Values keep their TOML types; dates and times become
+    ISO 8601 strings.
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  # A settings file: tables, an array of tables, offset and local date-times, a local date and a
+  # quoted table name with a dot.
+  settings: &settings
+    text: |
+      title = "settings"
+
+      [server]
+      host = "localhost"
+      port = 8080
+
+      [[items]]
+      name = "Example Entry"
+      tag = "archived"
+
+      [[items]]
+      name = "Notes"
+      tag = "active"
+
+      [counters]
+      opened = 3
+      saved = 5
+
+      [session]
+      opened = 2026-01-01T10:00:00Z
+      closed = 2026-01-01T10:30:00Z
+      local = 2026-01-01T11:00:00
+      day = 2026-01-01
+
+      ["app.window"]
+      width = 800
+  # The same key twice: not valid TOML.
+  duplicate: &duplicate
+    text: |
+      [server]
+      port = 8080
+      port = 8081
+
+functions:
+  contains_key:
+    asserts: [exists]
+    formats: [toml]
+    features: [archive_dst, glob_dst, key_path]
+    unsupported:
+      encoding: There is no ``encoding`` parameter; TOML is always UTF-8.
+    not_for:
+      - goal: the value of a key
+        use: toml.value_matches
+      - goal: a key or value is absent
+        use: toml.value_count
+    outcomes:
+      passed: '``key_path`` selects at least one value'
+      failed: the file was read and ``key_path`` selects nothing
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is not valid TOML (syntax error, duplicate key, impossible date or time, bytes that are not UTF-8)
+    limits:
+      - 'With ``expect_to_fail: true`` a missing key passes, but a missing file stays an error; toml.value_count with ``expected_count: 0`` says the same more clearly.'
+    use_cases:
+      - title: A setting was written
+        text: The key exists after the action, whatever its value.
+    examples:
+      - title: a key in a table
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: server.port
+      - title: a key in the last entry of an array of tables
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: items[-1].tag
+      - title: a quoted table name with a dot
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: "['app.window'].width"
+      - title: an absent key fails
+        text: To assert absence use toml.value_count with ``expected_count`` 0, which passes.
+        expect: failed
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: server.user
+      - title: a duplicate key is an error, not a failure
+        expect: error
+        files:
+          /home/user/.config/app/settings.toml: *duplicate
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: server.port
+
+  value_matches:
+    asserts: [value, order]
+    formats: [toml]
+    features: [archive_dst, glob_dst, key_path, wildcard_mode, regex_tag, placeholder, timestamp_tag, ordered_comparison, value_decode]
+    unsupported:
+      encoding: There is no ``encoding`` parameter; TOML is always UTF-8.
+    not_for:
+      - goal: no value matches, a key is absent
+        use: toml.value_count
+      - goal: two values of one file relate (earlier, within seconds, one above)
+        use: toml.values_compare
+    outcomes:
+      passed: 'the value at ``key_path`` (``any``: one of the values, ``all``: every value) matches ``expected_value``'
+      failed: the file was read and ``key_path`` selects nothing or an empty array, or the value(s) do not match
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is not valid TOML (syntax error, duplicate key, impossible date or time, bytes that are not UTF-8)
+        - an invalid ``wildcard_mode``; an invalid regex or unknown placeholder
+        - in ordered mode, a ``!re`` tag or ``regex_match``, text around a ``{{ name }}`` or a saved variable that is no number or time, bad ordered parameters, or a value that is no number or timestamp
+    limits:
+      - Equality is Python ``==`` and type-sensitive (``5`` is not ``"5"``).
+      - 'Dates and times compare as ISO 8601 strings: ``2026-01-01`` (local date), ``07:32:00`` (local time), ``2026-01-01T11:00:00`` (local date-time), ``2026-01-01T10:00:00+00:00`` (``Z`` becomes ``+00:00``).'
+      - A path that selects an array compares its elements one by one; a whole array cannot be compared.
+      - '``regex_match`` searches (``re.search``, unanchored); a ``!re`` tag matches from the start (``re.match``).'
+    choices:
+      wildcard_mode: [any, all]
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A setting has a value
+        text: A setting changed in the GUI is stored in a TOML configuration.
+      - title: An entry of an array of tables
+        text: '``items[*].name`` for every ``[[items]]`` entry.'
+    examples:
+      - title: one entry has a name
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: items[*].name
+          expected_value: Example Entry
+      - title: an offset date-time as ISO 8601 text
+        text: '``Z`` becomes ``+00:00``.'
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: session.opened
+          expected_value: '2026-01-01T10:00:00+00:00'
+      - title: a port of at least 1024
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: server.port
+          expected_value: 1024
+          comparison_type: greater_equal
+      - title: not every entry is archived
+        expect: failed
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: items[*].tag
+          expected_value: archived
+          wildcard_mode: all
+      - title: a host name pattern
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: server.host
+          expected_value: !re '^local'
+      - title: a glob with several matches is an error
+        expect: error
+        files:
+          /home/user/.config/app/settings-a.toml: *settings
+          /home/user/.config/app/settings-b.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings-*.toml
+          key_path: server.port
+          expected_value: 8080
+
+  value_count:
+    asserts: [count, absent]
+    formats: [toml]
+    features: [archive_dst, glob_dst, key_path, count_comparison, negative, regex_tag, placeholder, timestamp_tag]
+    unsupported:
+      encoding: There is no ``encoding`` parameter; TOML is always UTF-8.
+    not_for:
+      - goal: what one value is
+        use: toml.value_matches
+    outcomes:
+      passed: the number of values at ``key_path`` (only those matching ``expected_value``, if given) satisfies ``comparison_type``
+      failed: the file was read and the count comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is not valid TOML (syntax error, duplicate key, impossible date or time, bytes that are not UTF-8)
+        - a negative or non-integer ``expected_count``; an unknown ``comparison_type``
+        - an invalid regex or unknown placeholder
+    limits:
+      - Without ``expected_value`` every selected value counts once (an array is one value, ``items[*]`` counts its entries).
+      - With ``expected_value`` a path that selects exactly one array counts its matching elements.
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: A key or value is absent
+        text: '``expected_count: 0``.'
+      - title: How many entries an array holds
+        text: Arrays of tables such as accounts or profiles.
+    examples:
+      - title: two entries
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: items[*]
+          expected_count: 2
+      - title: one archived entry
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: items[*].tag
+          expected_value: archived
+          expected_count: 1
+      - title: a key was removed
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: server.user
+          expected_count: 0
+      - title: a negative expected_count is an error
+        expect: error
+        files:
+          /home/user/.config/app/settings.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.toml
+          key_path: items[*]
+          expected_count: -1
+
+  values_compare:
+    asserts: [order, compare]
+    formats: [toml]
+    features: [archive_dst, glob_dst, key_path, ordered_comparison, value_decode, other_dst]
+    unsupported:
+      encoding: There is no ``encoding`` parameter; TOML is always UTF-8.
+    not_for:
+      - goal: one value against a constant
+        use: toml.value_matches
+      - goal: two text values are equal
+        use: toml.value_matches
+    outcomes:
+      passed: '``first <comparison_type> second + offset`` holds'
+      failed: the file was read and a side selects nothing, or the comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is not valid TOML
+        - a side selects several values
+        - a value that is no number or timestamp, or a number compared with a timestamp
+        - invalid parameters (``comparison_type``, ``value_type``, ``tolerance`` with an order comparison, ``timestamp_epoch``, ...)
+    limits:
+      - Each side must select exactly one value (a one-element array counts as its element).
+      - Numbers and times only; two text values cannot be compared.
+      - A local date-time (no zone) is read in ``utc_offset`` (default UTC).
+    choices:
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A is earlier than B
+        text: A last-saved value later than the first-opened one, an end after a start (``comparison_type`` ``less`` / ``greater``).
+      - title: A within a few seconds of B
+        text: 'Two timestamps written by one action (``tolerance: 5``).'
+      - title: A = B + n
+        text: 'A counter one above another (``offset: 1``), or a time a fixed interval after another (``offset`` in seconds).'
+    examples:
+      - title: a counter not above another
+        files:
+          /home/user/.config/app/state.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/state.toml
+          key_path: counters.opened
+          other_key_path: counters.saved
+          comparison_type: less_equal
+      - title: closed half an hour after opened
+        files:
+          /home/user/.config/app/state.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/state.toml
+          key_path: session.closed
+          other_key_path: session.opened
+          offset: 1800
+      - title: a local date-time in a time zone
+        text: 11:00 local at ``+01:00`` is 10:00 UTC, the time ``session.opened`` holds.
+        files:
+          /home/user/.config/app/state.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/state.toml
+          key_path: session.local
+          other_key_path: session.opened
+          utc_offset: '+01:00'
+      - title: the comparison does not hold
+        expect: failed
+        files:
+          /home/user/.config/app/state.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/state.toml
+          key_path: session.opened
+          other_key_path: session.closed
+          comparison_type: greater
+      - title: a side with several values is an error
+        expect: error
+        files:
+          /home/user/.config/app/state.toml: *settings
+        parameter:
+          dst: /home/user/.config/app/state.toml
+          key_path: items[*].name
+          other_key_path: counters.saved

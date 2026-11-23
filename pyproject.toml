@@ -1,6 +1,6 @@
 [project]
 name = "adaredepend"
-version = "0.1.1"
+version = "0.1.2"
 description = "ADARE workspace root: host client, guest agent, shared library and CV server"
 authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
 license = "MIT"
@@ -143,8 +143,9 @@ extend-exclude = ["paper", "docsrc/build"]
 "adarelib/**/*.py" = "py310"
 "adare/appdata/testfunctions/**/*.py" = "py310"
 "examples/testfunctions/**/*.py" = "py310"
-# Their tests also run on 3.10 (`make test-testfunctions-guest`).
+# Their tests also run on 3.10 (`make test-testfunctions-guest`, `make test-adarelib-guest`).
 "adare/tests/unit/testfunctions/**/*.py" = "py310"
+"adare/tests/unit/adarelib/**/*.py" = "py310"
 
 [tool.ruff.format]
 # The codebase mixes quote styles; preserving them halves the reformat churn.

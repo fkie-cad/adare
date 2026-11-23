@@ -1,0 +1,407 @@
+# Contract of the image collection: what each function can and cannot do, and runnable
+# examples. Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run
+# in the unit suite (test_contract_examples.py); `adare test info image.<name>` shows all of it.
+
+collection:
+  title: Image
+  summary: >-
+    Metadata stored in image files: PNG text chunks (``tEXt``, ``zTXt``, ``iTXt``), EXIF tags
+    (IFD0, Exif IFD, GPS IFD of JPEG, PNG ``eXIf``, TIFF, WebP) and pixel dimensions. PNG chunks
+    are read by a strict chunk walker that verifies every CRC and keeps duplicate keywords; EXIF
+    values are compared by a fixed text form. Absence is a count function with
+    ``expected_count: 0``; a missing or corrupt file is an error, never a pass.
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  png: &png
+    png:
+      size: [64, 32]
+      text: {Software: app 1.2, Comment: exported by app, Creation Time: '2026-01-01T10:00:00+00:00'}
+  jpeg: &jpeg
+    jpeg:
+      size: [64, 32]
+      exif: {Make: ExampleCam, Model: Model 7, DateTimeOriginal: '2026:01:01 10:00:00', XResolution: 72, Software: Editor 3}
+
+functions:
+  png_text_matches:
+    asserts: [exists, value]
+    formats: [image]
+    features: [archive_dst, glob_dst, regex_tag, placeholder, timestamp_tag, wildcard_mode]
+    not_for:
+      - goal: a keyword is absent, or how many chunks have it
+        use: image.png_text_count
+      - goal: EXIF tags of a photo
+        use: image.exif_value_matches
+    outcomes:
+      passed: 'a text chunk with ``keyword`` exists and (with ``expected_value``) its text matches; with ``wildcard_mode: all`` every such chunk''s text'
+      failed: the PNG was read and has no chunk with ``keyword`` (the details list the keywords found), or no such chunk's text matches
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one; the file is over the read cap
+        - not a well-formed PNG (signature, truncated chunk, CRC mismatch in any chunk, malformed or undecompressable text chunk, no ``IEND``)
+        - an invalid regex or unknown placeholder; a ``wildcard_mode`` other than ``any`` / ``all``
+    limits:
+      - Keywords compare exactly (case-sensitive); all chunks up to ``IEND`` are read, also those after the image data.
+      - '``tEXt`` is Latin-1, ``zTXt`` zlib + Latin-1, ``iTXt`` UTF-8 (compressed or not; its language tag and translated keyword are ignored).'
+      - A YAML number or boolean in ``expected_value`` is compared as its text (``3``, ``true``).
+      - A decompressed text chunk over 16 MiB is an error.
+    choices:
+      wildcard_mode: [any, all]
+    use_cases:
+      - title: Metadata an application embeds in saved images
+        text: Software, source, comment or creation time written on export.
+    examples:
+      - title: comment written on export
+        files:
+          /home/user/Pictures/photo.png: *png
+        parameter:
+          dst: /home/user/Pictures/photo.png
+          keyword: Comment
+          expected_value: exported by app
+      - title: a keyword exists
+        files:
+          /home/user/Pictures/photo.png: *png
+        parameter:
+          dst: /home/user/Pictures/photo.png
+          keyword: Software
+      - title: every comment by pattern
+        files:
+          /home/user/Pictures/photo.png: *png
+        parameter:
+          dst: /home/user/Pictures/photo.png
+          keyword: Comment
+          expected_value: 'by app$'
+          regex_match: true
+          wildcard_mode: all
+      - title: a missing keyword fails
+        text: To assert absence use image.png_text_count with ``expected_count`` 0, which passes.
+        expect: failed
+        files:
+          /home/user/Pictures/photo.png: *png
+        parameter:
+          dst: /home/user/Pictures/photo.png
+          keyword: Source
+      - title: keywords are case-sensitive
+        expect: failed
+        files:
+          /home/user/Pictures/photo.png: *png
+        parameter:
+          dst: /home/user/Pictures/photo.png
+          keyword: comment
+      - title: a file that is not a PNG is an error
+        expect: error
+        files:
+          /home/user/Pictures/photo.png:
+            text: not an image
+        parameter:
+          dst: /home/user/Pictures/photo.png
+          keyword: Comment
+      - title: creation time between two saved timestamps
+        files:
+          /home/user/Pictures/photo.png: *png
+        parameter:
+          dst: /home/user/Pictures/photo.png
+          keyword: Creation Time
+          expected_value: !timestamp {after: '{{before_export}}', before: '{{after_export}}'}
+
+  png_text_count:
+    asserts: [count, absent]
+    formats: [image]
+    features: [archive_dst, glob_dst, count_comparison, negative, regex_tag, placeholder, timestamp_tag]
+    not_for:
+      - goal: the text of a chunk
+        use: image.png_text_matches
+      - goal: EXIF tags of a photo
+        use: image.exif_value_count
+    outcomes:
+      passed: the number of chunks with ``keyword`` (whose text matches ``expected_value``, if given) satisfies ``comparison_type``
+      failed: the PNG was read and the count comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one; the file is over the read cap
+        - not a well-formed PNG (signature, truncated chunk, CRC mismatch, malformed text chunk, no ``IEND``)
+        - a negative or non-integer ``expected_count``; an unknown ``comparison_type``; an invalid regex or unknown placeholder
+    limits:
+      - '``tEXt``, ``zTXt`` and ``iTXt`` chunks with ``keyword`` are counted together, also those after the image data.'
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: Metadata was stripped
+        text: '``expected_count: 0`` on a keyword after an export that removes metadata.'
+      - title: A keyword is written once
+        text: No duplicate text chunks after a re-save.
+    examples:
+      - title: no source chunk
+        files:
+          /home/user/Pictures/photo.png: *png
+        parameter:
+          dst: /home/user/Pictures/photo.png
+          keyword: Source
+          expected_count: 0
+      - title: one software chunk of this version
+        files:
+          /home/user/Pictures/photo.png: *png
+        parameter:
+          dst: /home/user/Pictures/photo.png
+          keyword: Software
+          expected_value: '^app 1\.'
+          regex_match: true
+          expected_count: 1
+      - title: a comment still present fails a strip check
+        expect: failed
+        files:
+          /home/user/Pictures/photo.png: *png
+        parameter:
+          dst: /home/user/Pictures/photo.png
+          keyword: Comment
+          expected_count: 0
+      - title: a missing file is an error, not an absence
+        expect: error
+        files:
+          /home/user/Pictures/photo.png: *png
+        parameter:
+          dst: /home/user/Pictures/other.png
+          keyword: Comment
+          expected_count: 0
+
+  exif_value_matches:
+    asserts: [exists, value, order]
+    formats: [image]
+    features: [archive_dst, glob_dst, ordered_comparison, regex_tag, placeholder, timestamp_tag, wildcard_mode]
+    not_for:
+      - goal: a tag is absent or was stripped
+        use: image.exif_value_count
+      - goal: text chunks of a PNG
+        use: image.png_text_matches
+      - goal: the width or height of an image
+        use: image.dimensions_match
+    outcomes:
+      passed: 'an occurrence of ``tag`` matches ``expected_value`` (``wildcard_mode: all``: every occurrence)'
+      failed: the image was read and ``tag`` is missing, or no occurrence matches (the details list the values)
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - not an image, or corrupt EXIF data
+        - an unknown tag name or a tag number out of range
+        - an invalid regex or unknown placeholder; a ``wildcard_mode`` other than ``any`` / ``all``
+        - in ordered mode, a value or ``expected_value`` that is no number or timestamp, or a ``!re`` or ``regex_match`` with it, text around a ``{{ name }}`` or a saved variable that is no number or time
+    limits:
+      - 'Values compare by text form: text as stored without trailing NULs; integers in decimal; rationals and floats as decimals (``72``, ``2.8``, ``0.004``; ``nan`` for x/0); sequences joined with ``", "`` (GPS ``51, 30, 12.5``); bytes as text when printable UTF-8, else lowercase hex.'
+      - 'The user comment (0x9286) is compared without its 8-byte charset prefix; the UTF-16 title/comment/author/keywords/subject tags (0x9C9B-0x9C9F) decoded.'
+      - A YAML number in ``expected_value`` is formatted the same way; write a sequence as text (``51, 30, 12.5``).
+      - 'Main-table names are looked up in IFD0 and the Exif IFD, GPS names in the GPS IFD, numbers in all three.'
+      - 'EXIF dates (``2026:01:01 10:00:00``) need ``time_format: ''%Y:%m:%d %H:%M:%S''`` in ordered mode (without it they are an error). In a ``!timestamp`` tag the ``YYYY:MM:DD HH:MM:SS`` form is recognised without ``format`` (also with subseconds or a zone, ``2026:01:01 10:00:00.5``, ``2026:01:01 10:00:00+02:00``) and read with its real date; an invalid colon date (``2026:13:45 10:00:00``) is a failed comparison or an error, never a silent date of today. ``format`` stays useful for another layout.'
+      - EXIF dates have no zone; ordered mode reads them as UTC unless ``utc_offset`` is set.
+    choices:
+      wildcard_mode: [any, all]
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: Camera and software metadata
+        text: Make, model or software written into a photo by a device or an editor.
+      - title: Capture time
+        text: '``DateTimeOriginal`` after a point in time, with ``comparison_type`` and ``time_format``.'
+      - title: Location data
+        text: '``GPSLatitude`` / ``GPSLongitude`` as degrees, minutes, seconds (``51, 30, 12.5``).'
+    examples:
+      - title: camera make
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: Make
+          expected_value: ExampleCam
+      - title: a tag by number
+        text: 0x0110 is ``Model``.
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: '0x0110'
+          expected_value: Model 7
+      - title: a rational as a number
+        text: The resolution 72/1 reads as ``72``; a YAML number is formatted the same way.
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: XResolution
+          expected_value: 72
+      - title: captured after a point in time
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: DateTimeOriginal
+          expected_value: '2025:12:31 00:00:00'
+          comparison_type: greater
+          time_format: '%Y:%m:%d %H:%M:%S'
+      - title: an EXIF date without time_format is an error in ordered mode
+        expect: error
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: DateTimeOriginal
+          expected_value: '2025:12:31 00:00:00'
+          comparison_type: greater
+      - title: software by pattern
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: Software
+          expected_value: '^Editor '
+          regex_match: true
+          wildcard_mode: all
+      - title: a missing tag fails
+        text: To assert absence use image.exif_value_count with ``expected_count`` 0, which passes.
+        expect: failed
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: Artist
+          expected_value: analyst
+      - title: an unknown tag name is an error
+        expect: error
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: CameraMaker
+          expected_value: ExampleCam
+      - title: capture time near a saved timestamp
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: DateTimeOriginal
+          expected_value: !timestamp {timestamp: '{{photo_taken}}', tolerance: 60, format: '%Y:%m:%d %H:%M:%S'}
+
+  exif_value_count:
+    asserts: [count, absent]
+    formats: [image]
+    features: [archive_dst, glob_dst, count_comparison, negative, regex_tag, placeholder, timestamp_tag]
+    not_for:
+      - goal: the value of a tag
+        use: image.exif_value_matches
+      - goal: text chunks of a PNG
+        use: image.png_text_count
+    outcomes:
+      passed: the number of occurrences of ``tag`` (whose value matches ``expected_value``, if given) satisfies ``comparison_type``
+      failed: the image was read and the count comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - not an image, or corrupt EXIF data
+        - an unknown tag name or a tag number out of range
+        - a negative or non-integer ``expected_count``; an unknown ``comparison_type``; an invalid regex or unknown placeholder
+    limits:
+      - Each IFD that has the tag counts once; a number is looked up in all three IFDs.
+      - Values compare by the text form of image.exif_value_matches; there is no ordered comparison.
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: Photo metadata was stripped
+        text: '``expected_count: 0`` on a GPS or camera tag after an export that removes metadata.'
+    examples:
+      - title: no location in the photo
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: GPSLatitude
+          expected_count: 0
+      - title: the camera make once
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: Make
+          expected_value: ExampleCam
+          expected_count: 1
+      - title: a make still present fails a strip check
+        expect: failed
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: Make
+          expected_count: 0
+      - title: an image without EXIF has no tags
+        files:
+          /home/user/Pictures/photo.png: *png
+        parameter:
+          dst: /home/user/Pictures/photo.png
+          tag: Make
+          expected_count: 0
+      - title: a file that is not an image is an error
+        expect: error
+        files:
+          /home/user/Pictures/photo.jpg:
+            text: not an image
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          tag: GPSLatitude
+          expected_count: 0
+
+  dimensions_match:
+    asserts: [value]
+    formats: [image]
+    features: [archive_dst, glob_dst]
+    not_for:
+      - goal: the file size in bytes
+        use: standard.file_size
+      - goal: metadata of the image
+        use: image.exif_value_matches
+    outcomes:
+      passed: the given dimensions match
+      failed: the image was read and a dimension differs (the details show the actual size)
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - not an image Pillow can read
+        - neither ``width`` nor ``height`` given, or one that is not a positive integer
+    limits:
+      - Only the given dimensions are checked; the size is read without decoding the pixel data.
+    use_cases:
+      - title: A screenshot or export was written
+        text: The saved image has the size of the screen or the chosen export size.
+      - title: A thumbnail was created
+        text: Cached thumbnails have a fixed size.
+    examples:
+      - title: thumbnail size
+        files:
+          /home/user/.cache/thumbnails/normal/a.png:
+            png: {size: [128, 128]}
+        parameter:
+          dst: /home/user/.cache/thumbnails/normal/a.png
+          width: 128
+          height: 128
+      - title: width only
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          width: 64
+      - title: another size fails
+        expect: failed
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg
+          width: 64
+          height: 64
+      - title: an image inside an archive
+        files:
+          /home/user/Documents/report.zip:
+            zip:
+              media/image1.png: *png
+        parameter:
+          dst: /home/user/Documents/report.zip!/media/image1.png
+          width: 64
+          height: 32
+      - title: no dimension given is an error
+        expect: error
+        files:
+          /home/user/Pictures/photo.jpg: *jpeg
+        parameter:
+          dst: /home/user/Pictures/photo.jpg

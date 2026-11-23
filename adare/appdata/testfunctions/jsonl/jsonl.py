@@ -1,7 +1,6 @@
 # external imports
 from pathlib import Path
 import json
-import re
 import os
 from typing import Optional
 
@@ -9,7 +8,12 @@ from typing import Optional
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
-from adarelib.testset.compare import compare_with_single_placeholder, get_nested_value
+from adarelib.testset.compare import get_nested_value, regex_expected_problem
+from adarelib.testset.content import open_text
+from adarelib.testset.structured import compare_count, compare_value, count_parameter_errors
+from adarelib.testset.ordering import OrderingError
+from adarelib.testset.valuecompare import ordered_setup
+from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, decoder_setup
 
 # configure logging
 import logging
@@ -17,49 +21,67 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def _compare_values(test_instance, actual_value, expected_value, regex_match=False):
-    """Compare values using placeholder system from BasicTest"""
+def _compare_values(test_instance, actual_value, expected_value, regex_match=False, ordered=None):
+    """Compare one value like structured.compare_value; with ``regex_match`` the value ``"*"`` means "key exists".
 
-    # Check for YamlRegexString objects (!re syntax)
-    try:
-        from adarelib.testset.yaml.customtags import YamlRegexString
+    ``ordered`` (an ordered comparison, see adarelib.testset.valuecompare) replaces both.
+    """
+    if ordered is not None:
+        return ordered.compare(actual_value, expected_value)
+    if regex_match and expected_value == "*":
+        return True, f'field exists with value "{actual_value}"'
+    return compare_value(test_instance, actual_value, expected_value, regex_match=regex_match)
 
-        if isinstance(expected_value, YamlRegexString):
-            try:
-                pattern = re.compile(expected_value.string)
-                if pattern.match(str(actual_value)):
-                    return True, f'value "{actual_value}" matches regex "{expected_value.string}"'
-                return False, f'value "{actual_value}" does not match regex "{expected_value.string}"'
-            except re.error as e:
-                return False, f'Invalid regex pattern: {expected_value.string} - {e}'
-    except ImportError:
-        pass
 
-    expected_str = str(expected_value)
+def _unmet_conditions(ctx, data, conditions: dict, regex_match: bool, first_only: bool = False) -> list[str]:
+    """The ``conditions`` the parsed JSONL record ``data`` does not meet (empty: it meets them all).
 
-    if not test_instance.has_placeholders(expected_str):
-        # No placeholders - check for regex_match flag
-        if regex_match and isinstance(expected_value, str):
-            # Special case: "*" means "field exists" (any value)
-            if expected_value == "*":
-                return True, f'field exists with value "{actual_value}"'
-
-            # Regex matching
-            try:
-                pattern = re.compile(expected_value)
-                if pattern.search(str(actual_value)):
-                    return True, f'value "{actual_value}" matches regex "{expected_value}"'
-                return False, f'value "{actual_value}" does not match regex "{expected_value}"'
-            except re.error as e:
-                return False, f'Invalid regex pattern: {expected_value} - {e}'
+    A multi-value path (wildcard or JSON array) needs one matching element. ``first_only``
+    stops at the first unmet condition, once the record's verdict is known.
+    """
+    unmet = []
+    for key_path, expected_value in conditions.items():
+        value, exists = get_nested_value(data, key_path)
+        if not exists:
+            unmet.append(f"{key_path} (not found)")
+        elif isinstance(value, list):
+            if not any(_compare_values(ctx, v, expected_value, regex_match)[0] for v in value):
+                unmet.append(f"{key_path} (no wildcard matches)")
         else:
-            # Direct value comparison
-            if actual_value == expected_value:
-                return True, f'value matches expected: {actual_value}'
-            return False, f'expected "{expected_value}", got "{actual_value}"'
-    else:
-        # Has placeholders - use placeholder system
-        return compare_with_single_placeholder(test_instance, expected_str, str(actual_value))
+            is_match, msg = _compare_values(ctx, value, expected_value, regex_match)
+            if not is_match:
+                unmet.append(f"{key_path} ({msg})")
+        if unmet and first_only:
+            break
+    return unmet
+
+
+def _decoded(decoder, value):
+    """``value`` decoded by ``value_decode`` (unchanged without a decoder).
+
+    :raises DecodedKeyPathMissing: ``decoded_key_path`` selects nothing in the decoded value
+    """
+    return value if decoder is None else decoder(value)
+
+
+def _count_range(expected_count) -> tuple[int, float] | None:
+    """``(min, max)`` of a ``{min, max}`` expected_count, or None when it is not a valid range."""
+    if not isinstance(expected_count, dict) or not expected_count or set(expected_count) - {'min', 'max'}:
+        return None
+    bounds = [expected_count.get('min', 0), expected_count.get('max', 0)]
+    if any(isinstance(b, bool) or not isinstance(b, int) or b < 0 for b in bounds):
+        return None
+    low, high = expected_count.get('min', 0), expected_count.get('max', float('inf'))
+    return (low, high) if low <= high else None
+
+
+_ENCODING_ERRORS = (LookupError, UnicodeDecodeError)
+
+
+def _encoding_error(e: Exception, dst: str, encoding: str | None) -> TestResult:
+    if isinstance(e, UnicodeDecodeError):
+        return TestResult.execution_error(e, f'Cannot decode JSONL file {dst} as {encoding or "UTF-8/UTF-16"}')
+    return TestResult.error([f'unknown encoding {encoding!r}: {e}'])
 
 
 @testfunction(
@@ -71,9 +93,10 @@ def line_matches(
     ctx: TestContext,
     dst: str = '',
     conditions: dict[str, str | int | float | bool | None] = None,
-    match_mode: str = "any",
+    wildcard_mode: str = "any",
     regex_match: bool = False,
     skip_malformed: bool = True,
+    encoding: str | None = None,
 ):
     """Pass when one line (``any``) or every valid line (``all``) of JSONL file ``dst`` meets all ``conditions``.
 
@@ -82,17 +105,21 @@ def line_matches(
 
     Args:
         dst: Guest path to the JSONL file (one JSON document per line; blank lines are
-            skipped). A glob must match exactly one path; a missing or 0-byte file fails.
+            skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails.
         conditions: Required mapping ``key_path -> expected value``; a line matches when every
             condition holds. If a path yields several values (wildcard or JSON array), one
             matching element suffices. Missing keys fail the line.
-        match_mode: ``any`` (default) or ``all`` (every valid line must match; no valid lines
-            fails). Other values are an execution error.
+        wildcard_mode: ``any`` (default) or ``all`` (every valid line must match; no valid lines
+            fails). Other values are an error.
         regex_match: Treat string expected values as regexes searched (``re.search``) in
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
+            An invalid regex is an error even when no line has the key.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
-            fails on the first malformed line.
+            makes the first malformed line an error.
+        encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
+            reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable
+            content are an error.
 
     Example:
         function: jsonl.line_matches
@@ -105,15 +132,22 @@ def line_matches(
     dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
-        return TestResult.failed([f'JSONL file {dst_param} not found ({status})'])
+        return TestResult.error([f'JSONL file {dst_param} not found ({status})'])
 
     log.debug(f'dst file {dst} will be used for test line_matches')
 
-    match_mode = match_mode or "any"
+    wildcard_mode = wildcard_mode or "any"
     regex_match = regex_match or False
 
-    if match_mode not in ['any', 'all']:
-        return TestResult.execution_error(None, f"Invalid match_mode: {match_mode}. Must be 'any' or 'all'")
+    if wildcard_mode not in ['any', 'all']:
+        return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
+    if not isinstance(conditions, dict) or not conditions:
+        return TestResult.error(
+            [f'conditions must be a non-empty mapping key_path -> expected value, got {conditions!r}']
+        )
+    problem = regex_expected_problem(ctx, conditions.values(), regex_match)
+    if problem is not None:
+        return problem
 
     try:
         # Check if file is empty (edge case handling)
@@ -124,7 +158,7 @@ def line_matches(
         malformed_lines = []
         line_num = 0
 
-        with open(dst) as f:
+        with open_text(dst, encoding) as f:
             for line in f:
                 line_num += 1
                 line = line.strip()
@@ -139,43 +173,13 @@ def line_matches(
                 except json.JSONDecodeError as e:
                     malformed_lines.append((line_num, line[:100]))
                     if not skip_malformed:
-                        return TestResult.failed(
-                            [f'Malformed JSON on line {line_num}: {e}', f'Line content: {line[:200]}']
+                        return TestResult.execution_error(
+                            e, f'Malformed JSON on line {line_num} (content: {line[:200]})'
                         )
                     continue
 
-                # Check all conditions for this line
-                all_conditions_met = True
-                failed_conditions = []
-
-                for key_path, expected_value in conditions.items():
-                    value, exists = get_nested_value(data, key_path)
-
-                    if not exists:
-                        all_conditions_met = False
-                        failed_conditions.append(f"{key_path} (not found)")
-                        continue
-
-                    # Handle multiple values from wildcards
-                    if isinstance(value, list):
-                        # Check if any value matches (for wildcards)
-                        any_match = False
-                        for v in value:
-                            is_match, msg = _compare_values(ctx, v, expected_value, regex_match)
-                            if is_match:
-                                any_match = True
-                                break
-                        if not any_match:
-                            all_conditions_met = False
-                            failed_conditions.append(f"{key_path} (no wildcard matches)")
-                    else:
-                        # Single value comparison
-                        is_match, msg = _compare_values(ctx, value, expected_value, regex_match)
-                        if not is_match:
-                            all_conditions_met = False
-                            failed_conditions.append(f"{key_path} ({msg})")
-
-                if all_conditions_met:
+                failed_conditions = _unmet_conditions(ctx, data, conditions, regex_match)
+                if not failed_conditions:
                     matching_lines.append((line_num, data))
                 else:
                     non_matching_lines.append((line_num, data, failed_conditions))
@@ -184,8 +188,8 @@ def line_matches(
         if malformed_lines:
             log.warning(f"Skipped {len(malformed_lines)} malformed JSON lines in {dst}")
 
-        # Determine success based on match_mode
-        if match_mode == "any":
+        # Determine success based on wildcard_mode
+        if wildcard_mode == "any":
             if matching_lines:
                 messages = [
                     f'Found {len(matching_lines)} matching line(s) out of {line_num} total lines (mode: any)',
@@ -204,7 +208,7 @@ def line_matches(
                 for ln, _data, failed in non_matching_lines[:3]:
                     messages.append(f'  Line {ln}: failed {failed}')
             return TestResult.failed(messages)
-        # match_mode == "all"
+        # wildcard_mode == "all"
         total_valid_lines = len(matching_lines) + len(non_matching_lines)
         if total_valid_lines == 0:
             return TestResult.failed(['No valid JSON lines found in file'])
@@ -224,7 +228,9 @@ def line_matches(
         return TestResult.failed(messages)
 
     except FileNotFoundError:
-        return TestResult.failed([f'JSONL file {dst} does not exist'])
+        return TestResult.error([f'JSONL file {dst} does not exist'])
+    except _ENCODING_ERRORS as e:
+        return _encoding_error(e, dst, encoding)
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSONL file {dst}")
 
@@ -241,23 +247,37 @@ def line_count(
     expected_count: int | dict[str, int] | None = None,
     regex_match: bool = False,
     skip_malformed: bool = True,
+    comparison_type: str = 'equals',
+    encoding: str | None = None,
 ):
     """Pass when the number of JSONL lines meeting all ``conditions`` is within ``expected_count``.
 
-    Use for: asserting how many records/events were written (e.g. exactly 3 deletions).
+    Use for: asserting how many records/events were written (e.g. exactly 3 deletions);
+    absence: ``expected_count: 0``. For CSV records use csv.row_count, for lines of a plain
+    text file text.line_count.
 
     Args:
         dst: Guest path to the JSONL file (one JSON document per line; blank lines are
-            skipped). A glob must match exactly one path; a missing or 0-byte file fails.
+            skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file
+            has 0 lines (passes ``expected_count: 0``).
         conditions: Mapping ``key_path -> expected value`` (all must hold; for multi-value
             paths one matching element suffices). ``None``/empty counts every valid JSON line.
-        expected_count: ``int`` for an exact count, ``{min: N, max: M}`` for a range (either
-            bound optional: min defaults to 0, max to unbounded), or ``None`` for "at least 1".
+        expected_count: Non-negative ``int`` compared with ``comparison_type``, ``{min: N, max: M}``
+            for a range (either bound optional: min defaults to 0, max to unbounded), or ``None``
+            for "at least 1". Anything else (a negative number, a boolean, other keys,
+            min > max) is an error.
         regex_match: Treat string expected values as regexes searched (``re.search``) in
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
+            An invalid regex is an error even when no line has the key.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
-            fails on the first malformed line.
+            makes the first malformed line an error.
+        encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
+            reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable
+            content are an error.
+        comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
+            ``less_equal``, applied to an ``int`` ``expected_count``. With the range form or
+            ``None`` only ``equals`` is allowed; other values are an error.
 
     Example:
         function: jsonl.line_count
@@ -266,40 +286,54 @@ def line_count(
           conditions: {event: file_deleted}
           expected_count: {min: 1, max: 5}
     """
+    if isinstance(expected_count, int) and not isinstance(expected_count, bool):
+        problems = count_parameter_errors(expected_count, comparison_type)
+    elif expected_count is not None and _count_range(expected_count) is None:
+        problems = [
+            f'expected_count must be a non-negative integer, {{min: N, max: M}} (only these keys, '
+            f'non-negative integers, min <= max) or None; got {expected_count!r}'
+        ]
+    elif comparison_type != 'equals':
+        problems = [
+            f'comparison_type {comparison_type!r} needs an integer expected_count; '
+            f'with {expected_count!r} only equals is allowed'
+        ]
+    else:
+        problems = []
+    if problems:
+        return TestResult.error(problems)
+
     dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
-        return TestResult.failed([f'JSONL file {dst_param} not found ({status})'])
+        return TestResult.error([f'JSONL file {dst_param} not found ({status})'])
 
     log.debug(f'dst file {dst} will be used for test line_count')
 
     regex_match = regex_match or False
+    problem = regex_expected_problem(ctx, conditions.values() if isinstance(conditions, dict) else (), regex_match)
+    if problem is not None:
+        return problem
 
     # Parse expected_count
     if expected_count is None:
         # No expected_count specified - require at least 1 match
         min_count = 1
         max_count = float('inf')
-    elif isinstance(expected_count, int):
+    elif isinstance(expected_count, int) and not isinstance(expected_count, bool):
         min_count = expected_count
         max_count = expected_count
-    elif isinstance(expected_count, dict):
-        min_count = expected_count.get('min', 0)
-        max_count = expected_count.get('max', float('inf'))
     else:
-        return TestResult.execution_error(
-            None, "expected_count must be int, dict with 'min'/'max', or None (at least 1)"
-        )
+        min_count, max_count = _count_range(expected_count)
 
     try:
-        # Check if file is empty (edge case handling)
-        if os.path.getsize(dst) == 0:
-            return TestResult.failed(['JSONL file is empty (0 bytes)'])
+        # A 0-byte file is read like any other: it has 0 matching lines, which passes
+        # expected_count 0 (or {max: 0}) and fails everything else.
         matching_count = 0
         total_lines = 0
         malformed_count = 0
 
-        with open(dst) as f:
+        with open_text(dst, encoding) as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
 
@@ -315,8 +349,8 @@ def line_count(
                 except json.JSONDecodeError as e:
                     malformed_count += 1
                     if not skip_malformed:
-                        return TestResult.failed(
-                            [f'Malformed JSON on line {line_num}: {e}', f'Line content: {line[:200]}']
+                        return TestResult.execution_error(
+                            e, f'Malformed JSON on line {line_num} (content: {line[:200]})'
                         )
                     continue
 
@@ -325,39 +359,20 @@ def line_count(
                     matching_count += 1
                     continue
 
-                # Check all conditions for this line
-                all_conditions_met = True
-
-                for key_path, expected_value in conditions.items():
-                    value, exists = get_nested_value(data, key_path)
-
-                    if not exists:
-                        all_conditions_met = False
-                        break
-
-                    # Handle multiple values from wildcards
-                    if isinstance(value, list):
-                        any_match = False
-                        for v in value:
-                            is_match, msg = _compare_values(ctx, v, expected_value, regex_match)
-                            if is_match:
-                                any_match = True
-                                break
-                        if not any_match:
-                            all_conditions_met = False
-                            break
-                    else:
-                        is_match, msg = _compare_values(ctx, value, expected_value, regex_match)
-                        if not is_match:
-                            all_conditions_met = False
-                            break
-
-                if all_conditions_met:
+                if not _unmet_conditions(ctx, data, conditions, regex_match, first_only=True):
                     matching_count += 1
 
         # Log malformed lines if any
         if malformed_count > 0:
             log.warning(f"Skipped {malformed_count} malformed JSON lines in {dst}")
+
+        if isinstance(expected_count, int) and comparison_type != 'equals':
+            ok, comparison = compare_count(matching_count, expected_count, comparison_type)
+            messages = [f'Found {matching_count} matching lines', comparison]
+            messages.append(f'Total valid lines: {total_lines - malformed_count}')
+            if conditions:
+                messages.append(f'Conditions: {conditions}')
+            return TestResult.success(messages) if ok else TestResult.failed(messages)
 
         # Check if count is within expected range
         if min_count <= matching_count <= max_count:
@@ -387,7 +402,9 @@ def line_count(
         return TestResult.failed(messages)
 
     except FileNotFoundError:
-        return TestResult.failed([f'JSONL file {dst} does not exist'])
+        return TestResult.error([f'JSONL file {dst} does not exist'])
+    except _ENCODING_ERRORS as e:
+        return _encoding_error(e, dst, encoding)
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSONL file {dst}")
 
@@ -404,36 +421,94 @@ def value_in_any_line(
     expected_value: str | int | float | bool | None = None,
     regex_match: bool = False,
     skip_malformed: bool = True,
+    encoding: str | None = None,
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
+    value_decode: list[str] | str | None = None,
+    decoded_key_path: str | None = None,
 ):
     """Pass when ``key_path`` has a value matching ``expected_value`` in at least one JSONL line.
 
     Use for: a single-field check across a log; for multi-field conditions use jsonl.line_matches.
 
+    With ``comparison_type`` (``greater``, ``less``, ...), ``tolerance`` or the time
+    parameters the value is compared as a number or timestamp.
+
     Args:
         dst: Guest path to the JSONL file (one JSON document per line; blank lines are
-            skipped). A glob must match exactly one path; a missing or 0-byte file fails.
+            skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails.
         key_path: Dot path inside each line's object, e.g. ``event.type``; ``*`` expands
-            object values, ``name[*]`` array elements. No numeric indexes.
+            object values, ``name[*]`` array elements, ``name[n]`` one element (``-1`` = last).
             For multi-value paths one matching element suffices.
         expected_value: Value to find; see ``regex_match`` for how it is compared.
         regex_match: Treat string expected values as regexes searched (``re.search``) in
             ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
             are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
+            An invalid regex is an error even when no line has the key.
         skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
-            fails on the first malformed line.
+            makes the first malformed line an error.
+        encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
+            reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable
+            content are an error.
+        comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
+            ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
+            below, compares the value with ``expected_value`` as a number or point in time
+            (ordered mode; ``less`` = earlier); ``!re`` / ``regex_match`` are then errors, a lone
+            ``{{ name }}`` is the saved variable; a value that is no number or timestamp is an error.
+        value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
+            ``number`` or ``timestamp``.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+        value_decode: Decode the value read from the file before comparing: one step or a
+            list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16``
+            (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes
+            left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
+            unknown step, is an error.
+        decoded_key_path: Key path into the value ``json`` decoded (dot path, numeric indexes allowed);
+            it must select one value: none fails (the value decoded, the key is not in it), several are an error.
+            Required with ``json``, an error without it.
 
     Example:
         function: jsonl.value_in_any_line
         parameter:
-          dst: /home/user/.local/share/app/history.jsonl
-          key_path: url
-          expected_value: example.com
+          dst: /home/user/data/events.jsonl
+          key_path: source
+          expected_value: example
           regex_match: true
     """
+    decoder, problem = decoder_setup(value_decode, decoded_key_path)
+    if problem is not None:
+        return problem
+    ordered, expected_value, problem = ordered_setup(
+        ctx,
+        expected_value,
+        regex_match,
+        comparison_type,
+        value_type,
+        tolerance,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
+    )
+    if problem is not None:
+        return problem
+    if ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match or False)
+        if problem is not None:
+            return problem
     dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
-        return TestResult.failed([f'JSONL file {dst_param} not found ({status})'])
+        return TestResult.error([f'JSONL file {dst_param} not found ({status})'])
 
     log.debug(f'dst file {dst} will be used for test value_in_any_line')
 
@@ -447,8 +522,9 @@ def value_in_any_line(
         total_lines = 0
         malformed_count = 0
         lines_with_key = 0
+        decoded_missing = 0
 
-        with open(dst) as f:
+        with open_text(dst, encoding) as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
 
@@ -464,8 +540,8 @@ def value_in_any_line(
                 except json.JSONDecodeError as e:
                     malformed_count += 1
                     if not skip_malformed:
-                        return TestResult.failed(
-                            [f'Malformed JSON on line {line_num}: {e}', f'Line content: {line[:200]}']
+                        return TestResult.execution_error(
+                            e, f'Malformed JSON on line {line_num} (content: {line[:200]})'
                         )
                     continue
 
@@ -477,17 +553,16 @@ def value_in_any_line(
 
                 lines_with_key += 1
 
-                # Handle multiple values from wildcards
-                if isinstance(value, list):
-                    for v in value:
-                        is_match, msg = _compare_values(ctx, v, expected_value, regex_match)
-                        if is_match:
-                            matching_lines.append((line_num, v, msg))
-                            break  # Only record once per line
-                else:
-                    is_match, msg = _compare_values(ctx, value, expected_value, regex_match)
+                # Handle multiple values from wildcards; a value without the decoded key is no match
+                for v in value if isinstance(value, list) else [value]:
+                    try:
+                        is_match, msg = _compare_values(ctx, _decoded(decoder, v), expected_value, regex_match, ordered)
+                    except DecodedKeyPathMissing:
+                        decoded_missing += 1
+                        continue
                     if is_match:
-                        matching_lines.append((line_num, value, msg))
+                        matching_lines.append((line_num, v, msg))
+                        break  # Only record once per line
 
         # Log malformed lines if any
         if malformed_count > 0:
@@ -508,11 +583,155 @@ def value_in_any_line(
         ]
         if lines_with_key > 0:
             messages.append(f'Found {lines_with_key} lines with key "{key_path}" but none matched the expected value')
+            if decoded_missing:
+                messages.append(f'decoded_key_path {decoded_key_path!r} selected nothing in {decoded_missing} value(s)')
         else:
             messages.append(f'Key path "{key_path}" not found in any line')
         return TestResult.failed(messages)
 
+    except (OrderingError, ValueDecodeError) as e:
+        return TestResult.error([f'line {line_num}: {e}'])
     except FileNotFoundError:
-        return TestResult.failed([f'JSONL file {dst} does not exist'])
+        return TestResult.error([f'JSONL file {dst} does not exist'])
+    except _ENCODING_ERRORS as e:
+        return _encoding_error(e, dst, encoding)
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read JSONL file {dst}")
+
+
+def _order_condition_errors(conditions) -> list[str]:
+    """Problems with the ``conditions`` of lines_in_order (an ERROR, the file is never read)."""
+    if not isinstance(conditions, list) or not conditions:
+        return [f'conditions must be a non-empty list of mappings key_path -> expected value, got {conditions!r}']
+    return [
+        f'condition {i} must be a non-empty mapping with string key paths, got {condition!r}'
+        for i, condition in enumerate(conditions, 1)
+        if not isinstance(condition, dict) or not condition or not all(isinstance(k, str) for k in condition)
+    ]
+
+
+def _read_records(
+    path: str, encoding: str | None, skip_malformed: bool
+) -> tuple[list[tuple[int, object]], TestResult | None]:
+    """``(line number, parsed record)`` of every non-blank line; or an error for a malformed one.
+
+    :raises OSError, LookupError, UnicodeDecodeError: the file cannot be read
+    """
+    records = []
+    malformed = 0
+    with open_text(path, encoding) as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append((line_num, json.loads(line)))
+            except json.JSONDecodeError as e:
+                malformed += 1
+                if not skip_malformed:
+                    return records, TestResult.execution_error(
+                        e, f'Malformed JSON on line {line_num} (content: {line[:200]})'
+                    )
+    if malformed:
+        log.warning(f"Skipped {malformed} malformed JSON lines in {path}")
+    return records, None
+
+
+@testfunction(
+    name='lines_in_order',
+    description='tests that JSONL records meeting each of several condition sets occur in the given order',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def lines_in_order(
+    ctx: TestContext,
+    dst: str,
+    conditions: list,
+    regex_match: bool = False,
+    skip_malformed: bool = True,
+    encoding: str | None = None,
+):
+    """Pass when each of ``conditions`` is met by a JSONL record after the record that met the one before it.
+
+    Use for: the order of events in an event log or NDJSON export (a login, then a
+    download, then a deletion of the same file); records in between are ignored. For one
+    condition set use jsonl.line_matches, for plain text lines text.lines_in_order.
+
+    Each condition set takes the earliest record after the record of the previous one, so
+    two condition sets never match the same record; when that fails, no other choice of
+    records would pass either. A record meets a condition set exactly as in
+    jsonl.line_matches. Details list the matched line numbers (counted from 1, blank lines
+    included); a FAILED result names the first condition set without a later record and,
+    if it is met only before, those earlier line numbers.
+
+    Args:
+        dst: Guest path to the JSONL file (one JSON document per line; blank lines are
+            skipped). A glob must match exactly one path, an archive member
+            (``logs.tar.gz!/events.jsonl``) is read like a file; a missing file is an error.
+        conditions: Non-empty list, in the expected order, of mappings
+            ``key_path -> expected value``; a record meets one when every condition holds.
+            If a path yields several values (wildcard or JSON array), one matching element
+            suffices; missing keys fail the record. An empty list or an entry that is not a
+            non-empty mapping is an error.
+        regex_match: Treat string expected values as regexes searched (``re.search``) in
+            ``str(value)``; the value ``"*"`` then means "key exists". Without it, values
+            are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work.
+            An invalid regex is an error even when no line has the key.
+        skip_malformed: ``True`` (default) ignores lines that are not valid JSON; ``False``
+            makes the first malformed line an error.
+        encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
+            reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable
+            content are an error.
+
+    Example:
+        function: jsonl.lines_in_order
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            - {event: login, user: alice}
+            - {event: file_opened, path: !re '.*report\\.txt$'}
+            - {event: file_deleted}
+    """
+    problems = _order_condition_errors(conditions)
+    if problems:
+        return TestResult.error(problems)
+    problem = regex_expected_problem(
+        ctx, [v for condition in conditions for v in condition.values()], regex_match or False
+    )
+    if problem is not None:
+        return problem
+    dst_param = dst
+    dst, status = ctx.resolve_globfilepath(dst)
+    if not dst:
+        return TestResult.error([f'JSONL file {dst_param} not found ({status})'])
+    try:
+        records, error = _read_records(dst, encoding, skip_malformed)
+    except FileNotFoundError:
+        return TestResult.error([f'JSONL file {dst} does not exist'])
+    except _ENCODING_ERRORS as e:
+        return _encoding_error(e, dst, encoding)
+    except (PermissionError, OSError) as e:
+        return TestResult.execution_error(e, f"Cannot read JSONL file {dst}")
+    if error is not None:
+        return error
+
+    def meets(record, condition) -> bool:
+        return not _unmet_conditions(ctx, record, condition, regex_match or False, first_only=True)
+
+    matched: list[str] = []
+    lines: list[int] = []
+    previous = -1  # index into records of the previous match
+    for number, condition in enumerate(conditions, 1):
+        index = next((i for i in range(previous + 1, len(records)) if meets(records[i][1], condition)), None)
+        if index is None:
+            earlier = [records[i][0] for i in range(previous + 1) if meets(records[i][1], condition)]
+            where = f'after line {records[previous][0]}' if previous >= 0 else 'in the file'
+            message = f'condition {number} {condition} is met by no record {where} ({len(records)} record(s))'
+            if earlier:
+                shown = ', '.join(str(n) for n in earlier[:10]) + (', ...' if len(earlier) > 10 else '')
+                message += f'; it is met only earlier, on line(s) {shown}: out of order'
+            return TestResult.failed([message, *matched])
+        matched.append(f'condition {number} {condition} matched line {records[index][0]}')
+        lines.append(records[index][0])
+        previous = index
+    shown_lines = ', '.join(str(n) for n in lines)
+    return TestResult.success([f'{len(conditions)} condition set(s) met in order on lines {shown_lines}', *matched])

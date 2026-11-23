@@ -7,13 +7,13 @@ import pytest
 import yaml
 
 from adarelib.testset.basictest import BasicTest, Parameter
-from adarelib.testset.timeinterval import check_interval, parse_utc_offset
+from adarelib.testset.timeinterval import check_interval, parse_timestamp_text, parse_utc_offset
 from adarelib.testset.yaml.customloader import get_custom_loader
 from adarelib.testset.yaml.customtags import YamlTimestamp
 
 pytestmark = pytest.mark.unit
 
-UTC = datetime.UTC
+UTC = datetime.timezone.utc
 T0 = datetime.datetime(2026, 10, 24, 12, 0, 0, tzinfo=UTC)
 
 
@@ -111,10 +111,13 @@ class TestBasicTestIntervalComparison:
         ok, msg = _test_with(_interval_metadata()).compare_with_placeholder('ts_resolved', str(T0.timestamp() + 1.5))
         assert ok, msg
 
-    def test_unresolved_bound_fails_clearly(self):
+    def test_unresolved_bound_is_an_error(self):
+        # nothing was compared, so an absence test must not pass on it: PlaceholderError = ERROR
+        from adarelib.testset.basictest import PlaceholderError
+
         metadata = _interval_metadata(interval=['{{ t0 }}', '{{ t1 }}'])
-        ok, msg = _test_with(metadata).compare_with_placeholder('ts_resolved', '2026-10-24T12:00:04Z')
-        assert not ok and 'save_timestamp' in msg
+        with pytest.raises(PlaceholderError, match='save_timestamp'):
+            _test_with(metadata).compare_with_placeholder('ts_resolved', '2026-10-24T12:00:04Z')
 
     def test_local_artifact_read_in_guest_timezone(self):
         # The artifact stores guest local time without an offset (like .trashinfo DeletionDate).
@@ -140,3 +143,64 @@ class TestBasicTestIntervalComparison:
         }
         ok, msg = _test_with(metadata).compare_with_placeholder('ts_resolved', '2026-10-24 21:00:02')
         assert ok, msg
+
+
+class TestExifDateForm:
+    """``2024:01:02 03:04:06`` (EXIF) is read with its real date, never as a time of day today."""
+
+    @pytest.mark.parametrize(
+        ('text', 'expected'),
+        [
+            ('2024:01:02 03:04:06', datetime.datetime(2024, 1, 2, 3, 4, 6)),
+            ('2024:01:02 03:04:06.250', datetime.datetime(2024, 1, 2, 3, 4, 6, 250000)),
+            (
+                '2024:01:02 03:04:06+02:00',
+                datetime.datetime(2024, 1, 2, 3, 4, 6, tzinfo=datetime.timezone(datetime.timedelta(hours=2))),
+            ),
+            ('2024:01:02 03:04:06Z', datetime.datetime(2024, 1, 2, 3, 4, 6, tzinfo=UTC)),
+            ('2024:01:02', datetime.datetime(2024, 1, 2)),
+        ],
+    )
+    def test_exif_form_keeps_its_date(self, text, expected):
+        assert parse_timestamp_text(text) == expected
+
+    @pytest.mark.parametrize('text', ['2024:13:45 03:04:06', '2024:1:2 03:04:06', '2024:01:02 25:00:00'])
+    def test_malformed_colon_date_is_an_error(self, text):
+        with pytest.raises(ValueError, match='EXIF'):
+            parse_timestamp_text(text)
+
+    def test_other_forms_are_unchanged(self):
+        assert parse_timestamp_text('2024-01-02 03:04:06') == datetime.datetime(2024, 1, 2, 3, 4, 6)
+        assert parse_timestamp_text('03:04:06').time() == datetime.time(3, 4, 6)  # a bare time is still a time
+
+    def test_placeholder_without_format_matches_the_real_date(self):
+        metadata = {
+            'type': 'timestamp',
+            'raw_value': '2024-01-02T03:04:06Z',
+            'resolved_value': '2024-01-02T03:04:06Z',
+            'tolerance': [-2, 2],
+        }
+        ok, msg = _test_with(metadata).compare_with_placeholder('ts_resolved', '2024:01:02 03:04:06')
+        assert ok, msg
+
+    def test_placeholder_for_another_date_does_not_match(self):
+        # before the fix the actual became today 03:04:06, so a test written for today passed wrongly
+        today = datetime.datetime.now(UTC).replace(hour=3, minute=4, second=6, microsecond=0).isoformat()
+        metadata = {'type': 'timestamp', 'raw_value': today, 'resolved_value': today, 'tolerance': [-2, 2]}
+        ok, _ = _test_with(metadata).compare_with_placeholder('ts_resolved', '2024:01:02 03:04:06')
+        assert not ok
+
+    def test_malformed_actual_is_not_a_silent_wrong_date(self):
+        metadata = {
+            'type': 'timestamp',
+            'raw_value': '2024-01-02T03:04:06Z',
+            'resolved_value': '2024-01-02T03:04:06Z',
+            'tolerance': [-2, 2],
+        }
+        ok, msg = _test_with(metadata).compare_with_placeholder('ts_resolved', '2024:13:45 03:04:06')
+        assert not ok
+
+    def test_yaml_tag_compare_reads_exif_date(self):
+        tag = YamlTimestamp(timestamp='2024-01-02 03:04:06', tolerance=1)
+        assert tag.compare('2024:01:02 03:04:06').success
+        assert not tag.compare('2024:13:45 03:04:06').success

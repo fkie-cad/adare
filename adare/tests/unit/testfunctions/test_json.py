@@ -14,9 +14,6 @@ ADARELIB_ROOT = PROJECT_ROOT.parent / "adarelib"
 if str(ADARELIB_ROOT) not in sys.path:
     sys.path.insert(0, str(ADARELIB_ROOT))
 
-# Import from adarelib.constants as required
-from adarelib.constants import StatusEnum
-
 # Import testfunctions dynamically
 from adarelib.helper.module import import_module_from_pyfile
 
@@ -116,7 +113,7 @@ class TestContainsKey:
         assert_test_failed(result)
         assert "does not exist" in result.details[0]
 
-    def test_contains_key_failure_malformed_json(self, tmp_path):
+    def test_contains_key_error_malformed_json(self, tmp_path):
         """Test failure with malformed JSON file."""
         json_file = tmp_path / "malformed.json"
         json_file.write_text("{invalid json content")
@@ -126,18 +123,18 @@ class TestContainsKey:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Invalid JSON" in result.details[0]
 
-    def test_contains_key_failure_file_not_found(self, tmp_path):
-        """Test failure when JSON file doesn't exist."""
+    def test_contains_key_error_file_not_found(self, tmp_path):
+        """Test error when JSON file doesn't exist."""
         test = ContainsKey(
             name="test_contains_key",
             parameter=ContainsKeyParameter(dst=str(tmp_path / "nonexistent.json"), key_path="name"),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
 
     def test_contains_key_success_with_null_value(self, create_json_file):
@@ -436,7 +433,7 @@ class TestValueMatches:
         assert_test_failed(result)
         assert "does not exist" in result.details[0]
 
-    def test_value_matches_failure_malformed_json(self, tmp_path):
+    def test_value_matches_error_malformed_json(self, tmp_path):
         """Test failure with malformed JSON file."""
         json_file = tmp_path / "malformed.json"
         json_file.write_text("{invalid: json}")
@@ -447,7 +444,7 @@ class TestValueMatches:
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Invalid JSON" in result.details[0]
 
     def test_value_matches_success_nested_wildcard(self, create_json_file):
@@ -500,12 +497,12 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="names", expected_element="Bob"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="names", expected_value="Bob"),
         )
         result = test.test()
 
         assert_test_success(result)
-        assert "contains expected element" in result.details[0]
+        assert "matches" in result.details[0]
         assert "Bob" in result.details[0]
 
     def test_array_contains_success_number(self, create_json_file):
@@ -514,7 +511,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="scores", expected_element=95),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="scores", expected_value=95),
         )
         result = test.test()
 
@@ -526,7 +523,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="flags", expected_element=False),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="flags", expected_value=False),
         )
         result = test.test()
 
@@ -538,7 +535,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="data.results.values", expected_element=20),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="data.results.values", expected_value=20),
         )
         result = test.test()
 
@@ -551,7 +548,7 @@ class TestArrayContains:
         test = ArrayContains(
             name="test_array_contains",
             parameter=ArrayContainsParameter(
-                dst=str(json_file), array_path="users", expected_element={"name": "Alice", "age": 30}
+                dst=str(json_file), array_path="users", expected_value={"name": "Alice", "age": 30}
             ),
         )
         result = test.test()
@@ -564,7 +561,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="matrix", expected_element=[3, 4]),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="matrix", expected_value=[3, 4]),
         )
         result = test.test()
 
@@ -576,12 +573,12 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="names", expected_element="David"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="names", expected_value="David"),
         )
         result = test.test()
 
         assert_test_failed(result)
-        assert "does not contain" in result.details[0]
+        assert "has no element matching" in result.details[0]
 
     def test_array_contains_failure_not_array(self, create_json_file):
         """Test failure when path points to non-array value."""
@@ -589,7 +586,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="name", expected_element="Alice"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="name", expected_value="Alice"),
         )
         result = test.test()
 
@@ -602,7 +599,7 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="values", expected_element="test"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="values", expected_value="test"),
         )
         result = test.test()
 
@@ -615,13 +612,13 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="results", expected_element="{{VAR1}}"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="results", expected_value="{{VAR1}}"),
             variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
         assert_test_success(result)
-        assert "matches placeholder" in result.details[0]
+        assert "matches" in result.details[0]
 
     def test_array_contains_failure_placeholder_mismatch(self, create_json_file, variable_metadata_simple):
         """Test failure when placeholder doesn't match any array element."""
@@ -629,13 +626,13 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="results", expected_element="{{VAR1}}"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="results", expected_value="{{VAR1}}"),
             variable_metadata=variable_metadata_simple,
         )
         result = test.test()
 
         assert_test_failed(result)
-        assert "no array element matches" in result.details[0]
+        assert "has no element matching" in result.details[0]
 
     def test_array_contains_empty_array(self, create_json_file):
         """Test behavior with empty array."""
@@ -643,12 +640,12 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="items", expected_element="anything"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="items", expected_value="anything"),
         )
         result = test.test()
 
         assert_test_failed(result)
-        assert "does not contain" in result.details[0]
+        assert "has no element matching" in result.details[0]
 
     def test_array_contains_success_null_element(self, create_json_file):
         """Test successful null element membership."""
@@ -656,35 +653,95 @@ class TestArrayContains:
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="values", expected_element=None),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="values", expected_value=None),
         )
         result = test.test()
 
         assert_test_success(result)
 
-    def test_array_contains_failure_malformed_json(self, tmp_path):
+    def test_array_contains_error_malformed_json(self, tmp_path):
         """Test failure with malformed JSON file."""
         json_file = tmp_path / "malformed.json"
         json_file.write_text("[invalid json")
 
         test = ArrayContains(
             name="test_array_contains",
-            parameter=ArrayContainsParameter(dst=str(json_file), array_path="items", expected_element="test"),
+            parameter=ArrayContainsParameter(dst=str(json_file), array_path="items", expected_value="test"),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "Invalid JSON" in result.details[0]
 
-    def test_array_contains_failure_file_not_found(self, tmp_path):
-        """Test failure when JSON file doesn't exist."""
+    def test_array_contains_error_file_not_found(self, tmp_path):
+        """Test error when JSON file doesn't exist."""
         test = ArrayContains(
             name="test_array_contains",
             parameter=ArrayContainsParameter(
-                dst=str(tmp_path / "nonexistent.json"), array_path="items", expected_element="test"
+                dst=str(tmp_path / "nonexistent.json"), array_path="items", expected_value="test"
             ),
         )
         result = test.test()
 
-        assert_test_failed(result)
+        assert_test_error(result)
         assert "does not exist" in result.details[0]
+
+
+# ============================================================================
+# Key path syntax: numeric indexes, top-level arrays, quoted keys
+# ============================================================================
+
+PATH_DATA = {
+    "items": [{"name": "first"}, {"name": "middle"}, {"name": "last"}],
+    "a.b": {"c": 1},
+    "list[x]": "bracketed",
+}
+
+
+@pytest.mark.parametrize(
+    ("key_path", "expected"),
+    [
+        ("items[0].name", "first"),
+        ("items[-1].name", "last"),
+        ("['a.b'].c", 1),
+        ('["a.b"].c', 1),
+        ("list[x]", "bracketed"),
+    ],
+)
+def test_value_matches_path_syntax(create_json_file, key_path, expected):
+    json_file = create_json_file("paths.json", PATH_DATA)
+
+    result = ValueMatches(
+        name="t", parameter=ValueMatchesParameter(dst=str(json_file), key_path=key_path, expected_value=expected)
+    ).test()
+
+    assert_test_success(result)
+
+
+def test_value_matches_index_out_of_range_fails(create_json_file):
+    json_file = create_json_file("paths.json", PATH_DATA)
+
+    result = ValueMatches(
+        name="t", parameter=ValueMatchesParameter(dst=str(json_file), key_path="items[3].name", expected_value="x")
+    ).test()
+
+    assert_test_failed(result)
+
+
+@pytest.mark.parametrize(("key_path", "expected"), [("[1].id", 2), ("[*].id", 3), ("[-1].tags[0]", "z")])
+def test_value_matches_top_level_array(create_json_file, key_path, expected):
+    json_file = create_json_file("top.json", [{"id": 1}, {"id": 2}, {"id": 3, "tags": ["z"]}])
+
+    result = ValueMatches(
+        name="t", parameter=ValueMatchesParameter(dst=str(json_file), key_path=key_path, expected_value=expected)
+    ).test()
+
+    assert_test_success(result)
+
+
+def test_contains_key_quoted_key(create_json_file):
+    json_file = create_json_file("paths.json", PATH_DATA)
+
+    result = ContainsKey(name="t", parameter=ContainsKeyParameter(dst=str(json_file), key_path="['a.b']")).test()
+
+    assert_test_success(result)

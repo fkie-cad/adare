@@ -285,7 +285,7 @@ def _resolve_stock(name: str) -> tuple[str, int]:
         )
 
     path = os.path.expandvars(info.szPath)
-    log.info(f"CLAUDE: stock {name} -> {path!r} index {info.iIcon}")
+    log.debug(f"stock {name} -> {path!r} index {info.iIcon}")
     return path, info.iIcon
 
 
@@ -294,7 +294,7 @@ def _resolve_exe(exe: str) -> tuple[str, int]:
     path = os.path.expandvars(exe)
     if not os.path.isfile(path):
         raise IconResolutionError(f"Executable not found for icon extraction: {path!r}")
-    log.info(f"CLAUDE: exe {exe!r} -> {path!r} index 0")
+    log.debug(f"exe {exe!r} -> {path!r} index 0")
     return path, 0
 
 
@@ -318,7 +318,7 @@ def _resolve_app(app: str) -> tuple[str, int]:
         except FileNotFoundError:
             continue
         except OSError as exc:
-            log.warning(f"CLAUDE: App Paths lookup error for {app!r}: {exc}")
+            log.warning(f"App Paths lookup error for {app!r}: {exc}")
             continue
 
     if not exe_path:
@@ -355,7 +355,7 @@ def _resolve_fileassoc(extension: str) -> tuple[str, int]:
     path = os.path.expandvars(info.szDisplayName)
     if not path:
         raise IconResolutionError(f"No icon location returned for extension {extension!r}")
-    log.info(f"CLAUDE: fileassoc {extension!r} -> {path!r} index {info.iIcon}")
+    log.debug(f"fileassoc {extension!r} -> {path!r} index {info.iIcon}")
     return path, info.iIcon
 
 
@@ -363,7 +363,7 @@ def _resolve_dll(dll: str, index: int) -> tuple[str, int]:
     """Resolve an explicit (dll, index) fallback. Rare -- only for icons with
     no stock id and no owning executable."""
     path = os.path.expandvars(dll)
-    log.info(f"CLAUDE: dll {dll!r} index {index} -> {path!r}")
+    log.debug(f"dll {dll!r} index {index} -> {path!r}")
     return path, int(index)
 
 
@@ -579,9 +579,7 @@ def extract_icon_png(spec: dict, size: int = DESIRED_SIZE) -> str:
     finally:
         ctypes.windll.user32.DestroyIcon(hicon)
 
-    encoded = base64.b64encode(png_bytes).decode("ascii")
-    log.info(f"CLAUDE: extracted icon for spec {spec} -> {len(png_bytes)} byte PNG")
-    return encoded
+    return base64.b64encode(png_bytes).decode("ascii")
 
 
 def _build_cli_spec(args) -> dict:

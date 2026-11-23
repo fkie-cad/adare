@@ -270,7 +270,7 @@ tests:
       conditions:
         ExecutableName: "REGEDIT.EXE"
         RunCount: '{{ run_number }}'
-      match_mode: "any"
+      wildcard_mode: "any"
 
   # Expectation 2 of 2, evaluated at every step: last-run matches the recorded time.
   #
@@ -296,4 +296,4 @@ tests:
       conditions:
         ExecutableName: "REGEDIT.EXE"
         LastRun: "{{ last_timestamp | format('%Y-%m-%d %H:%M:%S') | tolerance(5, -5) }}"
-      match_mode: "any"
+      wildcard_mode: "any"

@@ -1,0 +1,414 @@
+"""Unit tests for TOML testfunctions."""
+
+import importlib.util
+import sys
+import zipfile
+from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.unit
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+ADARELIB_ROOT = PROJECT_ROOT.parent / "adarelib"
+if str(ADARELIB_ROOT) not in sys.path:
+    sys.path.insert(0, str(ADARELIB_ROOT))
+
+from adarelib.helper.module import import_module_from_pyfile
+
+toml_tf = import_module_from_pyfile(PROJECT_ROOT / "appdata" / "testfunctions" / "toml" / "toml.py")
+
+ContainsKey = toml_tf.contains_key._test_class
+ContainsKeyParameter = toml_tf.contains_key._parameter_class
+ValueMatches = toml_tf.value_matches._test_class
+ValueMatchesParameter = toml_tf.value_matches._parameter_class
+ValueCount = toml_tf.value_count._test_class
+ValueCountParameter = toml_tf.value_count._parameter_class
+
+helpers_path = Path(__file__).parent / "helpers.py"
+spec = importlib.util.spec_from_file_location("helpers", helpers_path)
+helpers = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(helpers)
+
+assert_test_success = helpers.assert_test_success
+assert_test_failed = helpers.assert_test_failed
+assert_test_error = helpers.assert_test_error
+
+SETTINGS = """\
+title = "Example"
+installed = 2024-01-15
+alarm = 07:32:00
+local = 2024-01-15T10:30:00
+updated = 1979-05-27T07:32:00-08:00
+synced = 2024-01-15T10:30:00Z
+ports = [8080, 9090]
+
+[server]
+host = "a.example.test"
+port = 8080
+enabled = true
+
+["app.window"]
+width = 1280
+
+[[items]]
+name = "Example Entry"
+size = 3
+
+[[items]]
+name = "Other Entry"
+size = 5
+"""
+
+
+def contains_key(dst, key_path):
+    return ContainsKey(name="t", parameter=ContainsKeyParameter(dst=str(dst), key_path=key_path)).test()
+
+
+def value_matches(dst, key_path, expected_value, **kwargs):
+    parameter = ValueMatchesParameter(dst=str(dst), key_path=key_path, expected_value=expected_value, **kwargs)
+    return ValueMatches(name="t", parameter=parameter).test()
+
+
+def value_count(dst, key_path, expected_count, **kwargs):
+    parameter = ValueCountParameter(dst=str(dst), key_path=key_path, expected_count=expected_count, **kwargs)
+    return ValueCount(name="t", parameter=parameter).test()
+
+
+@pytest.fixture
+def settings(tmp_path):
+    path = tmp_path / "settings.toml"
+    path.write_text(SETTINGS, encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def bad_toml(tmp_path):
+    path = tmp_path / "bad.toml"
+    path.write_text("[server\nport = 1\n", encoding="utf-8")
+    return path
+
+
+def test_module_uses_a_toml_parser_not_itself():
+    assert hasattr(toml_tf.tomllib, "TOMLDecodeError")
+    assert toml_tf.tomllib.__name__ in ("tomllib", "tomli")
+
+
+# ============================================================================
+# contains_key
+# ============================================================================
+
+
+class TestContainsKey:
+    def test_table_key(self, settings):
+        result = contains_key(settings, "server.port")
+        assert_test_success(result)
+        assert "8080" in result.details[0]
+
+    def test_quoted_table_name(self, settings):
+        assert_test_success(contains_key(settings, "['app.window'].width"))
+
+    def test_array_of_tables(self, settings):
+        assert_test_success(contains_key(settings, "items[*].name"))
+        assert_test_success(contains_key(settings, "items[-1].size"))
+        assert_test_failed(contains_key(settings, "items[2].name"))
+
+    def test_missing_key_fails(self, settings):
+        result = contains_key(settings, "server.user")
+        assert_test_failed(result)
+        assert "does not exist" in result.details[0]
+
+    def test_missing_file_is_error(self, tmp_path):
+        result = contains_key(tmp_path / "missing.toml", "a")
+        assert_test_error(result)
+        assert "does not exist" in " ".join(result.details)
+
+    def test_corrupt_is_error(self, bad_toml):
+        result = contains_key(bad_toml, "server")
+        assert_test_error(result)
+        assert "Invalid TOML" in " ".join(result.details)
+
+    @pytest.mark.parametrize(
+        "content",
+        ["a = 1\na = 2\n", "d = 2024-02-30\n", "t = 25:00:00\n", "a = \n"],
+        ids=["duplicate-key", "impossible-date", "impossible-time", "missing-value"],
+    )
+    def test_invalid_content_is_error(self, tmp_path, content):
+        path = tmp_path / "bad.toml"
+        path.write_text(content, encoding="utf-8")
+        assert_test_error(contains_key(path, "a"))
+
+    def test_undecodable_bytes_are_error(self, tmp_path):
+        path = tmp_path / "bad.toml"
+        path.write_bytes(b'a = "\xff"\n')
+        assert_test_error(contains_key(path, "a"))
+
+    def test_glob_errors(self, tmp_path):
+        assert_test_error(contains_key(tmp_path / "*.toml", "a"))
+        for name in ("a.toml", "b.toml"):
+            (tmp_path / name).write_text("a = 1\n", encoding="utf-8")
+        assert_test_error(contains_key(tmp_path / "*.toml", "a"))
+
+    def test_member_of_zip_archive(self, tmp_path):
+        archive = tmp_path / "a.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("x.toml", SETTINGS)
+        assert_test_success(contains_key(f"{archive}!/x.toml", "items[0].name"))
+
+
+# ============================================================================
+# value_matches
+# ============================================================================
+
+
+class TestValueMatches:
+    def test_string_value(self, settings):
+        assert_test_success(value_matches(settings, "server.host", "a.example.test"))
+
+    def test_mismatch_fails(self, settings):
+        result = value_matches(settings, "server.port", 9090)
+        assert_test_failed(result)
+        assert "8080" in result.details[0]
+
+    def test_types_are_kept(self, settings):
+        assert_test_failed(value_matches(settings, "server.port", "8080"))
+        assert_test_success(value_matches(settings, "server.enabled", True))
+
+    @pytest.mark.parametrize(
+        ("key_path", "expected"),
+        [
+            ("installed", "2024-01-15"),
+            ("alarm", "07:32:00"),
+            ("local", "2024-01-15T10:30:00"),
+            ("updated", "1979-05-27T07:32:00-08:00"),
+            ("synced", "2024-01-15T10:30:00+00:00"),
+        ],
+    )
+    def test_dates_and_times_compare_as_iso_strings(self, settings, key_path, expected):
+        assert_test_success(value_matches(settings, key_path, expected))
+
+    def test_array_of_tables_wildcard(self, settings):
+        assert_test_success(value_matches(settings, "items[*].name", "Other Entry"))
+        assert_test_failed(value_matches(settings, "items[*].name", "Other Entry", wildcard_mode="all"))
+        assert_test_success(value_matches(settings, "items[*].name", r"Entry$", regex_match=True, wildcard_mode="all"))
+
+    def test_array_value_compares_elements(self, settings):
+        assert_test_success(value_matches(settings, "ports", 9090))
+        assert_test_failed(value_matches(settings, "ports", 443))
+
+    def test_missing_key_fails(self, settings):
+        assert_test_failed(value_matches(settings, "server.user", "x"))
+
+    def test_bad_wildcard_mode_is_error(self, settings):
+        assert_test_error(value_matches(settings, "server.port", 8080, wildcard_mode="most"))
+
+    def test_invalid_regex_is_error(self, settings):
+        assert_test_error(value_matches(settings, "server.host", "[unclosed", regex_match=True))
+
+    def test_missing_file_is_error(self, tmp_path):
+        assert_test_error(value_matches(tmp_path / "missing.toml", "a", 1))
+
+    def test_corrupt_is_error(self, bad_toml):
+        assert_test_error(value_matches(bad_toml, "server.port", 1))
+
+    def test_glob_errors(self, tmp_path):
+        assert_test_error(value_matches(tmp_path / "*.toml", "a", 1))
+        for name in ("a.toml", "b.toml"):
+            (tmp_path / name).write_text("a = 1\n", encoding="utf-8")
+        assert_test_error(value_matches(tmp_path / "*.toml", "a", 1))
+
+
+# ============================================================================
+# value_count
+# ============================================================================
+
+
+class TestValueCount:
+    def test_counts_array_of_tables(self, settings):
+        assert_test_success(value_count(settings, "items[*]", 2))
+        assert_test_failed(value_count(settings, "items[*]", 3))
+
+    def test_counts_matching_values(self, settings):
+        assert_test_success(value_count(settings, "items[*].size", 1, expected_value=5))
+        assert_test_success(value_count(settings, "ports", 2, expected_value=r"^\d{4}$", regex_match=True))
+
+    def test_comparison_types(self, settings):
+        assert_test_success(value_count(settings, "server.*", 3, comparison_type="equals"))
+        assert_test_success(value_count(settings, "server.*", 4, comparison_type="less"))
+        assert_test_failed(value_count(settings, "server.*", 3, comparison_type="greater"))
+
+    def test_zero_asserts_absence(self, settings):
+        assert_test_success(value_count(settings, "server.user", 0))
+        assert_test_failed(value_count(settings, "server.port", 0))
+        assert_test_success(value_count(settings, "items[*].name", 0, expected_value="Removed Entry"))
+
+    def test_absence_in_missing_file_is_error(self, tmp_path):
+        result = value_count(tmp_path / "missing.toml", "a", 0)
+        assert_test_error(result)
+        assert "does not exist" in " ".join(result.details)
+
+    def test_corrupt_is_error(self, bad_toml):
+        assert_test_error(value_count(bad_toml, "a", 0))
+
+    @pytest.mark.parametrize(("expected_count", "comparison_type"), [(-1, "equals"), (1, "about")])
+    def test_bad_parameters_are_errors(self, settings, expected_count, comparison_type):
+        assert_test_error(value_count(settings, "items[*]", expected_count, comparison_type=comparison_type))
+
+    def test_glob_errors(self, tmp_path):
+        assert_test_error(value_count(tmp_path / "*.toml", "a", 0))
+        for name in ("a.toml", "b.toml"):
+            (tmp_path / name).write_text("a = 1\n", encoding="utf-8")
+        assert_test_error(value_count(tmp_path / "*.toml", "a", 0))
+
+
+# ============================================================================
+# ordered comparisons, values_compare
+# ============================================================================
+
+ValuesCompare = toml_tf.values_compare._test_class
+
+STATE = """\
+[session]
+opened = 2026-03-01T10:00:00Z
+closed = 2026-03-01T12:00:30+02:00
+local = 2026-03-01T10:00:00
+pages = 4
+"""
+
+
+def values_compare(dst, key_path, other_key_path, **kwargs):
+    parameter = toml_tf.values_compare._parameter_class(
+        dst=str(dst), key_path=key_path, other_key_path=other_key_path, **kwargs
+    )
+    return ValuesCompare(name="t", parameter=parameter).test()
+
+
+@pytest.fixture
+def state(tmp_path):
+    path = tmp_path / "state.toml"
+    path.write_text(STATE, encoding="utf-8")
+    return path
+
+
+class TestOrderedComparison:
+    def test_value_matches_ordered(self, state):
+        assert_test_success(value_matches(state, "session.pages", 3, comparison_type="greater"))
+        assert_test_success(value_matches(state, "session.closed", "2026-03-01T10:00:00Z", tolerance=30))
+        assert_test_error(value_matches(state, "session.pages", 3, comparison_type="above"))
+
+    def test_values_compare(self, state):
+        assert_test_success(values_compare(state, "session.closed", "session.opened", comparison_type="greater"))
+        assert_test_success(values_compare(state, "session.closed", "session.opened", offset=30))
+        # a local date-time is read in utc_offset
+        assert_test_success(values_compare(state, "session.local", "session.opened", utc_offset="+00:00"))
+        assert_test_success(
+            values_compare(state, "session.local", "session.opened", utc_offset="+01:00", comparison_type="less")
+        )
+
+    def test_values_compare_missing_and_uninterpretable(self, state):
+        assert_test_failed(values_compare(state, "session.missing", "session.pages"))
+        assert_test_error(values_compare(state, "session", "session.pages"))
+
+
+# --- round 2: value_decode, values_compare with other_dst --------------------------------
+from adarelib.constants import StatusEnum  # noqa: E402
+
+
+def _r2_write(path, data):
+    path.write_text(''.join(f'{k} = "{v}"\n' if isinstance(v, str) else f'{k} = {v}\n' for k, v in data.items()))
+    return str(path)
+
+
+def _r2_run(function, **params):
+    testfunction = getattr(toml_tf, function)
+    return testfunction._test_class(name='t', parameter=testfunction._parameter_class(**params)).test()
+
+
+@pytest.fixture
+def r2_files(tmp_path):
+    before = _r2_write(tmp_path / 'before.toml', {'count': 3, 'saved': '2026-03-01T10:00:00Z', 'blob': 'eyJpZCI6IDd9'})
+    after = _r2_write(tmp_path / 'after.toml', {'count': 5, 'saved': '2026-03-01T10:05:00Z', 'blob': 'eyJpZCI6IDl9'})
+    return before, after
+
+
+def test_values_compare_other_dst(r2_files, tmp_path):
+    before, after = r2_files
+    run = _r2_run
+    assert (
+        run(
+            'values_compare',
+            dst=after,
+            key_path='count',
+            other_key_path='count',
+            other_dst=before,
+            comparison_type='greater',
+        ).status
+        == StatusEnum.SUCCESS
+    )
+    assert (
+        run(
+            'values_compare',
+            dst=after,
+            key_path='saved',
+            other_key_path='saved',
+            other_dst=before,
+            comparison_type='less',
+        ).status
+        == StatusEnum.FAILED
+    )
+    assert (
+        run('values_compare', dst=after, key_path='count', other_key_path='count', other_dst=before, offset=2).status
+        == StatusEnum.SUCCESS
+    )
+    missing = run(
+        'values_compare', dst=after, key_path='count', other_key_path='count', other_dst=str(tmp_path / 'gone.toml')
+    )
+    assert missing.status == StatusEnum.ERROR and 'does not exist' in missing.details[0]
+
+
+def test_values_compare_other_dst_archive_member(r2_files, tmp_path):
+    import zipfile as _zipfile
+
+    before, after = r2_files
+    archive = tmp_path / 'backup.zip'
+    with _zipfile.ZipFile(archive, 'w') as zf:
+        zf.write(before, 'state/before.toml')
+    result = _r2_run(
+        'values_compare',
+        dst=after,
+        key_path='count',
+        other_key_path='count',
+        other_dst=f'{archive}!/state/before.toml',
+        comparison_type='greater',
+    )
+    assert result.status == StatusEnum.SUCCESS, result.details
+
+
+def test_value_decode(r2_files):
+    _, after = r2_files
+    ok = _r2_run(
+        'value_matches',
+        dst=after,
+        key_path='blob',
+        expected_value=9,
+        value_decode=['base64', 'json'],
+        decoded_key_path='id',
+    )
+    assert ok.status == StatusEnum.SUCCESS, ok.details
+    ordered = _r2_run(
+        'values_compare',
+        dst=after,
+        key_path='blob',
+        other_key_path='count',
+        value_decode=['base64', 'json'],
+        decoded_key_path='id',
+    )
+    assert ordered.status == StatusEnum.ERROR  # the count is no base64: decoding both sides fails
+    bad = _r2_run('value_matches', dst=after, key_path='count', expected_value=5, value_decode='base64')
+    assert bad.status == StatusEnum.ERROR and "'base64'" in bad.details[0]
+    unknown = _r2_run('value_matches', dst=after, key_path='count', expected_value=5, value_decode='rot13')
+    assert unknown.status == StatusEnum.ERROR
+    no_path = _r2_run('value_matches', dst=after, key_path='blob', expected_value=9, value_decode='json')
+    assert no_path.status == StatusEnum.ERROR
+    plain = _r2_run('value_matches', dst=after, key_path='count', expected_value=5)
+    assert plain.status == StatusEnum.SUCCESS

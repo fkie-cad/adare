@@ -14,6 +14,7 @@ from pathlib import Path
 
 from adare.console import console, print_step
 from adare.hypervisor.qemu.accel import resolve_accel
+from adare.hypervisor.qemu.socket_paths import PORTABLE_SOCKET_PATH_MAX
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 
 log = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ log = logging.getLogger(__name__)
 # A Unix-domain socket path lives in `sockaddr_un.sun_path`, which is 104 bytes on
 # macOS (108 on Linux) *including* the NUL terminator. Bind with a longer path and
 # Python raises `OSError: AF_UNIX path too long` before QEMU even starts.
-AF_UNIX_PATH_MAX = 103
+AF_UNIX_PATH_MAX = PORTABLE_SOCKET_PATH_MAX  # shared with the run sockets' check (socket_paths)
 
 
 def install_qmp_socket_path(disk_stem: str) -> Path:

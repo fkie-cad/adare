@@ -1,14 +1,14 @@
 {
   "ruff": {
     "B007": 8,
-    "B904": 12,
+    "B904": 4,
     "B905": 18,
-    "BLE001": 124,
-    "C901": 86,
+    "BLE001": 118,
+    "C901": 83,
     "E402": 171,
     "RET504": 7,
     "S110": 15,
-    "SIM102": 17,
+    "SIM102": 16,
     "SIM105": 6,
     "SIM108": 12,
     "SIM117": 14
@@ -26,7 +26,7 @@
     "list-item": 4,
     "misc": 43,
     "name-defined": 2,
-    "no-any-return": 248,
+    "no-any-return": 244,
     "no-redef": 7,
     "no-untyped-def": 27,
     "operator": 17,
@@ -35,21 +35,19 @@
     "return-value": 36,
     "str-bytes-safe": 2,
     "type-var": 2,
-    "union-attr": 194,
+    "union-attr": 192,
     "unused-coroutine": 1,
     "valid-type": 36,
-    "var-annotated": 49
+    "var-annotated": 47
   },
   "oversized_files": {
     "adare-cv-server/adare_cv_server/feature_matching.py": 1147,
     "adare/adare/hypervisor/qemu/libvirt_xml_builder.py": 1031,
     "adare/adare/hypervisor/qemu/mixins/commands.py": 1058,
     "adare/adare/hypervisor/qemu/vm.py": 1809,
-    "adare/appdata/testfunctions/excel/excel.py": 1200,
     "adare/tests/unit/testfunctions/test_csv.py": 1241,
-    "adare/tests/unit/testfunctions/test_excel.py": 1575,
     "adare/tests/unit/testfunctions/test_standard.py": 1123,
-    "adare/tests/unit/testfunctions/test_xml.py": 1324,
-    "adarelib/adarelib/common/variables.py": 1367
+    "adare/tests/unit/testfunctions/test_xml.py": 1314,
+    "adarelib/adarelib/common/variables.py": 1257
   }
 }

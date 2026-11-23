@@ -61,23 +61,41 @@ def _parse_registry_path(key_path):
     return hive_mapping[hive_name], subkey
 
 
-def _format_registry_type(reg_type):
-    """Convert registry type to string name"""
-    if not WINREG_AVAILABLE:
-        raise ImportError("winreg module not available")
+# Registry data types by their numeric value (fixed by the Windows API, so no winreg lookup is
+# needed). Canonical names only: ``winreg`` has aliases that share a value (REG_DWORD_LITTLE_ENDIAN
+# == REG_DWORD == 4) and lacks REG_QWORD, so a table built from its constants misnames them.
+_REGISTRY_TYPE_NAMES = {
+    0: 'REG_NONE',
+    1: 'REG_SZ',
+    2: 'REG_EXPAND_SZ',
+    3: 'REG_BINARY',
+    4: 'REG_DWORD',
+    5: 'REG_DWORD_BIG_ENDIAN',
+    6: 'REG_LINK',
+    7: 'REG_MULTI_SZ',
+    8: 'REG_RESOURCE_LIST',
+    9: 'REG_FULL_RESOURCE_DESCRIPTOR',
+    10: 'REG_RESOURCE_REQUIREMENTS_LIST',
+    11: 'REG_QWORD',
+}
 
-    type_mapping = {
-        winreg.REG_SZ: 'REG_SZ',
-        winreg.REG_EXPAND_SZ: 'REG_EXPAND_SZ',
-        winreg.REG_BINARY: 'REG_BINARY',
-        winreg.REG_DWORD: 'REG_DWORD',
-        winreg.REG_DWORD_LITTLE_ENDIAN: 'REG_DWORD_LITTLE_ENDIAN',
-        winreg.REG_DWORD_BIG_ENDIAN: 'REG_DWORD_BIG_ENDIAN',
-        winreg.REG_LINK: 'REG_LINK',
-        winreg.REG_MULTI_SZ: 'REG_MULTI_SZ',
-        winreg.REG_RESOURCE_LIST: 'REG_RESOURCE_LIST',
-    }
-    return type_mapping.get(reg_type, f'UNKNOWN_TYPE_{reg_type}')
+# Legacy names accepted in ``value_type`` for the canonical ones (little endian is the native order)
+_REGISTRY_TYPE_ALIASES = {
+    'REG_DWORD_LITTLE_ENDIAN': 'REG_DWORD',
+    'REG_QWORD_LITTLE_ENDIAN': 'REG_QWORD',
+    'UNKNOWN_TYPE_11': 'REG_QWORD',  # what earlier versions reported for a REG_QWORD
+}
+
+
+def _format_registry_type(reg_type):
+    """Convert a registry type number to its canonical name"""
+    return _REGISTRY_TYPE_NAMES.get(reg_type, f'UNKNOWN_TYPE_{reg_type}')
+
+
+def _canonical_registry_type_name(name):
+    """Normalise a user supplied type name (case-insensitive, legacy aliases accepted)"""
+    name = str(name).strip().upper()
+    return _REGISTRY_TYPE_ALIASES.get(name, name)
 
 
 # ============================================================================
@@ -153,9 +171,12 @@ def registry_value_matches(
             matters: REG_DWORD/QWORD -> int, REG_SZ/REG_EXPAND_SZ -> str (unexpanded),
             REG_BINARY -> bytes. REG_MULTI_SZ (a list) can never match. A ``{{ }}``
             placeholder still present at run time is resolved, and all-digit results become int.
-        value_type: Optional type name check, case-insensitive, e.g. ``REG_SZ``. REG_DWORD values
-            are reported as ``REG_DWORD_LITTLE_ENDIAN`` and REG_QWORD as ``UNKNOWN_TYPE_11``,
-            so use those strings (``REG_DWORD`` never matches). ``None`` skips the check.
+        value_type: Optional type name check, case-insensitive, e.g. ``REG_SZ``. Canonical
+            names: REG_NONE, REG_SZ, REG_EXPAND_SZ, REG_BINARY, REG_DWORD, REG_DWORD_BIG_ENDIAN,
+            REG_LINK, REG_MULTI_SZ, REG_RESOURCE_LIST, REG_FULL_RESOURCE_DESCRIPTOR,
+            REG_RESOURCE_REQUIREMENTS_LIST, REG_QWORD. The legacy aliases
+            ``REG_DWORD_LITTLE_ENDIAN`` and ``REG_QWORD_LITTLE_ENDIAN`` (and ``UNKNOWN_TYPE_11``,
+            the name earlier versions reported) are accepted for REG_DWORD / REG_QWORD. ``None`` skips the check.
 
     Example:
         function: windows.registry_value_matches
@@ -194,7 +215,7 @@ def registry_value_matches(
 
             # Type checking if specified
             if value_type:
-                expected_type_name = value_type.upper()
+                expected_type_name = _canonical_registry_type_name(value_type)
                 actual_type_name = _format_registry_type(reg_type)
 
                 if expected_type_name != actual_type_name:

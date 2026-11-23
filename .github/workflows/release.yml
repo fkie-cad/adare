@@ -1,0 +1,109 @@
+name: Release
+
+# A tag <package>-v<version> (e.g. adarelib-v0.2.0) on a main commit becomes a GitHub
+# Release with that package's sdist + wheel and its CHANGELOG section as the notes.
+# Nothing is published to PyPI. Steps (CHANGELOG.md, "Versioning policy"):
+#   bump <package>/pyproject.toml, rename Unreleased to "## [<package> <version>] - <date>",
+#   merge to main, `make release-check TAG=...`, then tag main and push the tag.
+on:
+  push:
+    tags: ['*-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  UV_LOCKED: 1
+
+jobs:
+  # Tag format, version in pyproject.toml, CHANGELOG section, commit on main.
+  verify:
+    name: Verify tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      package: ${{ steps.check.outputs.package }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # origin/main, for the "is on main" check
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Check the tag
+        id: check
+        run: make release-check TAG="$GITHUB_REF_NAME"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: release-notes.md
+          retention-days: 7
+
+  # The full Tests workflow, unchanged.
+  tests:
+    name: Tests
+    needs: verify
+    uses: ./.github/workflows/tests.yml
+
+  # Real VM on the self-hosted runner (live-smoke.yml). Off until the repo variable
+  # LIVE_RUNNER is 'true', so tags work before the runner exists.
+  live-smoke:
+    name: Live VM smoke
+    needs: verify
+    if: vars.LIVE_RUNNER == 'true'
+    uses: ./.github/workflows/live-smoke.yml
+
+  build:
+    name: Build package
+    needs: [verify, tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Build sdist and wheel
+        run: make build PACKAGE="${{ needs.verify.outputs.package }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: GitHub Release
+    needs: [verify, build, live-smoke]
+    # live-smoke may be skipped (no runner yet); everything else must have passed.
+    if: >-
+      !cancelled() && needs.verify.result == 'success' && needs.build.result == 'success'
+      && (needs.live-smoke.result == 'success' || needs.live-smoke.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ needs.verify.outputs.package }} ${{ needs.verify.outputs.version }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/* -R "$GITHUB_REPOSITORY"
+          --verify-tag --title "$TITLE" --notes-file release-notes.md

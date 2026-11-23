@@ -79,7 +79,7 @@ backed up + DB-ingested).
 Assertions turn a replay into a forensic result. Find the function, don't guess it:
 
 ```sh
-adare test search "recently-used file entry was written"   # ranked matches + example
+adare test search "saved-file index entry was written"   # short cards + example; match: weak = no fit
 adare test info standard.file_exists --example             # paste-ready tests: block
 ```
 
@@ -108,10 +108,29 @@ actions:
 `adare exp playbook validate` checks the YAML and that each `- test:` refers to a
 defined test. Parameter names and types come from `adare test info`.
 
+### Files inside archives
+
+Any file test reads a file inside an archive: put `!` between the archive and the
+member path. Formats: tar (also .gz/.bz2/.xz/.lz4/.sz), zip (also .docx/.xlsx/.odt), and
+single-file gz/bz2/xz, LZ4 (frame format `.lz4` and the `.jsonlz4` block-with-header form)
+and Snappy (framing format `.sz`). The format is detected from the content, not the extension.
+
+```yaml
+dst: /home/u/backup.tar.gz!/etc/app/config.json   # member of a tar/zip
+dst: /var/log/syslog.2.gz!                         # decompressed content of a .gz
+dst: /home/u/.config/app/store.jsonlz4!            # LZ4 JSON store: any json.* test
+dst: /home/u/Documents/report.docx!/docProps/core.xml   # office metadata (xml.* tests)
+dst: /home/u/outer.zip!/inner.tar.gz!/data.json    # nested
+dst: {archive: /home/u/backup.tar.gz, member: etc/app/config.json}   # mapping form
+```
+
+A missing or unreadable archive is an ERROR for every test, also `file_does_not_exist`.
+An absent member counts like a missing file. Guide: `docsrc/source/guide/archives.rst`.
+
 ### Negative tests need proof of the act
 
 An absence test (`*_does_not_exist`, `visual.not_exists`, `count_max` with `max: 0`,
-anything with `expect_to_fail`) passes just as well when the deleting click never
+a count function with `expected_count: 0`, anything with `expect_to_fail`) passes just as well when the deleting click never
 took effect. ADARE guards this by itself: every click/keyboard/drag/scroll/goto is
 checked for a screen change near its input and recorded (`settings.effect_check: warn`
 by default, `off` disables it). A passing negative test becomes **INCONCLUSIVE** if an

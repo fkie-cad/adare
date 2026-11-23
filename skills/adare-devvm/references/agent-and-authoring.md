@@ -31,7 +31,7 @@ VM, drives it, tears it down unless `--keep`).
 ```sh
 adare dev agent -s <id> --goal "open the Files app and go to Documents"
 adare dev agent -s <id> --goal "…" -o experiments/files.play.yaml
-adare dev agent --plan --goal "open LibreOffice and write an invoice" -o inv.play.yaml
+adare dev agent --plan --goal "open the text editor and write an invoice" -o inv.play.yaml
 adare dev agent -e ubuntu2510-libre --goal "…" --as-experiment demo6 --ground --video
 ```
 

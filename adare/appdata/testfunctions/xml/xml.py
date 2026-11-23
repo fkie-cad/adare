@@ -33,7 +33,11 @@ from typing import Optional
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
-from adarelib.testset.compare import compare_with_single_placeholder
+from adarelib.testset.compare import compare_with_single_placeholder, regex_expected_problem
+from adarelib.testset.structured import StructuredFormat, compare_count, count_parameter_errors
+from adarelib.testset.ordering import OrderingError
+from adarelib.testset.valuecompare import ordered_setup, structured_values_compare
+from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, decoder_setup
 
 # configure logging
 import logging
@@ -118,8 +122,27 @@ def _find_elements(root, xpath, namespaces=None):
         raise ValueError(f"Invalid XPath expression '{xpath}': {e}") from e
 
 
-def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sensitive=True):
-    """Compare values using the same logic as JSON testfunctions"""
+def _text_form(expected):
+    """An unquoted YAML number (``41``) is compared as its text (``'41'``); bool and strings stay as they are."""
+    if isinstance(expected, (int, float)) and not isinstance(expected, bool):
+        return str(expected)
+    return expected
+
+
+_WILDCARD_MODES = ('any', 'all')
+
+
+def _compare_values(
+    ctx, actual_text, expected_text, regex_match=False, case_sensitive=True, ordered=None, what='text', decoder=None
+):
+    """Compare values using the same logic as JSON testfunctions (``ordered``: ordered mode)"""
+    if decoder is not None:
+        try:
+            actual_text = decoder(actual_text, as_text=True)
+        except DecodedKeyPathMissing as e:  # decoded fine, the key is not in it: no match
+            return False, str(e)
+    if ordered is not None:
+        return ordered.compare(actual_text, expected_text)
     expected_str = str(expected_text)
 
     if not ctx.has_placeholders(expected_str):
@@ -130,16 +153,16 @@ def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sen
                 flags = 0 if case_sensitive else re.IGNORECASE
                 pattern = re.compile(expected_text, flags)
                 if pattern.search(actual_text):
-                    return True, f'text "{actual_text}" matches regex "{expected_text}"'
-                return False, f'text "{actual_text}" does not match regex "{expected_text}"'
+                    return True, f'{what} "{actual_text}" matches regex "{expected_text}"'
+                return False, f'{what} "{actual_text}" does not match regex "{expected_text}"'
             except re.error as e:
-                return False, f'Invalid regex pattern: {expected_text} - {e}'
+                raise re.error(f'invalid regex pattern {expected_text!r}: {e}') from e
         else:
             # Direct text comparison
             success = actual_text == expected_text if case_sensitive else actual_text.lower() == expected_text.lower()
 
             if success:
-                return True, f'text matches expected: {actual_text}'
+                return True, f'{what} matches expected: {actual_text}'
             return False, f'expected "{expected_text}", got "{actual_text}"'
     else:
         # Has placeholders - use placeholder system (handles regex and timestamp with tolerance)
@@ -147,14 +170,22 @@ def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sen
 
 
 def _handle_wildcard_matching(
-    ctx, elements, expected_text, wildcard_mode, xpath, regex_match=False, case_sensitive=True
+    ctx,
+    elements,
+    expected_text,
+    wildcard_mode,
+    xpath,
+    regex_match=False,
+    case_sensitive=True,
+    ordered=None,
+    decoder=None,
 ):
     """Handle matching logic for multiple elements with 'any' or 'all' modes"""
     if not elements:
         return TestResult.failed([f'no elements found at XPath "{xpath}"'])
 
     # Validate wildcard_mode
-    if wildcard_mode not in ['any', 'all']:
+    if wildcard_mode not in _WILDCARD_MODES:
         return TestResult.execution_error(None, f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'")
 
     matches = []
@@ -163,7 +194,9 @@ def _handle_wildcard_matching(
     # Check each element's text against expected using unified comparison method
     for i, element in enumerate(elements):
         element_text = element.text or ""
-        is_match, message = _compare_values(ctx, element_text, expected_text, regex_match, case_sensitive)
+        is_match, message = _compare_values(
+            ctx, element_text, expected_text, regex_match, case_sensitive, ordered, decoder=decoder
+        )
         if is_match:
             matches.append((i, element_text, message))
         else:
@@ -208,35 +241,24 @@ def _handle_wildcard_matching(
     )
 
 
-def _compare_count(actual_count, expected_count, comparison_type):
-    """Compare counts based on comparison type"""
-    if comparison_type == 'equals':
-        return actual_count == expected_count, f"count is {actual_count}, expected {expected_count}"
-    if comparison_type == 'greater':
-        return actual_count > expected_count, f"count is {actual_count}, expected > {expected_count}"
-    if comparison_type == 'less':
-        return actual_count < expected_count, f"count is {actual_count}, expected < {expected_count}"
-    if comparison_type == 'greater_equal':
-        return actual_count >= expected_count, f"count is {actual_count}, expected >= {expected_count}"
-    if comparison_type == 'less_equal':
-        return actual_count <= expected_count, f"count is {actual_count}, expected <= {expected_count}"
-    raise ValueError(f"Invalid comparison type: {comparison_type}")
-
-
 def _evaluate_xpath(root, xpath, result_type, namespaces=None):
-    """Evaluate XPath and convert result based on type"""
+    """Evaluate XPath and convert result based on type.
+
+    ``None`` for ``text`` / ``number`` when no element is selected ("no value"); ``boolean``
+    is never ``None``.
+    """
     try:
         if result_type == 'text':
             elements = _xpath(root, xpath, namespaces)
             if elements:
                 return elements[0].text or ""
-            return ""
+            return None  # no element: no value, which must never equal an expected value
         if result_type == 'number':
             elements = _xpath(root, xpath, namespaces)
             if elements:
-                text = elements[0].text or "0"
-                return float(text)
-            return 0.0
+                # an empty element is no number (float('') raises): it must not read as 0
+                return float(elements[0].text or "")
+            return None
         if result_type == 'boolean':
             elements = _xpath(root, xpath, namespaces)
             return len(elements) > 0
@@ -247,33 +269,25 @@ def _evaluate_xpath(root, xpath, result_type, namespaces=None):
 
 
 def _parse_xml_with_namespaces(filepath):
-    """Parse XML and extract namespace information"""
+    """Parse XML and return ``(root, namespaces)``: every ``xmlns[:prefix]`` declaration in the file.
+
+    ElementTree drops the declarations from the tree, so they are collected from the parser's
+    ``start-ns`` events: the default namespace under prefix ``''``, others under their prefix,
+    wherever in the document they are declared. When a prefix is declared several times with
+    different URIs, the first declaration wins.
+    """
+    namespaces = {}
+    root = None
     try:
-        # Parse the file and get namespace info
-        tree = ET.parse(filepath)
-        root = tree.getroot()
-
-        # Extract namespaces from the root element
-        # Note: ElementTree doesn't have great namespace introspection
-        # This is a basic implementation
-        namespaces = {}
-
-        # Check for default namespace
-        if root.tag.startswith('{'):
-            default_ns = root.tag[1 : root.tag.find('}')]
-            namespaces[''] = default_ns
-
-        # Extract namespace prefixes from attributes
-        for attr_name in root.attrib:
-            if attr_name.startswith('xmlns:'):
-                prefix = attr_name[6:]  # Remove 'xmlns:' prefix
-                namespaces[prefix] = root.attrib[attr_name]
-            elif attr_name == 'xmlns':
-                namespaces[''] = root.attrib[attr_name]
-
-        return root, namespaces
+        for event, node in ET.iterparse(filepath, events=('start-ns', 'start')):
+            if event == 'start-ns':
+                prefix, uri = node
+                namespaces.setdefault(prefix, uri)
+            elif root is None:
+                root = node
     except ET.ParseError as e:
         raise ValueError(f"Invalid XML format: {e}") from e
+    return root, namespaces
 
 
 # =============================================================================
@@ -294,7 +308,7 @@ def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: dict[str,
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
             ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
@@ -306,12 +320,12 @@ def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: dict[str,
     Example:
         function: xml.element_exists
         parameter:
-          dst: /home/user/data/recent.xml
-          xpath: "//item[@href='file:///home/user/report.txt']"
+          dst: /home/user/data/list.xml
+          xpath: "//entry[@ref='item-42']"
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test element_exists')
 
@@ -326,7 +340,7 @@ def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: dict[str,
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
@@ -340,44 +354,106 @@ def element_text_matches(
     ctx: TestContext,
     dst: str,
     xpath: str,
-    expected_text: str = '',
+    expected_value: str,
     regex_match: bool = False,
     case_sensitive: bool = True,
     wildcard_mode: str = "any",
     namespaces: dict[str, str] = None,
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
+    value_decode: list[str] | str | None = None,
+    decoded_key_path: str | None = None,
 ):
-    """Pass when the text of the element(s) selected by ``xpath`` equals/matches ``expected_text``.
+    """Pass when the text of the element(s) selected by ``xpath`` equals/matches ``expected_value``.
 
-    Use for: asserting an XML setting or record value. "Text" is ``element.text``: only the
-    text before the element's first child, not stripped (missing -> ``''``).
+    Use for: asserting an XML setting or record value, and document properties of office
+    files: the author of a .docx is ``dc:creator`` in ``report.docx!/docProps/core.xml``
+    (xpath ``./dc:creator``, namespaces ``{dc: 'http://purl.org/dc/elements/1.1/'}``).
+    "Text" is ``element.text``: only the text before the element's first child, not
+    stripped (missing -> ``''``). To count elements use xml.element_count.
+
+    With ``comparison_type`` (``greater``, ``less``, ...), ``tolerance`` or the time
+    parameters the text is compared as a number or timestamp (``case_sensitive`` is then
+    ignored); to compare two values of one file use xml.values_compare.
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
             ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
             Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
             error, so no functions such as ``text()``. No match fails.
-        expected_text: Exact expected text, or a regex with ``regex_match``. A single
-            ``!re``/``!timestamp`` tag is matched by type (``case_sensitive`` then ignored).
-        regex_match: Search ``expected_text`` as a Python regex (``re.search``, unanchored).
+        expected_value: Required. Exact expected text (``''`` for an empty element; an unquoted
+            number such as ``41`` is compared as its text ``'41'``), or a regex
+            with ``regex_match``. A single ``!re``/``!timestamp`` tag is matched by type
+            (``case_sensitive`` then ignored); an invalid regex is an error.
+        regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
         case_sensitive: ``False`` compares lower-cased / uses ``re.IGNORECASE``.
         wildcard_mode: For several matched elements: ``any`` (default) or ``all`` must match;
-            other values are an execution error (only checked when several elements match).
+            any other value is an error, whatever number of elements match.
         namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
             ``//ns:item``); ``{uri}tag`` also works without it.
+        comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
+            ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
+            below, compares the value with ``expected_value`` as a number or point in time
+            (ordered mode; ``less`` = earlier); ``!re`` / ``regex_match`` are then errors, a lone
+            ``{{ name }}`` is the saved variable; a value that is no number or timestamp is an error.
+        value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
+            ``number`` or ``timestamp``.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+        value_decode: Decode the value read from the file before comparing: one step or a
+            list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16``
+            (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes
+            left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
+            unknown step, is an error.
+        decoded_key_path: Key path into the value ``json`` decoded (dot path as in json.value_matches);
+            it must select one value: none fails (the value decoded, the key is not in it), several are an error.
+            Required with ``json``, an error without it.
 
     Example:
         function: xml.element_text_matches
         parameter:
           dst: /home/user/.config/app/settings.xml
           xpath: ./general/language
-          expected_text: de_DE
+          expected_value: de_DE
     """
+    decoder, problem = decoder_setup(value_decode, decoded_key_path)
+    if problem is not None:
+        return problem
+    ordered, expected_value, problem = ordered_setup(
+        ctx,
+        expected_value,
+        regex_match,
+        comparison_type,
+        value_type,
+        tolerance,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
+    )
+    if problem is not None:
+        return problem
+    if wildcard_mode not in _WILDCARD_MODES:
+        return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode!r}. Must be 'any' or 'all'"])
+    if ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
+        expected_value = _text_form(expected_value)
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test element_text_matches')
 
@@ -391,19 +467,23 @@ def element_text_matches(
         # Handle multiple elements based on wildcard mode
         if len(elements) > 1:
             return _handle_wildcard_matching(
-                ctx, elements, expected_text, wildcard_mode, xpath, regex_match, case_sensitive
+                ctx, elements, expected_value, wildcard_mode, xpath, regex_match, case_sensitive, ordered, decoder
             )
         # Single element matching
         element_text = elements[0].text or ""
-        is_match, message = _compare_values(ctx, element_text, expected_text, regex_match, case_sensitive)
+        is_match, message = _compare_values(
+            ctx, element_text, expected_value, regex_match, case_sensitive, ordered, decoder=decoder
+        )
         if is_match:
             return TestResult.success([message])
         return TestResult.failed([message])
 
+    except (OrderingError, ValueDecodeError) as e:
+        return TestResult.error([str(e)])
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
@@ -422,39 +502,95 @@ def attribute_matches(
     regex_match: bool = False,
     case_sensitive: bool = True,
     namespaces: dict[str, str] = None,
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
+    value_decode: list[str] | str | None = None,
+    decoded_key_path: str | None = None,
 ):
     """Pass when ``attribute`` of the FIRST element selected by ``xpath`` equals/matches ``expected_value``.
 
-    Use for: asserting attribute values (``visited``, ``modified``, ``href`` ...). No matching
+    Use for: asserting attribute values (an id, a state, a timestamp ...). No matching
     element or a missing attribute fails.
+
+    With ``comparison_type`` (``greater``, ``less``, ...), ``tolerance`` or the time
+    parameters the attribute value is compared as a number or timestamp (``case_sensitive`` is then
+    ignored); to compare two values of one file use xml.values_compare.
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
             ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
             Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
             error, so no functions such as ``text()``.
         attribute: Attribute name; namespaced attributes need the ``{uri}name`` form.
-        expected_value: Exact expected value, or a regex with ``regex_match``; a single
+        expected_value: Exact expected value (an unquoted number such as ``3`` is compared as
+            its text ``'3'``), or a regex with ``regex_match``; a single
             ``!re``/``!timestamp`` tag is matched by type.
         regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
         case_sensitive: ``False`` compares lower-cased / uses ``re.IGNORECASE``.
         namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
             ``//ns:item``); ``{uri}tag`` also works without it.
+        comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
+            ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
+            below, compares the value with ``expected_value`` as a number or point in time
+            (ordered mode; ``less`` = earlier); ``!re`` / ``regex_match`` are then errors, a lone
+            ``{{ name }}`` is the saved variable; a value that is no number or timestamp is an error.
+        value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
+            ``number`` or ``timestamp``.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+        value_decode: Decode the value read from the file before comparing: one step or a
+            list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16``
+            (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes
+            left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
+            unknown step, is an error.
+        decoded_key_path: Key path into the value ``json`` decoded (dot path as in json.value_matches);
+            it must select one value: none fails (the value decoded, the key is not in it), several are an error.
+            Required with ``json``, an error without it.
 
     Example:
         function: xml.attribute_matches
         parameter:
-          dst: /home/user/data/recent.xml
-          xpath: "//item[@href='file:///home/user/report.txt']"
-          attribute: visited
+          dst: /home/user/data/list.xml
+          xpath: "//entry[@ref='item-42']"
+          attribute: modified
           expected_value: !re '20[0-9]{2}-'
     """
+    decoder, problem = decoder_setup(value_decode, decoded_key_path)
+    if problem is not None:
+        return problem
+    ordered, expected_value, problem = ordered_setup(
+        ctx,
+        expected_value,
+        regex_match,
+        comparison_type,
+        value_type,
+        tolerance,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
+    )
+    if problem is not None:
+        return problem
+    if ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
+        expected_value = _text_form(expected_value)
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test attribute_matches')
 
@@ -471,53 +607,19 @@ def attribute_matches(
             return TestResult.failed([f'attribute "{attribute}" not found in element at XPath "{xpath}"'])
 
         actual_value = element.attrib[attribute]
-
-        # _compare_values uses "text" wording; for attributes we use the same logic
-        # but need to adjust messages for attribute context
-        expected_str = str(expected_value)
-
-        if not ctx.has_placeholders(expected_str):
-            # No placeholders - check for regex_match flag
-            if regex_match:
-                # Regex matching
-                try:
-                    flags = 0 if case_sensitive else re.IGNORECASE
-                    pattern = re.compile(expected_value, flags)
-                    if pattern.search(actual_value):
-                        is_match, message = (
-                            True,
-                            f'attribute value "{actual_value}" matches regex "{expected_value}"',
-                        )
-                    else:
-                        is_match, message = (
-                            False,
-                            f'attribute value "{actual_value}" does not match regex "{expected_value}"',
-                        )
-                except re.error as e:
-                    is_match, message = False, f'Invalid regex pattern: {expected_value} - {e}'
-            else:
-                # Direct value comparison
-                if case_sensitive:
-                    success = actual_value == expected_value
-                else:
-                    success = actual_value.lower() == expected_value.lower()
-
-                if success:
-                    is_match, message = True, f'attribute value matches expected: {actual_value}'
-                else:
-                    is_match, message = False, f'expected "{expected_value}", got "{actual_value}"'
-        else:
-            # Has placeholders - use placeholder system
-            is_match, message = compare_with_single_placeholder(ctx, expected_str, actual_value)
-
+        is_match, message = _compare_values(
+            ctx, actual_value, expected_value, regex_match, case_sensitive, ordered, 'attribute value', decoder
+        )
         if is_match:
             return TestResult.success([message])
         return TestResult.failed([message])
 
+    except (OrderingError, ValueDecodeError) as e:
+        return TestResult.error([str(e)])
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
@@ -531,40 +633,43 @@ def element_count(
     ctx: TestContext,
     dst: str,
     xpath: str,
-    expected_count: int = 0,
+    expected_count: int,
     comparison_type: str = 'equals',
     namespaces: dict[str, str] = None,
 ):
     """Pass when the number of elements selected by ``xpath`` satisfies ``comparison_type`` vs ``expected_count``.
 
-    Use for: counting entries (bookmarks, recent files); ``expected_count: 0`` asserts absence
+    Use for: counting entries; ``expected_count: 0`` asserts absence
     (opposite of xml.element_exists).
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
             ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
             Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
             error, so no functions such as ``text()``.
-        expected_count: Number to compare against (default 0).
+        expected_count: Required non-negative integer to compare against; anything else is an error.
         comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
-            ``less_equal``; other values are an execution error.
+            ``less_equal``; other values are an error.
         namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
             ``//ns:item``); ``{uri}tag`` also works without it.
 
     Example:
         function: xml.element_count
         parameter:
-          dst: /home/user/data/recent.xml
-          xpath: //item
+          dst: /home/user/data/list.xml
+          xpath: //entry
           expected_count: 1
           comparison_type: greater_equal
     """
+    problems = count_parameter_errors(expected_count, comparison_type)
+    if problems:
+        return TestResult.error(problems)
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test element_count')
 
@@ -573,7 +678,7 @@ def element_count(
         elements = _find_elements(root, xpath, namespaces)
         actual_count = len(elements)
 
-        success, message = _compare_count(actual_count, expected_count, comparison_type)
+        success, message = compare_count(actual_count, expected_count, comparison_type)
 
         if success:
             return TestResult.success([f'element count matches: {message}'])
@@ -582,7 +687,7 @@ def element_count(
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
@@ -596,27 +701,29 @@ def xpath_result_matches(
     ctx: TestContext,
     dst: str,
     xpath: str,
-    expected_result: str | int | float | bool = '',
+    expected_value: str | int | float | bool,
     result_type: str = 'text',
     namespaces: dict[str, str] = None,
 ):
-    """Pass when ``xpath`` evaluated as ``result_type`` equals ``expected_result``.
+    """Pass when ``xpath`` evaluated as ``result_type`` equals ``expected_value``.
 
     Use for: typed checks on the first matched element. Prefer xml.element_text_matches for text.
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         xpath: ElementTree ``ElementPath`` subset, evaluated on the root element:
             ``//tag`` (any depth), ``/root/child`` (first step must be the root tag),
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
             Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
             error, so no functions such as ``text()``.
-        expected_result: Converted per ``result_type``: ``str()``, ``float()`` or ``bool()``.
+        expected_value: Required. Converted per ``result_type``: ``str()``, ``float()`` or ``bool()``.
             Note ``bool('false')`` is True -- use unquoted YAML ``true``/``false``.
-        result_type: ``text`` (default; first element's ``.text``, ``''`` if none), ``number``
-            (``float`` of that text; no match -> 0.0, non-numeric -> execution error) or
+        result_type: ``text`` (default; first element's ``.text``, ``''`` if empty), ``number``
+            (``float`` of that text; non-numeric or empty -> execution error) or
             ``boolean`` (whether anything matched). Other values are an execution error.
+            With ``text`` or ``number`` an xpath that selects no element fails (it never equals
+            any ``expected_value``); ``boolean`` tests that.
         namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
             ``//ns:item``); ``{uri}tag`` also works without it.
 
@@ -625,35 +732,37 @@ def xpath_result_matches(
         parameter:
           dst: /home/user/.config/app/stats.xml
           xpath: ./counters/opened
-          expected_result: 3
+          expected_value: 3
           result_type: number
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test xpath_result_matches')
 
     try:
         root = _parse_xml(dst_resolved)
         actual_result = _evaluate_xpath(root, xpath, result_type, namespaces)
+        if actual_result is None:
+            return TestResult.failed([f'no element found at XPath "{xpath}"'])
 
         # Type conversion for comparison
         if result_type == 'number':
-            expected_result = float(expected_result)
+            expected = float(expected_value)
         elif result_type == 'boolean':
-            expected_result = bool(expected_result)
+            expected = bool(expected_value)
         else:
-            expected_result = str(expected_result)
+            expected = str(expected_value)
 
-        if actual_result == expected_result:
+        if actual_result == expected:
             return TestResult.success([f'XPath result matches: {actual_result}'])
-        return TestResult.failed([f'XPath result mismatch. Expected: {expected_result}, Got: {actual_result}'])
+        return TestResult.failed([f'XPath result mismatch. Expected: {expected}, Got: {actual_result}'])
 
     except ValueError as e:
         return TestResult.execution_error(e, "XML/XPath processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
@@ -668,13 +777,14 @@ def namespace_matches(
 ):
     """Pass when the namespaces detected in ``dst`` contain (or equal) ``expected_namespaces``.
 
-    Use for: checking which XML dialect/schema version a file uses. Only the root element's
-    own namespace is detected, under prefix ``''``: ElementTree drops ``xmlns:*`` attributes,
-    so other declared prefixes are never seen and expecting them fails.
+    Use for: checking which XML dialect/schema version a file uses. Every
+    ``xmlns`` / ``xmlns:prefix`` declaration in the file is detected (default namespace under
+    prefix ``''``), also on nested elements; a prefix declared twice with different URIs
+    keeps its first URI.
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
-            fails; malformed XML is an execution error.
+            or malformed XML is an execution error.
         expected_namespaces: Required map prefix -> URI, e.g. ``{'': 'http://www.w3.org/2000/svg'}``;
             ``None`` is an execution error.
         check_mode: ``contains`` (default; every expected prefix present with that URI) or
@@ -686,9 +796,11 @@ def namespace_matches(
           dst: /home/user/Pictures/logo.svg
           expected_namespaces: {'': 'http://www.w3.org/2000/svg'}
     """
+    if expected_namespaces is None:
+        return TestResult.error(['parameter expected_namespaces is required (map of prefix -> URI)'])
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
-        return TestResult.failed([f'XML file {dst} not found ({status})'])
+        return TestResult.error([f'XML file {dst} not found ({status})'])
 
     log.debug(f'dst file {dst_resolved} will be used for test namespace_matches')
 
@@ -724,6 +836,124 @@ def namespace_matches(
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
     except FileNotFoundError:
-        return TestResult.failed([f'XML file {dst_resolved} does not exist'])
+        return TestResult.error([f'XML file {dst_resolved} does not exist'])
     except (PermissionError, OSError) as e:
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
+
+
+_XML_FORMAT = StructuredFormat(label='XML', load=_parse_xml, errors=(ValueError,))
+
+
+def _side_values(root, xpath, attribute, namespaces):
+    """``(label, values)`` of one side: the text or ``attribute`` of every element ``xpath`` selects."""
+    elements = _find_elements(root, xpath, namespaces)
+    if attribute is None:
+        return f'text of XPath "{xpath}"', [element.text or "" for element in elements]
+    label = f'attribute "{attribute}" of XPath "{xpath}"'
+    return label, [element.attrib[attribute] for element in elements if attribute in element.attrib]
+
+
+@testfunction(
+    name='values_compare',
+    description='compares two values (element text or attribute) of one XML file (or of two files) as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def values_compare(
+    ctx: TestContext,
+    dst: str,
+    xpath: str,
+    other_xpath: str,
+    attribute: str | None = None,
+    other_attribute: str | None = None,
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    offset: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
+    namespaces: dict[str, str] = None,
+    other_dst: str | None = None,
+    value_decode: list[str] | str | None = None,
+    decoded_key_path: str | None = None,
+):
+    """Pass when the value selected by ``xpath`` compares to the one selected by ``other_xpath`` (+ ``offset``).
+
+    Use for: relations inside one XML file (or between two, ``other_dst``): a last-saved
+    value later than the first-opened one (two attributes, or two elements), two timestamps
+    within a few seconds of each other,
+    a counter one above another (``comparison_type: equals`` with ``offset: 1``). To compare
+    one value with a constant use xml.element_text_matches or xml.attribute_matches with
+    ``comparison_type``.
+
+    Args:
+        dst: Guest path to the XML file; a glob must match exactly one path. A missing file
+            or malformed XML is an error.
+        xpath: Selects the element of the first value (ElementTree ``ElementPath`` subset as in xml.element_text_matches).
+            It must select exactly one element (with ``attribute``: one element that has the
+            attribute): nothing fails, several are an error.
+        other_xpath: Selects the element of the second value; same rules (may equal ``xpath``
+            to compare two attributes of one element).
+        attribute: Take the first value from this attribute (``{uri}name`` for namespaced
+            attributes); ``None`` (default) takes the element text (``element.text``, before
+            the first child, not stripped).
+        other_attribute: The same for the second value.
+        comparison_type: How the first value relates to the second: ``equals`` (default),
+            ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``
+            (``less`` = earlier for timestamps). Other values are an error.
+        value_type: ``auto`` (default; numbers if both are numbers, else timestamps),
+            ``number`` or ``timestamp``. A value that is no number or timestamp is an error.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        offset: Added to the second value before comparing (seconds for timestamps, may be
+            negative; ``'{{ name }}'`` = a saved number): ``first <comparison_type> second + offset``.
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+        namespaces: Prefix -> URI map for prefixed names in both XPaths (``{ns: 'http://...'}`` +
+            ``//ns:item``); ``{uri}tag`` also works without it.
+        other_dst: Guest path of a second XML file to read ``other_xpath`` from (same rules as
+            ``dst``, ``archive!/member`` included); default ``None``: ``dst``. A missing file is
+            an error. Compares a file with a copy saved before an action.
+        value_decode: Decode both values before comparing (steps as in xml.element_text_matches).
+        decoded_key_path: With ``json`` in ``value_decode``: key path into the decoded value; it must select one
+            value: none fails, several are an error.
+
+    Example:
+        function: xml.values_compare
+        parameter:
+          dst: /home/user/data/list.xml
+          xpath: "//entry[@ref='item-42']"
+          attribute: modified
+          other_xpath: "//entry[@ref='item-42']"
+          other_attribute: created
+          comparison_type: greater_equal
+    """
+
+    def side(root, path, first):
+        return _side_values(root, path, attribute if first else other_attribute, namespaces)
+
+    return structured_values_compare(
+        ctx,
+        dst,
+        xpath,
+        other_xpath,
+        _XML_FORMAT,
+        comparison_type,
+        value_type,
+        tolerance,
+        offset,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
+        other_dst,
+        value_decode,
+        decoded_key_path,
+        side,
+    )
+
+
+# host mode pulls other_dst like dst
+values_compare._test_class.host_mode_path_params = ('other_dst',)

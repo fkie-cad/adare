@@ -138,7 +138,7 @@ tests:
     parameter:
       dst: '{{config_json}}'
       array_path: 'features'
-      expected_element: 'logging'
+      expected_value: 'logging'
 
   - name: test_json_array_contains_integer
     description: 'Test json_array_contains with integer element'
@@ -146,7 +146,7 @@ tests:
     parameter:
       dst: '{{users_json}}'
       array_path: 'user_ids'
-      expected_element: 123
+      expected_value: 123
 
   - name: test_json_array_contains_object
     description: 'Test json_array_contains with object element'
@@ -154,7 +154,7 @@ tests:
     parameter:
       dst: '{{users_json}}'
       array_path: 'permissions'
-      expected_element: {"action": "read", "resource": "users"}
+      expected_value: {"action": "read", "resource": "users"}
 
   - name: test_json_array_contains_not_found
     description: 'Test json_array_contains with non-existent element'
@@ -163,7 +163,7 @@ tests:
     parameter:
       dst: '{{config_json}}'
       array_path: 'features'
-      expected_element: 'nonexistent_feature'
+      expected_value: 'nonexistent_feature'
 
   - name: test_json_array_contains_not_array
     description: 'Test json_array_contains with non-array path'
@@ -172,7 +172,7 @@ tests:
     parameter:
       dst: '{{config_json}}'
       array_path: 'app_name'
-      expected_element: 'anything'
+      expected_value: 'anything'
 
   # Wildcard matching tests
   - name: test_json_value_matches_array_wildcard_any

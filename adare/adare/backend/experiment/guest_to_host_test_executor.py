@@ -13,18 +13,34 @@ Strategy:
 """
 
 import asyncio
+import glob
 import logging
-from datetime import datetime
+import os
+import shutil
+import tempfile
+from pathlib import Path
 
+from adare.backend.experiment.guest_probe_tests import QgaProbeTests
 from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
 from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
 from adarelib.event.event import TestResult
+from adarelib.testset.archive import has_archive_separator, join_archive_path, split_archive_path
 from adarelib.testset.basictest import BasicTest, HostModeCategory
+from adarelib.testset.testfunction import get_testclass_from_testfunction
 
 log = logging.getLogger(__name__)
 
 
-class GuestToHostTestExecutor:
+def _replace_paths(detail, display: dict[str, str]):
+    """``detail`` with local copies shown by their guest path (longest local path first)."""
+    if not isinstance(detail, str):
+        return detail
+    for local in sorted(display, key=len, reverse=True):
+        detail = detail.replace(local, display[local])
+    return detail
+
+
+class GuestToHostTestExecutor(QgaProbeTests):
     """
     Executes tests on the host machine using QGA for guest file/command access.
 
@@ -75,19 +91,9 @@ class GuestToHostTestExecutor:
 
         for test_def in playbook_tests:
             func_name_full = getattr(test_def, 'function', '')
-            # Extract short name (without collection prefix)
-            if '.' in func_name_full:
-                collection, func_name = func_name_full.split('.', 1)
-            else:
-                func_name = func_name_full
-
-            # Look up test class in testfunction_collection
-            test_cls = None
-            for coll_tests in testfunction_collection.values():
-                if isinstance(coll_tests, dict):
-                    test_cls = coll_tests.get(func_name)
-                    if test_cls:
-                        break
+            # By collection.name: several collections share function names (contains_key,
+            # value_matches, value_count), so a lookup by short name could pick another one.
+            test_cls = get_testclass_from_testfunction(func_name_full, testfunction_collection)
 
             if test_cls:
                 category = getattr(test_cls, 'host_mode_category', HostModeCategory.AGENT_ONLY)
@@ -165,12 +171,83 @@ class GuestToHostTestExecutor:
         test_function: str,
         test_instance: BasicTest,
     ) -> TestResult:
+        """Pull the paths of the class's ``host_mode_path_params`` (e.g. ``other_dst``), then dst.
+
+        Each path parameter that is set is pulled like dst (glob, archive member, sidecars)
+        and rewritten to its local copy for the run; the guest value is restored afterwards.
+        """
+        names = getattr(type(test_instance), 'host_mode_path_params', ())
+        parameter = getattr(test_instance, 'parameter', None)
+        originals = {n: getattr(parameter, n) for n in names if getattr(parameter, n, None)}
+        sidecars = getattr(type(test_instance), 'host_mode_sidecars', ())
+        display: dict[str, str] = {}
+        try:
+            for name, guest_value in originals.items():
+                local_value, shown, early = await self._pull_path_param(test_name, guest_value, sidecars)
+                if early is not None:
+                    return early
+                display.update(shown)
+                object.__setattr__(parameter, name, local_value)
+            result = await self._execute_dst_test(test_name, test_function, test_instance)
+        finally:
+            for name, guest_value in originals.items():
+                object.__setattr__(parameter, name, guest_value)
+        dst = getattr(parameter, 'dst', None)
+        if display and isinstance(dst, str) and not has_archive_separator(dst):
+            # details that name both files (values_compare) show dst's local copy too
+            display[str(self.guest_file._guest_path_to_local(dst))] = dst
+        if display:
+            result.details = [_replace_paths(d, display) for d in result.details]
+        return result
+
+    async def _pull_path_param(
+        self, test_name: str, guest_value: str, sidecars: tuple[str, ...]
+    ) -> tuple[str, dict[str, str], TestResult | None]:
+        """Pull one path parameter like dst: ``(local value, {local: guest} for display, early result)``.
+
+        A missing plain file is not an early result: the test sees the missing local path and
+        reports it (ERROR for content tests), as for dst.
+        """
+        if has_archive_separator(guest_value):
+            archive, members = split_archive_path(guest_value)
+            guest_archive, local_archive, early = await self._pull_archive(test_name, archive)
+            if early is not None:
+                return guest_value, {}, early
+            return join_archive_path(local_archive, members), {local_archive: guest_archive}, None
+        if any(c in guest_value for c in ('*', '?', '[', ']')):
+            try:
+                matching_paths = await self.guest_file.resolve_guest_glob(guest_value)
+            except RuntimeError as e:
+                return guest_value, {}, self._pull_error(test_name, guest_value, e)
+            self._drop_stale_copies(guest_value, matching_paths)
+            for guest_path in matching_paths:
+                try:
+                    await self.guest_file.pull_file(guest_path, force=True)
+                except FileNotFoundError:
+                    self._drop_stale_copies(guest_path, [], literal=True)
+                    continue
+                except RuntimeError as e:
+                    return guest_value, {}, self._pull_error(test_name, guest_path, e)
+                missing = await self._pull_sidecars(guest_path, sidecars)
+                if missing:
+                    return guest_value, {}, self._sidecar_error(missing)
+            return str(self.guest_file._guest_path_to_local(guest_value)), {}, None
+        local_value, early = await self._pull_plain_path(test_name, '', guest_value, sidecars)
+        return local_value, {local_value: guest_value}, early
+
+    async def _execute_dst_test(
+        self,
+        test_name: str,
+        test_function: str,
+        test_instance: BasicTest,
+    ) -> TestResult:
         """Execute a file-based test by pulling files and rewriting dst.
 
         Strategy:
         1. Read the original guest path from parameter.dst
         2. Handle glob patterns by resolving on guest first
-        3. Pull the file(s) from guest to local temp dir
+        3. Pull the file(s) from guest to local temp dir, always fresh: a test reads the
+           file as it is now, not a copy an earlier test pulled (before/after tests)
         4. Rewrite parameter.dst to local path
         5. Run test() locally
         """
@@ -180,13 +257,21 @@ class GuestToHostTestExecutor:
         original_dst = test_instance.parameter.dst
         log.debug(f"GuestToHostTestExecutor: original dst='{original_dst}'")
 
+        if has_archive_separator(original_dst) or test_function == 'standard.file_count':
+            return await self._execute_without_pull(test_name, test_function, test_instance, original_dst)
+
         # Check for glob patterns
         has_glob = any(c in original_dst for c in ['*', '?', '[', ']'])
         sidecars = getattr(type(test_instance), 'host_mode_sidecars', ())
 
         if has_glob:
             # Resolve glob on guest side, then pull matching files
-            matching_paths = await self.guest_file.resolve_guest_glob(original_dst)
+            try:
+                matching_paths = await self.guest_file.resolve_guest_glob(original_dst)
+            except RuntimeError as e:
+                # no answer is not "no match": an absence test must not pass on it
+                return self._pull_error(test_name, original_dst, e)
+            self._drop_stale_copies(original_dst, matching_paths)
             if not matching_paths:
                 # No matches — let the test handle it (will get empty glob results)
                 local_dst = str(self.guest_file._guest_path_to_local(original_dst))
@@ -198,10 +283,11 @@ class GuestToHostTestExecutor:
             # Pull each matching file
             for guest_path in matching_paths:
                 try:
-                    await self.guest_file.pull_file(guest_path, force=bool(sidecars))
+                    await self.guest_file.pull_file(guest_path, force=True)
                 except FileNotFoundError as e:
                     # Gone between glob and pull: it is absent, like an unmatched path.
                     log.warning(f"GuestToHostTestExecutor: {guest_path} vanished before pull: {e}")
+                    self._drop_stale_copies(guest_path, [], literal=True)
                     continue
                 except RuntimeError as e:
                     # A file that matched but could not be read must not silently drop out
@@ -214,27 +300,9 @@ class GuestToHostTestExecutor:
             # Rewrite dst to local glob pattern
             local_dst = str(self.guest_file._guest_path_to_local(original_dst))
         else:
-            # Simple path — pull directly
-            try:
-                local_path = await self.guest_file.pull_file(original_dst, force=bool(sidecars))
-                local_dst = str(local_path)
-            except FileNotFoundError as e:
-                # The guest answered "no such file": a real absence.
-                func_name = test_function.split('.')[-1] if '.' in test_function else test_function
-                if func_name in ('file_does_not_exist', 'dir_does_not_exist'):
-                    return TestResult.success([f'{original_dst} does not exist on guest'])
-                if func_name in ('file_exists', 'dir_exists'):
-                    return TestResult.failed([f'{original_dst} does not exist on guest: {e}'])
-                log.warning(f"GuestToHostTestExecutor: {original_dst} not found on guest: {e}")
-                local_dst = str(self.guest_file._guest_path_to_local(original_dst))
-            except RuntimeError as e:
-                # Transport/permission failure: says nothing about whether the file exists,
-                # so neither an absence test may pass nor an existence test fail on it.
-                return self._pull_error(test_name, original_dst, e)
-            else:
-                missing = await self._pull_sidecars(original_dst, sidecars)
-                if missing:
-                    return self._sidecar_error(missing)
+            local_dst, early = await self._pull_plain_path(test_name, test_function, original_dst, sidecars)
+            if early is not None:
+                return early
 
         # Rewrite dst and run test
         object.__setattr__(test_instance.parameter, 'dst', local_dst)
@@ -244,6 +312,149 @@ class GuestToHostTestExecutor:
             # Restore original dst for correct reporting
             object.__setattr__(test_instance.parameter, 'dst', original_dst)
 
+        return result
+
+    async def _pull_plain_path(
+        self, test_name: str, test_function: str, original_dst: str, sidecars
+    ) -> tuple[str, TestResult | None]:
+        """Pull a plain (non-glob) ``dst``; return the local path, or a result that ends the test."""
+        local_dst = str(self.guest_file._guest_path_to_local(original_dst))
+        try:
+            local_dst = str(await self.guest_file.pull_file(original_dst, force=True))
+        except FileNotFoundError as e:
+            # The guest answered "no such file": a real absence.
+            func_name = test_function.split('.')[-1] if '.' in test_function else test_function
+            if func_name in ('file_does_not_exist', 'dir_does_not_exist'):
+                return local_dst, TestResult.success([f'{original_dst} does not exist on guest'])
+            if func_name in ('file_exists', 'dir_exists'):
+                return local_dst, TestResult.failed([f'{original_dst} does not exist on guest: {e}'])
+            log.warning(f"GuestToHostTestExecutor: {original_dst} not found on guest: {e}")
+            # a copy an earlier test pulled must not stand in for the file that is gone
+            self._drop_stale_copies(original_dst, [], literal=True)
+            return local_dst, None
+        except RuntimeError as e:
+            # Transport/permission failure: says nothing about whether the file exists,
+            # so neither an absence test may pass nor an existence test fail on it.
+            return local_dst, self._pull_error(test_name, original_dst, e)
+        missing = await self._pull_sidecars(original_dst, sidecars)
+        return local_dst, (self._sidecar_error(missing) if missing else None)
+
+    async def _execute_archive_test(self, test_name: str, test_instance: BasicTest, original_dst: str) -> TestResult:
+        """Pull only the archive of ``archive!/member``; the test extracts the member locally.
+
+        Unlike a plain path, a missing archive is an ERROR for every test (also
+        file_does_not_exist): without the archive nothing can be said about its members.
+        Members' sidecars (SQLite -wal) come from the archive, so none are pulled.
+        """
+        archive, members = split_archive_path(original_dst)
+        guest_archive, local_archive, early = await self._pull_archive(test_name, archive)
+        if early is not None:
+            return early
+
+        object.__setattr__(test_instance.parameter, 'dst', join_archive_path(local_archive, members))
+        try:
+            result = await self._run_test(test_instance)
+        finally:
+            object.__setattr__(test_instance.parameter, 'dst', original_dst)
+
+        # report the guest path, not the host's temp copy
+        result.details = [d.replace(local_archive, guest_archive) if isinstance(d, str) else d for d in result.details]
+        return result
+
+    async def _pull_archive(self, test_name: str, archive: str) -> tuple[str, str, TestResult | None]:
+        """Pull the archive of an ``archive!/member`` path: ``(guest archive, local archive, early result)``.
+
+        A glob must match exactly one archive; a missing archive is an ERROR.
+        """
+        guest_archive = archive
+        if any(c in archive for c in ('*', '?', '[', ']')):
+            try:
+                matches = await self.guest_file.resolve_guest_glob(archive)
+            except RuntimeError as e:
+                return archive, '', self._pull_error(test_name, archive, e)
+            if len(matches) != 1:
+                found = 'no file matches' if not matches else f'{len(matches)} files match'
+                return archive, '', TestResult.error([f'archive {archive}: {found} the glob (must be exactly one)'])
+            guest_archive = matches[0]
+        try:
+            local_archive = str(await self.guest_file.pull_file(guest_archive, force=True))
+        except FileNotFoundError as e:
+            return guest_archive, '', TestResult.error([f'archive {guest_archive} does not exist on guest: {e}'])
+        except RuntimeError as e:
+            return guest_archive, '', self._pull_error(test_name, guest_archive, e)
+        return guest_archive, local_archive, None
+
+    def _drop_stale_copies(self, guest_pattern: str, matching_paths: list[str], literal: bool = False) -> None:
+        """Remove files from the shared local mirror that match ``guest_pattern`` but are not
+        among ``matching_paths`` on the guest any more (``literal``: ``guest_pattern`` is one path).
+
+        The mirror keeps every file an earlier test pulled; the test globs the mirror, so a copy
+        of a file since deleted on the guest would still be found (``file_exists`` passing,
+        ``file_does_not_exist`` failing on a file that is gone).
+        """
+        keep = {str(self.guest_file._guest_path_to_local(p)) for p in matching_paths}
+        local_pattern = str(self.guest_file._guest_path_to_local(guest_pattern))
+        for local in [local_pattern] if literal else glob.glob(local_pattern):
+            if local not in keep and (os.path.isfile(local) or os.path.islink(local)):
+                try:
+                    os.remove(local)
+                except OSError as e:
+                    log.warning(f"GuestToHostTestExecutor: could not remove stale copy {local}: {e}")
+
+    async def _execute_without_pull(
+        self, test_name: str, test_function: str, test_instance: BasicTest, original_dst: str
+    ) -> TestResult:
+        """Tests whose dst is not pulled as is: an archive path, or a count of guest paths."""
+        if has_archive_separator(original_dst):
+            return await self._execute_archive_test(test_name, test_instance, original_dst)
+        return await self._execute_path_count_test(test_name, test_instance, original_dst)
+
+    async def _execute_path_count_test(self, test_name: str, test_instance: BasicTest, original_dst: str) -> TestResult:
+        """Count guest paths (``standard.file_count``) without pulling any file.
+
+        The guest lists the matching paths with their kind; the test then runs on a fresh
+        skeleton of exactly those paths (empty files, directories, dangling links). So no copy
+        left in the shared mirror by an earlier test is counted, and directories count too.
+        """
+        try:
+            kinds = await self.guest_file.path_kinds(original_dst)
+        except RuntimeError as e:
+            return self._pull_error(test_name, original_dst, e)
+        mirror_root = self.guest_file._temp_root
+        skeleton = Path(tempfile.mkdtemp(prefix='adare_count_'))
+
+        def local_of(guest_path: str) -> Path:
+            return skeleton / self.guest_file._guest_path_to_local(guest_path).relative_to(mirror_root)
+
+        display = {str(local_of(p)): p for p, _ in kinds}
+        try:
+            for guest_path, kind in sorted(kinds, key=lambda item: item[1] != 'dir'):
+                local = local_of(guest_path)
+                local.parent.mkdir(parents=True, exist_ok=True)
+                if kind == 'dir':
+                    local.mkdir(exist_ok=True)
+                elif kind == 'file':
+                    local.touch()
+                else:
+                    local.symlink_to(skeleton / '.missing')
+            object.__setattr__(test_instance.parameter, 'dst', str(local_of(original_dst)))
+            try:
+                result = await self._run_test(test_instance)
+            finally:
+                object.__setattr__(test_instance.parameter, 'dst', original_dst)
+        except OSError as e:
+            return TestResult.execution_error(e, f'Cannot build the local listing for {original_dst}')
+        finally:
+            shutil.rmtree(skeleton, ignore_errors=True)
+        details = []
+        for detail in result.details:
+            if isinstance(detail, str):
+                # longest first, so a path is never replaced inside a longer one
+                for local_text in sorted(display, key=len, reverse=True):
+                    detail = detail.replace(local_text, display[local_text])
+                detail = detail.replace(str(local_of(original_dst)), original_dst)
+            details.append(detail)
+        result.details = details
         return result
 
     @staticmethod
@@ -259,10 +470,15 @@ class GuestToHostTestExecutor:
         no longer exists on the guest, so dst and its sidecars come from the same
         moment — a stale -wal next to a fresh database would corrupt the result.
 
+        A dst that is itself a sidecar (``app.db-wal``) has no companions of its own:
+        nothing is probed (no ``app.db-wal-wal``).
+
         Returns:
             Guest paths of sidecars that exist but could not be pulled
         """
-        missing = []
+        missing: list[str] = []
+        if guest_path.endswith(suffixes):
+            return missing
         for suffix in suffixes:
             sidecar = guest_path + suffix
             if await self.guest_file.file_exists(sidecar):
@@ -281,6 +497,18 @@ class GuestToHostTestExecutor:
             [f"could not pull {', '.join(missing)} from guest; testing without it would read stale data"]
         )
 
+    def _guest_os_error(self, test_function: str) -> TestResult | None:
+        """The agent refuses linux.* off Linux and windows.* off Windows; host mode does the same."""
+        collection = test_function.split('.')[0] if '.' in test_function else ''
+        is_windows = getattr(self.guest_command, 'is_windows', None)
+        if not isinstance(is_windows, bool):  # a hostside image proxy does not know the OS
+            return None
+        if collection == 'linux' and is_windows:
+            return TestResult.error([f'{test_function} only runs on Linux guests, this guest is Windows'])
+        if collection == 'windows' and not is_windows:
+            return TestResult.error([f'{test_function} only runs on Windows guests'])
+        return None
+
     async def _execute_qga_probe_test(
         self,
         test_name: str,
@@ -294,6 +522,9 @@ class GuestToHostTestExecutor:
         QGA and interpret the results on the host.
         """
         func_name = test_function.split('.')[-1] if '.' in test_function else test_function
+        os_error = self._guest_os_error(test_function)
+        if os_error is not None:
+            return os_error
 
         if func_name == 'process_running':
             return await self._test_process_running(test_instance)
@@ -301,370 +532,15 @@ class GuestToHostTestExecutor:
             return await self._test_service_status(test_instance)
         if func_name == 'user_exists':
             return await self._test_user_exists(test_instance)
-        if func_name == 'log_entry_exists':
-            return await self._test_log_entry_exists(test_instance)
         if func_name == 'registry_key_exists':
             return await self._test_registry_key_exists(test_instance)
         if func_name == 'registry_value_matches':
             return await self._test_registry_value_matches(test_instance)
         if func_name == 'file_permissions':
-            return await self._test_file_permissions(test_instance)
+            return await self._test_file_permissions(test_name, test_instance)
         if func_name == 'file_timestamps':
-            return await self._test_file_timestamps(test_instance)
+            return await self._test_file_timestamps(test_name, test_instance)
         return TestResult.error([f"Unknown QGA probe test: {func_name}"])
-
-    async def _test_process_running(self, test_instance: BasicTest) -> TestResult:
-        """Check if process is running via QGA."""
-        process_name = test_instance.parameter.process_name
-        if hasattr(test_instance, 'has_placeholders') and test_instance.has_placeholders(process_name):
-            process_name = test_instance.resolve_variables(process_name)
-
-        is_running = await self.guest_command.is_process_running(process_name)
-
-        if is_running:
-            return TestResult.success([f'process {process_name} is running'])
-        return TestResult.failed([f'process {process_name} is not running'])
-
-    async def _test_service_status(self, test_instance: BasicTest) -> TestResult:
-        """Check service status via QGA."""
-        service_name = test_instance.parameter.service_name
-        expected_status = test_instance.parameter.expected_status
-
-        if hasattr(test_instance, 'has_placeholders'):
-            if test_instance.has_placeholders(service_name):
-                service_name = test_instance.resolve_variables(service_name)
-            if test_instance.has_placeholders(expected_status):
-                expected_status = test_instance.resolve_variables(expected_status)
-
-        actual_status = await self.guest_command.get_service_status(service_name)
-
-        if actual_status == expected_status:
-            return TestResult.success([f'service {service_name} is {actual_status}'])
-        return TestResult.failed(
-            [f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}']
-        )
-
-    async def _test_user_exists(self, test_instance: BasicTest) -> TestResult:
-        """Check if user exists via QGA."""
-        username = test_instance.parameter.username
-        if hasattr(test_instance, 'has_placeholders') and test_instance.has_placeholders(username):
-            username = test_instance.resolve_variables(username)
-
-        exists = await self.guest_command.user_exists(username)
-
-        if exists:
-            return TestResult.success([f'user {username} exists'])
-        return TestResult.failed([f'user {username} does not exist'])
-
-    async def _test_log_entry_exists(self, test_instance: BasicTest) -> TestResult:
-        """Search for log entries matching a pattern via QGA."""
-        log_file = test_instance.parameter.log_file
-        pattern = test_instance.parameter.pattern
-        max_lines = getattr(test_instance.parameter, 'max_lines', 1000)
-
-        if hasattr(test_instance, 'has_placeholders'):
-            if test_instance.has_placeholders(log_file):
-                log_file = test_instance.resolve_variables(log_file)
-            if test_instance.has_placeholders(pattern):
-                pattern = test_instance.resolve_variables(pattern)
-
-        found, matches = await self.guest_command.search_log_file(log_file, pattern, max_lines)
-
-        if found:
-            return TestResult.success([f'found {len(matches)} log entries matching pattern in {log_file}'])
-        return TestResult.failed([f'no log entries matching pattern found in {log_file}'])
-
-    async def _test_registry_key_exists(self, test_instance: BasicTest) -> TestResult:
-        """Check if a Windows registry key exists via QGA PowerShell."""
-        key_path = test_instance.parameter.key_path
-        if hasattr(test_instance, 'has_placeholders') and test_instance.has_placeholders(key_path):
-            key_path = test_instance.resolve_variables(key_path)
-
-        exists = await self.guest_command.registry_key_exists(key_path)
-
-        if exists:
-            return TestResult.success([f'registry key exists: {key_path}'])
-        return TestResult.failed([f'registry key does not exist: {key_path}'])
-
-    async def _test_registry_value_matches(self, test_instance: BasicTest) -> TestResult:
-        """Check if a Windows registry value matches expected value via QGA PowerShell."""
-        key_path = test_instance.parameter.key_path
-        value_name = test_instance.parameter.value_name
-        expected_value = test_instance.parameter.expected_value
-        expected_type = getattr(test_instance.parameter, 'value_type', None)
-
-        if hasattr(test_instance, 'has_placeholders'):
-            if test_instance.has_placeholders(key_path):
-                key_path = test_instance.resolve_variables(key_path)
-            if test_instance.has_placeholders(value_name):
-                value_name = test_instance.resolve_variables(value_name)
-            if isinstance(expected_value, str) and test_instance.has_placeholders(expected_value):
-                expected_value = test_instance.resolve_variables(expected_value)
-
-        found, actual_value, actual_type = await self.guest_command.registry_value_get(key_path, value_name)
-
-        if not found:
-            return TestResult.failed([f'registry key or value does not exist: {key_path}\\{value_name}'])
-
-        # Type check if requested
-        if expected_type:
-            expected_type_upper = expected_type.upper()
-            # PowerShell type names: String, DWord, Binary, etc. Map to REG_ names
-            ps_to_reg = {
-                'STRING': 'REG_SZ',
-                'EXPANDSTRING': 'REG_EXPAND_SZ',
-                'BINARY': 'REG_BINARY',
-                'DWORD': 'REG_DWORD',
-                'MULTISTRING': 'REG_MULTI_SZ',
-                'QWORD': 'REG_QWORD',
-            }
-            actual_type_mapped = ps_to_reg.get(actual_type.upper(), actual_type.upper()) if actual_type else 'UNKNOWN'
-            if expected_type_upper != actual_type_mapped:
-                return TestResult.failed(
-                    [f'registry value type mismatch. Expected: {expected_type_upper}, Got: {actual_type_mapped}']
-                )
-
-        # Value comparison (compare as strings since QGA returns strings)
-        if str(actual_value) == str(expected_value):
-            return TestResult.success([f'registry value matches: {actual_value}'])
-        return TestResult.failed([f'registry value mismatch. Expected: {expected_value}, Got: {actual_value}'])
-
-    async def _test_file_permissions(self, test_instance: BasicTest) -> TestResult:
-        """Check file permissions, owner, and group via QGA stat."""
-        dst = test_instance.parameter.dst
-        expected_permissions = test_instance.parameter.expected_permissions
-        check_owner = getattr(test_instance.parameter, 'check_owner', None)
-        check_group = getattr(test_instance.parameter, 'check_group', None)
-
-        if hasattr(test_instance, 'has_placeholders') and test_instance.has_placeholders(dst):
-            dst = test_instance.resolve_variables(dst)
-
-        perm_info = await self.guest_command.get_file_permissions(dst)
-
-        if not perm_info:
-            return TestResult.failed([f'could not get permissions for {dst} (file may not exist)'])
-
-        results = []
-        success = True
-
-        # Check permissions (octal comparison)
-        actual_perms = perm_info.get('permissions', '')
-        if actual_perms:
-            # Normalize: both as 3-digit octal strings
-            try:
-                actual_octal = actual_perms.lstrip('0') or '0'
-                if expected_permissions.isdigit():
-                    expected_octal = expected_permissions.lstrip('0') or '0'
-                    if actual_octal == expected_octal:
-                        results.append(f'permissions match: {actual_perms}')
-                    else:
-                        results.append(f'permission mismatch. Expected: {expected_permissions}, Got: {actual_perms}')
-                        success = False
-                else:
-                    # Symbolic notation — convert actual octal to int for comparison
-                    actual_int = int(actual_perms, 8)
-                    expected_int = self._parse_symbolic_permissions(expected_permissions)
-                    if actual_int == expected_int:
-                        results.append(f'permissions match: {actual_perms}')
-                    else:
-                        results.append(f'permission mismatch. Expected: {expected_permissions}, Got: {actual_perms}')
-                        success = False
-            except ValueError as e:
-                results.append(f'permission comparison error: {e}')
-                success = False
-        else:
-            results.append(f'could not determine permissions for {dst}')
-            success = False
-
-        # Check owner
-        if check_owner:
-            actual_owner = perm_info.get('owner', '')
-            if actual_owner == check_owner:
-                results.append(f'owner matches: {actual_owner}')
-            else:
-                results.append(f'owner mismatch. Expected: {check_owner}, Got: {actual_owner}')
-                success = False
-
-        # Check group
-        if check_group:
-            actual_group = perm_info.get('group', '')
-            if actual_group == check_group:
-                results.append(f'group matches: {actual_group}')
-            else:
-                results.append(f'group mismatch. Expected: {check_group}, Got: {actual_group}')
-                success = False
-
-        if success:
-            return TestResult.success(results)
-        return TestResult.failed(results)
-
-    @staticmethod
-    def _parse_symbolic_permissions(perm_str: str) -> int:
-        """Parse symbolic permission string like 'rwxr-xr-x' to integer."""
-        import stat
-
-        if len(perm_str) != 9:
-            raise ValueError(f"Invalid symbolic permission format: {perm_str}")
-        perms = 0
-        if perm_str[0] == 'r':
-            perms |= stat.S_IRUSR
-        if perm_str[1] == 'w':
-            perms |= stat.S_IWUSR
-        if perm_str[2] == 'x':
-            perms |= stat.S_IXUSR
-        if perm_str[3] == 'r':
-            perms |= stat.S_IRGRP
-        if perm_str[4] == 'w':
-            perms |= stat.S_IWGRP
-        if perm_str[5] == 'x':
-            perms |= stat.S_IXGRP
-        if perm_str[6] == 'r':
-            perms |= stat.S_IROTH
-        if perm_str[7] == 'w':
-            perms |= stat.S_IWOTH
-        if perm_str[8] == 'x':
-            perms |= stat.S_IXOTH
-        return perms
-
-    async def _test_file_timestamps(self, test_instance: BasicTest) -> TestResult:
-        """Check file timestamps via QGA stat."""
-        dst = test_instance.parameter.dst
-        timestamp_type = getattr(test_instance.parameter, 'timestamp_type', 'modified')
-        comparison_type = getattr(test_instance.parameter, 'comparison_type', 'equals')
-
-        if hasattr(test_instance, 'has_placeholders') and test_instance.has_placeholders(dst):
-            dst = test_instance.resolve_variables(dst)
-
-        timestamps = await self.guest_command.get_file_timestamps(dst)
-
-        if not timestamps:
-            return TestResult.failed([f'could not get timestamps for {dst} (file may not exist)'])
-
-        # Map timestamp_type to stat key
-        type_to_key = {'modified': 'mtime', 'accessed': 'atime', 'created': 'ctime'}
-        stat_key = type_to_key.get(timestamp_type)
-        if not stat_key or stat_key not in timestamps:
-            return TestResult.error([f'timestamp type {timestamp_type} not available for {dst}'])
-
-        actual_time = timestamps[stat_key]
-
-        if comparison_type == 'equals':
-            expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
-            )
-            tolerance = getattr(test_instance.parameter, 'tolerance_seconds', 0) or 0
-            if abs(actual_time - expected_time) <= tolerance:
-                return TestResult.success(
-                    [f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}']
-                )
-            return TestResult.failed(
-                [
-                    f'{timestamp_type} timestamp mismatch. '
-                    f'Expected: {datetime.fromtimestamp(expected_time)}, Got: {datetime.fromtimestamp(actual_time)}'
-                ]
-            )
-
-        if comparison_type == 'before':
-            expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
-            )
-            if actual_time < expected_time:
-                return TestResult.success(
-                    [f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected_time)}']
-                )
-            return TestResult.failed(
-                [f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected_time)}']
-            )
-
-        if comparison_type == 'after':
-            expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
-            )
-            if actual_time > expected_time:
-                return TestResult.success(
-                    [f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected_time)}']
-                )
-            return TestResult.failed(
-                [f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected_time)}']
-            )
-
-        if comparison_type == 'between':
-            start_time = self._parse_test_timestamp(
-                test_instance.parameter.start_time, getattr(test_instance.parameter, 'time_format', None)
-            )
-            end_time = self._parse_test_timestamp(
-                test_instance.parameter.end_time, getattr(test_instance.parameter, 'time_format', None)
-            )
-            if start_time <= actual_time <= end_time:
-                return TestResult.success(
-                    [
-                        f'{timestamp_type} timestamp is between '
-                        f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
-                    ]
-                )
-            return TestResult.failed(
-                [
-                    f'{timestamp_type} timestamp is not between '
-                    f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
-                ]
-            )
-
-        if comparison_type == 'within_last':
-            within_duration = test_instance.parameter.within_duration
-            duration_seconds = self._parse_duration(within_duration)
-            current_time = datetime.now().timestamp()
-            threshold_time = current_time - duration_seconds
-            if actual_time >= threshold_time:
-                return TestResult.success([f'{timestamp_type} timestamp is within last {within_duration}'])
-            return TestResult.failed([f'{timestamp_type} timestamp is not within last {within_duration}'])
-
-        return TestResult.error([f'Unsupported comparison type: {comparison_type}'])
-
-    @staticmethod
-    def _parse_test_timestamp(timestamp, time_format=None) -> float:
-        """Parse a timestamp value to Unix epoch seconds."""
-        if isinstance(timestamp, (int, float)):
-            return float(timestamp)
-
-        timestamp = str(timestamp)
-        try:
-            return float(timestamp)
-        except (ValueError, TypeError):
-            pass
-
-        if time_format:
-            try:
-                return datetime.strptime(timestamp, time_format).timestamp()
-            except ValueError:
-                pass
-
-        common_formats = [
-            '%Y-%m-%d %H:%M:%S',
-            '%Y-%m-%dT%H:%M:%S',
-            '%Y-%m-%dT%H:%M:%SZ',
-            '%Y-%m-%d',
-            '%m/%d/%Y %H:%M:%S',
-            '%m/%d/%Y',
-        ]
-        for fmt in common_formats:
-            try:
-                return datetime.strptime(timestamp, fmt).timestamp()
-            except ValueError:
-                continue
-
-        raise ValueError(f"Cannot parse timestamp: {timestamp}")
-
-    @staticmethod
-    def _parse_duration(duration_str: str) -> float:
-        """Parse duration string like '1h', '30m', '2d' to seconds."""
-        units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
-        if not duration_str or duration_str[-1] not in units:
-            raise ValueError(f"Invalid duration format: {duration_str}")
-        try:
-            value = int(duration_str[:-1])
-            return value * units[duration_str[-1]]
-        except ValueError as e:
-            raise ValueError(f"Invalid duration format: {duration_str}") from e
 
     async def _run_test(self, test_instance) -> TestResult:
         """Run a test method, handling both sync and async test() methods."""

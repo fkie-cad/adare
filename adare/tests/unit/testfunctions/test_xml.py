@@ -158,26 +158,16 @@ class TestElementExists:
         assert "1 matches" in result.details[0]
 
     def test_element_exists_file_not_found(self, tmp_path):
-        """A missing XML file is a test FAILURE, not an execution error."""
+        """A missing XML file is an execution ERROR, not a test failure."""
         test = ElementExists(
             name="test_exists", parameter=ElementExistsParameter(dst=str(tmp_path / "nonexistent.xml"), xpath="//item")
         )
         result = test.test()
 
-        # FAILED, not ERROR, and this assertion was changed deliberately when xml.py
-        # moved from lxml to the stdlib parser.
-        #
-        # xml.py has always ordered `except FileNotFoundError -> failed(...)` ahead of
-        # `except OSError -> execution_error(...)`, in all six of its functions, so a
-        # missing file was clearly meant to read as a failed assertion. But lxml's
-        # parse() raises a bare OSError for a missing path, never FileNotFoundError,
-        # so that clause was unreachable and the file surfaced as ERROR instead. The
-        # stdlib parser raises FileNotFoundError, so the intended branch now runs.
-        #
-        # FAILED is also the more truthful verdict: "the artifact is not there" is a
-        # finding about the evidence, whereas ERROR says the test could not be
-        # evaluated. The detail string still names the path, so nothing is lost.
-        assert result.status == StatusEnum.FAILED
+        # ERROR, not FAILED: the test never read the evidence, so it has no answer.
+        # expect_to_fail inverts only SUCCESS/FAILED, so a FAILED here would let a
+        # wrong path pass a negative test (same rule as sqlite.query_result).
+        assert result.status == StatusEnum.ERROR
         assert "does not exist" in result.details[0]
 
     def test_element_exists_malformed_xml(self, create_xml_file):
@@ -233,7 +223,7 @@ class TestElementTextMatches:
 
         test = ElementTextMatches(
             name="test_text",
-            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//name", expected_text="Alice"),
+            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//name", expected_value="Alice"),
         )
         result = test.test()
 
@@ -252,7 +242,7 @@ class TestElementTextMatches:
 
         test = ElementTextMatches(
             name="test_text",
-            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//name", expected_text="Bob"),
+            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//name", expected_value="Bob"),
         )
         result = test.test()
 
@@ -273,7 +263,7 @@ class TestElementTextMatches:
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file), xpath="//code", expected_text=r"[A-Z]{3}-\d{5}", regex_match=True
+                dst=str(xml_file), xpath="//code", expected_value=r"[A-Z]{3}-\d{5}", regex_match=True
             ),
         )
         result = test.test()
@@ -294,7 +284,7 @@ class TestElementTextMatches:
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file), xpath="//code", expected_text=r"\d{5}", regex_match=True
+                dst=str(xml_file), xpath="//code", expected_value=r"\d{5}", regex_match=True
             ),
         )
         result = test.test()
@@ -315,7 +305,7 @@ class TestElementTextMatches:
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file), xpath="//name", expected_text="alice", case_sensitive=False
+                dst=str(xml_file), xpath="//name", expected_value="alice", case_sensitive=False
             ),
         )
         result = test.test()
@@ -335,7 +325,7 @@ class TestElementTextMatches:
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file), xpath="//name", expected_text="alice", case_sensitive=True
+                dst=str(xml_file), xpath="//name", expected_value="alice", case_sensitive=True
             ),
         )
         result = test.test()
@@ -357,7 +347,7 @@ class TestElementTextMatches:
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file), xpath="//item", expected_text="Banana", wildcard_mode="any"
+                dst=str(xml_file), xpath="//item", expected_value="Banana", wildcard_mode="any"
             ),
         )
         result = test.test()
@@ -380,7 +370,7 @@ class TestElementTextMatches:
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file), xpath="//status", expected_text="active", wildcard_mode="all"
+                dst=str(xml_file), xpath="//status", expected_value="active", wildcard_mode="all"
             ),
         )
         result = test.test()
@@ -403,7 +393,7 @@ class TestElementTextMatches:
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file), xpath="//status", expected_text="active", wildcard_mode="all"
+                dst=str(xml_file), xpath="//status", expected_value="active", wildcard_mode="all"
             ),
         )
         result = test.test()
@@ -424,7 +414,7 @@ class TestElementTextMatches:
         test = ElementTextMatches(
             name="test_text",
             parameter=ElementTextMatchesParameter(
-                dst=str(xml_file), xpath="//ns:name", expected_text="Alice", namespaces={"ns": "http://example.com/ns"}
+                dst=str(xml_file), xpath="//ns:name", expected_value="Alice", namespaces={"ns": "http://example.com/ns"}
             ),
         )
         result = test.test()
@@ -443,7 +433,7 @@ class TestElementTextMatches:
 
         test = ElementTextMatches(
             name="test_text",
-            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//empty", expected_text=""),
+            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//empty", expected_value=""),
         )
         result = test.test()
 
@@ -461,7 +451,7 @@ class TestElementTextMatches:
 
         test = ElementTextMatches(
             name="test_text",
-            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//nonexistent", expected_text="test"),
+            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//nonexistent", expected_value="test"),
         )
         result = test.test()
 
@@ -480,7 +470,7 @@ class TestElementTextMatches:
 
         test = ElementTextMatches(
             name="test_text",
-            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//item", expected_text="{{VAR1}}"),
+            parameter=ElementTextMatchesParameter(dst=str(xml_file), xpath="//item", expected_value="{{VAR1}}"),
             variable_metadata=variable_metadata_simple,
         )
         result = test.test()
@@ -697,7 +687,7 @@ class TestElementCount:
         result = test.test()
 
         assert_test_success(result)
-        assert "count is 3" in result.details[0]
+        assert "count 3 " in result.details[0]
 
     def test_element_count_equals_failure(self, create_xml_file):
         """Test failure when count doesn't equal expected."""
@@ -719,7 +709,7 @@ class TestElementCount:
         result = test.test()
 
         assert_test_failed(result)
-        assert "count is 2" in result.details[0]
+        assert "count 2 " in result.details[0]
 
     def test_element_count_greater_success(self, create_xml_file):
         """Test successful count with greater comparison."""
@@ -742,7 +732,7 @@ class TestElementCount:
         result = test.test()
 
         assert_test_success(result)
-        assert "count is 3" in result.details[0]
+        assert "count 3 " in result.details[0]
 
     def test_element_count_less_success(self, create_xml_file):
         """Test successful count with less comparison."""
@@ -763,7 +753,7 @@ class TestElementCount:
         result = test.test()
 
         assert_test_success(result)
-        assert "count is 1" in result.details[0]
+        assert "count 1 " in result.details[0]
 
     def test_element_count_greater_equal_success(self, create_xml_file):
         """Test successful count with greater_equal comparison."""
@@ -824,7 +814,7 @@ class TestElementCount:
         result = test.test()
 
         assert_test_success(result)
-        assert "count is 0" in result.details[0]
+        assert "count 0 " in result.details[0]
 
     def test_element_count_with_namespaces(self, create_xml_file):
         """Test element counting with namespaces."""
@@ -892,7 +882,7 @@ class TestElementCount:
         result = test.test()
 
         assert result.status == StatusEnum.ERROR
-        assert "Invalid comparison type" in result.details[0]
+        assert "invalid comparison_type" in result.details[0]
 
 
 # ============================================================================
@@ -916,7 +906,7 @@ class TestXPathResultMatches:
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file), xpath="//name", expected_result="Alice", result_type="text"
+                dst=str(xml_file), xpath="//name", expected_value="Alice", result_type="text"
             ),
         )
         result = test.test()
@@ -937,7 +927,7 @@ class TestXPathResultMatches:
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file), xpath="//name", expected_result="Bob", result_type="text"
+                dst=str(xml_file), xpath="//name", expected_value="Bob", result_type="text"
             ),
         )
         result = test.test()
@@ -958,7 +948,7 @@ class TestXPathResultMatches:
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file), xpath="//price", expected_result=29.99, result_type="number"
+                dst=str(xml_file), xpath="//price", expected_value=29.99, result_type="number"
             ),
         )
         result = test.test()
@@ -978,7 +968,7 @@ class TestXPathResultMatches:
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file), xpath="//price", expected_result=19.99, result_type="number"
+                dst=str(xml_file), xpath="//price", expected_value=19.99, result_type="number"
             ),
         )
         result = test.test()
@@ -998,7 +988,7 @@ class TestXPathResultMatches:
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file), xpath="//item", expected_result=True, result_type="boolean"
+                dst=str(xml_file), xpath="//item", expected_value=True, result_type="boolean"
             ),
         )
         result = test.test()
@@ -1017,7 +1007,7 @@ class TestXPathResultMatches:
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file), xpath="//nonexistent", expected_result=False, result_type="boolean"
+                dst=str(xml_file), xpath="//nonexistent", expected_value=False, result_type="boolean"
             ),
         )
         result = test.test()
@@ -1039,7 +1029,7 @@ class TestXPathResultMatches:
             parameter=XPathResultMatchesParameter(
                 dst=str(xml_file),
                 xpath="//ns:name",
-                expected_result="Alice",
+                expected_value="Alice",
                 result_type="text",
                 namespaces={"ns": "http://example.com/ns"},
             ),
@@ -1061,7 +1051,7 @@ class TestXPathResultMatches:
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file), xpath="//empty", expected_result="", result_type="text"
+                dst=str(xml_file), xpath="//empty", expected_value="", result_type="text"
             ),
         )
         result = test.test()
@@ -1081,7 +1071,7 @@ class TestXPathResultMatches:
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file), xpath="//count", expected_result=0, result_type="number"
+                dst=str(xml_file), xpath="//count", expected_value=0, result_type="number"
             ),
         )
         result = test.test()
@@ -1103,7 +1093,7 @@ class TestXPathResultMatches:
             parameter=XPathResultMatchesParameter(
                 dst=str(xml_file),
                 xpath="//value",
-                expected_result="42",  # String that will be converted to float
+                expected_value="42",  # String that will be converted to float
                 result_type="number",
             ),
         )
@@ -1111,8 +1101,8 @@ class TestXPathResultMatches:
 
         assert_test_success(result)
 
-    def test_xpath_result_matches_missing_element_returns_zero(self, create_xml_file):
-        """Test XPath result with missing element for number type returns 0."""
+    def test_xpath_result_matches_missing_element_never_equals_zero(self, create_xml_file):
+        """A missing element has no value: expected_value 0 must not pass on absence."""
         xml_file = create_xml_file(
             "test.xml",
             """<?xml version="1.0"?>
@@ -1124,12 +1114,12 @@ class TestXPathResultMatches:
         test = XPathResultMatches(
             name="test_xpath",
             parameter=XPathResultMatchesParameter(
-                dst=str(xml_file), xpath="//nonexistent", expected_result=0, result_type="number"
+                dst=str(xml_file), xpath="//nonexistent", expected_value=0, result_type="number"
             ),
         )
         result = test.test()
 
-        assert_test_success(result)
+        assert_test_failed(result)
 
 
 # ============================================================================

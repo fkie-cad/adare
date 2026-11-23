@@ -351,6 +351,29 @@ class TestValidatePlaybookTests:
         assert len(issues) == 1
         assert 't_bad' in issues[0]
 
+    def test_lookup_is_by_collection_and_name(self):
+        """Collections share function names; each test must get its own collection's class."""
+        testfunction_collection = {
+            # an agent-only collection listed first would win a lookup by short name
+            'custom': {'value_matches': AgentOnlyTest, 'line_count': AgentOnlyTest},
+            'plist': {'value_matches': FileContentTest},
+            'text': {'line_count': FileContentTest},
+        }
+
+        playbook_tests = [
+            self._make_test_def('t_plist', 'plist.value_matches'),
+            self._make_test_def('t_text', 'text.line_count'),
+        ]
+
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
+        assert ok is True, issues
+
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
+            [self._make_test_def('t_custom', 'custom.value_matches')], testfunction_collection
+        )
+        assert ok is False
+        assert 'agent_only' in issues[0]
+
     def test_no_category_test_defaults_to_agent_only(self):
         """Test class without explicit host_mode_category defaults to AGENT_ONLY."""
         testfunction_collection = {
@@ -409,6 +432,18 @@ class TestSidecarPulling:
         ]
 
     @pytest.mark.asyncio
+    async def test_dst_that_is_a_sidecar_probes_no_companions(self, tmp_path):
+        executor, guest_file = self._make_executor(tmp_path, {'/home/user/app.db-wal'})
+        test = SidecarTest(parameter=SidecarParam(dst='/home/user/app.db-wal'))
+
+        result = await executor._execute_file_based_test('t', 'sqlite.wal_frame_count', test)
+
+        assert result.status == StatusEnum.SUCCESS
+        assert guest_file.pull_file.await_args_list == [(('/home/user/app.db-wal',), {'force': True})]
+        probed = [call.args[0] for call in guest_file.file_exists.await_args_list]
+        assert not any(p.endswith(('-wal-wal', '-wal-journal')) for p in probed), probed
+
+    @pytest.mark.asyncio
     async def test_removes_stale_local_sidecar_gone_from_guest(self, tmp_path):
         stale = tmp_path / 'home/user/app.db-wal'
         stale.parent.mkdir(parents=True)
@@ -448,13 +483,127 @@ class TestSidecarPulling:
         assert pulled == ['/home/user/app.db', '/home/user/app.db-journal']
 
     @pytest.mark.asyncio
-    async def test_tests_without_sidecars_keep_cached_pull(self, tmp_path):
+    async def test_every_test_pulls_fresh(self, tmp_path):
+        """One proxy serves the whole run: a cached pull would hand an after-test the
+        file as an earlier test saw it."""
         executor, guest_file = self._make_executor(tmp_path, set())
 
         await executor._execute_file_based_test('t', 'json.contains_key', FileContentTest())
 
-        guest_file.pull_file.assert_awaited_once_with('/tmp/testfile', force=False)
+        guest_file.pull_file.assert_awaited_once_with('/tmp/testfile', force=True)
         guest_file.file_exists.assert_not_awaited()
+
+
+@attrs.define
+class PathParam(Parameter):
+    dst: str = '/home/user/after.db'
+    other_dst: str | None = '/home/user/before.db'
+
+
+@attrs.define
+class PathParamTest(SidecarTest):
+    """A values_compare-like test: other_dst is a second guest file (with sidecars)."""
+
+    host_mode_path_params: ClassVar[tuple[str, ...]] = ('other_dst',)
+
+    parameter: PathParam = attrs.Factory(PathParam)
+
+
+class TestPathParams:
+    """host_mode_path_params (other_dst) are pulled like dst, with sidecars, and restored after."""
+
+    def _make_executor(self, tmp_path, existing=frozenset()):
+        guest_file = MagicMock()
+        guest_file.pull_file = AsyncMock(side_effect=lambda p, force=False: tmp_path / p.lstrip('/'))
+        guest_file.file_exists = AsyncMock(side_effect=lambda p: p in existing)
+        guest_file._guest_path_to_local = lambda p: tmp_path / p.lstrip('/')
+        executor = GuestToHostTestExecutor(guest_file=guest_file, guest_command=MagicMock(), testfunction_collection={})
+        seen = {}
+
+        async def run(instance):
+            seen.update(dst=instance.parameter.dst, other_dst=instance.parameter.other_dst)
+            return TestResult.failed([f'{instance.parameter.other_dst} differs'])
+
+        executor._run_test = AsyncMock(side_effect=run)
+        return executor, guest_file, seen
+
+    @pytest.mark.asyncio
+    async def test_pulls_other_dst_and_its_sidecars(self, tmp_path):
+        executor, guest_file, seen = self._make_executor(tmp_path, {'/home/user/before.db-wal'})
+        test = PathParamTest()
+
+        result = await executor._execute_file_based_test('t', 'sqlite.values_compare', test)
+
+        pulled = [c.args[0] for c in guest_file.pull_file.await_args_list]
+        assert pulled == ['/home/user/before.db', '/home/user/before.db-wal', '/home/user/after.db']
+        assert seen == {'dst': str(tmp_path / 'home/user/after.db'), 'other_dst': str(tmp_path / 'home/user/before.db')}
+        # restored for reporting, and the details show the guest path
+        assert (test.parameter.dst, test.parameter.other_dst) == ('/home/user/after.db', '/home/user/before.db')
+        assert result.details == ['/home/user/before.db differs']
+
+    @pytest.mark.asyncio
+    async def test_unset_param_is_not_pulled(self, tmp_path):
+        executor, guest_file, seen = self._make_executor(tmp_path)
+        test = PathParamTest(parameter=PathParam(other_dst=None))
+
+        await executor._execute_file_based_test('t', 'json.values_compare', test)
+
+        assert [c.args[0] for c in guest_file.pull_file.await_args_list] == ['/home/user/after.db']
+        assert seen['other_dst'] is None
+
+    @pytest.mark.asyncio
+    async def test_missing_other_dst_runs_on_the_missing_local_path(self, tmp_path):
+        stale = tmp_path / 'home/user/before.db'
+        stale.parent.mkdir(parents=True)
+        stale.write_bytes(b'from an earlier pull')
+        executor, guest_file, seen = self._make_executor(tmp_path)
+
+        async def pull(path, force=False):
+            if path == '/home/user/before.db':
+                raise FileNotFoundError('no such file')
+            return tmp_path / path.lstrip('/')
+
+        guest_file.pull_file.side_effect = pull
+
+        await executor._execute_file_based_test('t', 'json.values_compare', PathParamTest())
+
+        assert seen['other_dst'] == str(stale) and not stale.exists()  # the test reports it missing
+
+    @pytest.mark.asyncio
+    async def test_other_dst_transport_error_is_an_error(self, tmp_path):
+        executor, guest_file, _ = self._make_executor(tmp_path)
+        guest_file.pull_file.side_effect = RuntimeError('transfer failed')
+        test = PathParamTest()
+
+        result = await executor._execute_file_based_test('t', 'json.values_compare', test)
+
+        assert result.status == StatusEnum.ERROR
+        executor._run_test.assert_not_awaited()
+        assert test.parameter.other_dst == '/home/user/before.db'
+
+    @pytest.mark.asyncio
+    async def test_other_dst_archive_member_pulls_the_archive(self, tmp_path):
+        executor, guest_file, seen = self._make_executor(tmp_path)
+        guest_file.resolve_guest_glob = AsyncMock(return_value=['/home/user/backup-1.tar.gz'])
+        test = PathParamTest(parameter=PathParam(other_dst='/home/user/backup-*.tar.gz!/state.db'))
+
+        await executor._execute_file_based_test('t', 'json.values_compare', test)
+
+        pulled = [c.args[0] for c in guest_file.pull_file.await_args_list]
+        assert pulled == ['/home/user/backup-1.tar.gz', '/home/user/after.db']
+        assert seen['other_dst'] == f'{tmp_path}/home/user/backup-1.tar.gz!/state.db'
+
+    @pytest.mark.asyncio
+    async def test_other_dst_glob_pulls_each_match(self, tmp_path):
+        executor, guest_file, seen = self._make_executor(tmp_path, {'/home/user/b1.db-journal'})
+        guest_file.resolve_guest_glob = AsyncMock(return_value=['/home/user/b1.db'])
+        test = PathParamTest(parameter=PathParam(other_dst='/home/user/b*.db'))
+
+        await executor._execute_file_based_test('t', 'json.values_compare', test)
+
+        pulled = [c.args[0] for c in guest_file.pull_file.await_args_list]
+        assert pulled == ['/home/user/b1.db', '/home/user/b1.db-journal', '/home/user/after.db']
+        assert seen['other_dst'] == str(tmp_path / 'home/user/b*.db')
 
 
 # ============================================================================
@@ -532,3 +681,73 @@ class TestQgaNotFoundClassification:
         from adare.backend.experiment.host_services.guest_file_proxy import is_not_found_error
 
         assert not is_not_found_error(message)
+
+
+# ============================================================================
+# Archive members: only the archive is pulled; the test extracts the member
+# ============================================================================
+
+
+class TestArchiveDst:
+    """dst 'archive!/member' pulls the archive only and rewrites dst to the local copy."""
+
+    def _make_executor(self, tmp_path, pull_error=None):
+        guest_file = MagicMock()
+        guest_file.pull_file = AsyncMock(
+            side_effect=pull_error or (lambda p, force=False: tmp_path / 'pulled' / p.lstrip('/'))
+        )
+        guest_file.file_exists = AsyncMock(return_value=True)
+        guest_file.resolve_guest_glob = AsyncMock(return_value=['/home/u/backup-1.tar.gz'])
+        executor = GuestToHostTestExecutor(guest_file=guest_file, guest_command=MagicMock(), testfunction_collection={})
+        seen = []
+
+        async def run(instance):
+            seen.append(instance.parameter.dst)
+            local = str(tmp_path / 'pulled/home/u/backup-1.tar.gz')
+            return TestResult.success([f'archive member: x.json from {local} sha256=00, 2 bytes'])
+
+        executor._run_test = AsyncMock(side_effect=run)
+        return executor, guest_file, seen
+
+    @pytest.mark.asyncio
+    async def test_pulls_only_the_archive_and_rewrites_dst(self, tmp_path):
+        executor, guest_file, seen = self._make_executor(tmp_path)
+        instance = SidecarTest(parameter=SidecarParam(dst='/home/u/backup-*.tar.gz!/etc/x.json'))
+
+        result = await executor._execute_file_based_test('t', 'sqlite.query_result', instance)
+
+        assert result.status == StatusEnum.SUCCESS
+        # one pull, of the resolved archive; no sidecar lookups next to the archive
+        assert [c.args[0] for c in guest_file.pull_file.await_args_list] == ['/home/u/backup-1.tar.gz']
+        guest_file.file_exists.assert_not_awaited()
+        assert seen == [f'{tmp_path}/pulled/home/u/backup-1.tar.gz!/etc/x.json']
+        assert instance.parameter.dst == '/home/u/backup-*.tar.gz!/etc/x.json'  # restored
+        assert result.details == ['archive member: x.json from /home/u/backup-1.tar.gz sha256=00, 2 bytes']
+
+    @pytest.mark.asyncio
+    async def test_missing_archive_is_error_even_for_absence_test(self, tmp_path):
+        executor, _, _ = self._make_executor(tmp_path, pull_error=FileNotFoundError('no such file'))
+        instance = FileBasedTest(parameter=DummyParam(dst='/home/u/gone.zip!/x'))
+
+        result = await executor._execute_file_based_test('t', 'standard.file_does_not_exist', instance)
+
+        assert result.status == StatusEnum.ERROR
+        executor._run_test.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_archive_glob_must_match_one(self, tmp_path):
+        executor, guest_file, _ = self._make_executor(tmp_path)
+        guest_file.resolve_guest_glob.return_value = ['/a/1.zip', '/a/2.zip']
+        instance = FileBasedTest(parameter=DummyParam(dst='/a/*.zip!/x'))
+
+        result = await executor._execute_file_based_test('t', 'standard.file_exists', instance)
+
+        assert result.status == StatusEnum.ERROR
+        guest_file.pull_file.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_transport_error_is_error(self, tmp_path):
+        executor, _, _ = self._make_executor(tmp_path, pull_error=RuntimeError('QGA timeout'))
+        instance = FileBasedTest(parameter=DummyParam(dst='/home/u/b.zip!/x'))
+        result = await executor._execute_file_based_test('t', 'standard.file_exists', instance)
+        assert result.status == StatusEnum.ERROR

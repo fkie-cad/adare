@@ -1,0 +1,4 @@
+# actionlint (`make ci-hygiene`): labels of our self-hosted runners.
+self-hosted-runner:
+  labels:
+    - adare-live  # live-smoke.yml, on the ADARE host

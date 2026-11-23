@@ -61,6 +61,28 @@ def load_failure_hints(exception_type: str, exception_message: str) -> list[str]
     ]
 
 
+def not_found_messages(function_name: str, supported_tests: dict[str, Any]) -> list[str]:
+    """Error lines for a test function that no loaded collection provides.
+
+    When no collection was loaded at all, the real problem is the upload (an empty or
+    missing testfunction archive), so say that instead of printing an empty "Available:".
+    """
+    available_functions = sorted(
+        f"{coll_name}.{func_name}" for coll_name, coll_funcs in supported_tests.items() for func_name in coll_funcs
+    )
+    if not available_functions:
+        return [
+            f"Test function '{function_name}' not found",
+            "No testfunctions were uploaded to the guest (no testfunction collection is loaded); "
+            "the host-side upload was empty or failed - check the host log for the testfunction upload",
+        ]
+    shown = ', '.join(available_functions[:10])
+    return [
+        f"Test function '{function_name}' not found",
+        f"Available: {shown}{'...' if len(available_functions) > 10 else ''}",
+    ]
+
+
 class TestToolsMixin:
     """Mixin providing test management tool methods."""
 
@@ -135,8 +157,6 @@ class TestToolsMixin:
 
     def _execute_resolved_test_data(self, resolved_test_data: dict[str, Any]) -> dict[str, Any]:
         """Execute a test using pre-resolved test data."""
-        log.info(f"CLAUDE: Starting test execution with resolved_test_data: {resolved_test_data}")
-
         try:
             # Validate resolved_test_data is not None
             if resolved_test_data is None:
@@ -210,6 +230,13 @@ class TestToolsMixin:
             if not function_name:
                 return TestResult.error(["No test function specified"])
 
+            # A playbook written for an older version: say what the name is now
+            from adarelib.testset.renames import rename_problems
+
+            renamed = rename_problems(function_name, resolved_test_data.get('parameter'))
+            if renamed:
+                return TestResult.error(renamed)
+
             # Get test class using the proper helper function
             test_class = get_testclass_from_testfunction(function_name, supported_tests)
             if not test_class:
@@ -229,17 +256,7 @@ class TestToolsMixin:
 
                     hints = load_failure_hints(failure.exception_type, failure.exception_message)
                     return TestResult.error([error_msg, *hints])
-                available_functions = []
-                for coll_name, coll_funcs in supported_tests.items():
-                    for func_name in coll_funcs:
-                        available_functions.append(f"{coll_name}.{func_name}")
-
-                return TestResult.error(
-                    [
-                        f"Test function '{function_name}' not found",
-                        f"Available: {', '.join(sorted(available_functions)[:10])}{'...' if len(available_functions) > 10 else ''}",
-                    ]
-                )
+                return TestResult.error(not_found_messages(function_name, supported_tests))
 
             # Create test instance with required arguments
             test_name = resolved_test_data.get('name', 'unknown_test')
@@ -264,8 +281,6 @@ class TestToolsMixin:
                     parameter_instance = parameter_class(**processed_test_data['parameter'])
 
                 variable_metadata = processed_test_data.get('_VARIABLE_METADATA', {})
-                log.info(f"CLAUDE: Creating test instance with variable_metadata: {variable_metadata}")
-
                 test_instance = test_class(
                     name=test_name,
                     parameter=parameter_instance,
