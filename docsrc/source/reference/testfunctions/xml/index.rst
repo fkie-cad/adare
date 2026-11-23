@@ -32,3 +32,4 @@ Features:
    element_count
    xpath_result_matches
    namespace_matches
+   values_compare

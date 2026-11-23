@@ -284,3 +284,58 @@ class TestValueCount:
         for name in ("a.yaml", "b.yaml"):
             (tmp_path / name).write_text("a: 1\n", encoding="utf-8")
         assert_test_error(value_count(tmp_path / "*.yaml", "a", 0))
+
+
+# ============================================================================
+# ordered comparisons, values_compare
+# ============================================================================
+
+ValuesCompare = yaml_tf.values_compare._test_class
+
+STATE = """\
+session:
+  opened: 2026-03-01T10:00:00Z
+  closed: 2026-03-01T10:00:30Z
+  pages: 4
+  saved: "5"
+history: [1, 2]
+"""
+
+
+def values_compare(dst, key_path, other_key_path, **kwargs):
+    parameter = yaml_tf.values_compare._parameter_class(
+        dst=str(dst), key_path=key_path, other_key_path=other_key_path, **kwargs
+    )
+    return ValuesCompare(name="t", parameter=parameter).test()
+
+
+@pytest.fixture
+def state(tmp_path):
+    path = tmp_path / "state.yaml"
+    path.write_text(STATE, encoding="utf-8")
+    return path
+
+
+class TestOrderedComparison:
+    def test_value_matches_greater_on_a_yaml_timestamp(self, state):
+        assert_test_success(value_matches(state, "session.closed", "2026-03-01T10:00:00Z", comparison_type="greater"))
+        assert_test_failed(value_matches(state, "session.opened", "2026-03-01T10:00:00Z", comparison_type="greater"))
+
+    def test_value_matches_number_tolerance(self, state):
+        assert_test_success(value_matches(state, "session.pages", 5, tolerance=1))
+        assert_test_failed(value_matches(state, "session.pages", 6, tolerance=1))
+
+    def test_value_matches_ordered_with_regex_is_error(self, state):
+        assert_test_error(value_matches(state, "session.pages", "4", regex_match=True, comparison_type="less"))
+
+    def test_values_compare(self, state):
+        assert_test_success(values_compare(state, "session.opened", "session.closed", comparison_type="less"))
+        assert_test_success(values_compare(state, "session.closed", "session.opened", offset=30))
+        assert_test_success(values_compare(state, "session.saved", "session.pages", offset=1))
+        assert_test_failed(values_compare(state, "session.closed", "session.opened", tolerance=10))
+
+    def test_values_compare_missing_ambiguous_and_uninterpretable(self, state):
+        assert_test_failed(values_compare(state, "session.missing", "session.pages"))
+        assert_test_error(values_compare(state, "history", "session.pages"))
+        assert_test_error(values_compare(state, "session.*", "session.pages"))
+        assert_test_error(values_compare(state, "session.pages", "session.opened"))  # number vs timestamp

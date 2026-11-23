@@ -78,6 +78,18 @@ GOLDEN = [
     ('find a string in a binary database file', 'text.occurrence_count'),
     ('utf-16 encoded string', 'text.occurrence_count'),
     ('timestamp stored as unix epoch in sqlite', 'sqlite.query_result'),
+    # ordered comparisons and values_compare
+    ('created date earlier than modified date in the same XML file', 'xml.values_compare'),
+    ('two timestamps in one JSON file within 5 seconds', 'json.values_compare'),
+    ('EXIF date taken after a given day', 'image.exif_value_matches'),
+    # binary containers
+    ('read a number at an offset of a binary file', 'binary.struct_value_matches'),
+    ('count a byte pattern in a region of a binary file', 'binary.pattern_count'),
+    ('key value pair in a binary metadata block', 'binary.pair_value_matches'),
+    # sqlite write-ahead log
+    ('changes not yet checkpointed in the sqlite wal', 'sqlite.wal_frame_count'),
+    ('number of transactions in the wal file', 'sqlite.wal_frame_count'),
+    ('row only in the write-ahead log, not in the main database file', 'sqlite.row_count'),
 ]
 
 

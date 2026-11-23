@@ -259,3 +259,52 @@ class TestValueCount:
         for name in ("a.toml", "b.toml"):
             (tmp_path / name).write_text("a = 1\n", encoding="utf-8")
         assert_test_error(value_count(tmp_path / "*.toml", "a", 0))
+
+
+# ============================================================================
+# ordered comparisons, values_compare
+# ============================================================================
+
+ValuesCompare = toml_tf.values_compare._test_class
+
+STATE = """\
+[session]
+opened = 2026-03-01T10:00:00Z
+closed = 2026-03-01T12:00:30+02:00
+local = 2026-03-01T10:00:00
+pages = 4
+"""
+
+
+def values_compare(dst, key_path, other_key_path, **kwargs):
+    parameter = toml_tf.values_compare._parameter_class(
+        dst=str(dst), key_path=key_path, other_key_path=other_key_path, **kwargs
+    )
+    return ValuesCompare(name="t", parameter=parameter).test()
+
+
+@pytest.fixture
+def state(tmp_path):
+    path = tmp_path / "state.toml"
+    path.write_text(STATE, encoding="utf-8")
+    return path
+
+
+class TestOrderedComparison:
+    def test_value_matches_ordered(self, state):
+        assert_test_success(value_matches(state, "session.pages", 3, comparison_type="greater"))
+        assert_test_success(value_matches(state, "session.closed", "2026-03-01T10:00:00Z", tolerance=30))
+        assert_test_error(value_matches(state, "session.pages", 3, comparison_type="above"))
+
+    def test_values_compare(self, state):
+        assert_test_success(values_compare(state, "session.closed", "session.opened", comparison_type="greater"))
+        assert_test_success(values_compare(state, "session.closed", "session.opened", offset=30))
+        # a local date-time is read in utc_offset
+        assert_test_success(values_compare(state, "session.local", "session.opened", utc_offset="+00:00"))
+        assert_test_success(
+            values_compare(state, "session.local", "session.opened", utc_offset="+01:00", comparison_type="less")
+        )
+
+    def test_values_compare_missing_and_uninterpretable(self, state):
+        assert_test_failed(values_compare(state, "session.missing", "session.pages"))
+        assert_test_error(values_compare(state, "session", "session.pages"))

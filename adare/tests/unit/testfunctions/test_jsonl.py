@@ -798,3 +798,29 @@ def test_line_count_range_with_equals_still_works(three_active):
     result = _count(three_active, expected_count={"min": 1, "max": 3}, comparison_type="equals")
 
     assert result.status == StatusEnum.FAILED  # 4 valid lines, no conditions
+
+
+# ============================================================================
+# value_in_any_line: ordered comparisons
+# ============================================================================
+
+
+class TestValueInAnyLineOrdered:
+    def _run(self, path, expected_value, **params):
+        parameter = ValueInAnyLineParameter(dst=str(path), key_path="ts", expected_value=expected_value, **params)
+        return ValueInAnyLine(name="t", parameter=parameter).test()
+
+    @pytest.fixture
+    def log_file(self, create_jsonl_file):
+        return create_jsonl_file("log.jsonl", [{"ts": 1772359200000}, {"ts": 1772359260000}, {"other": 1}])
+
+    def test_any_line_later_than(self, log_file):
+        params = {"timestamp_epoch": 1970, "timestamp_unit": "ms", "comparison_type": "greater"}
+        assert_test_success(self._run(log_file, "2026-03-01T10:00:30Z", **params))
+        assert_test_failed(self._run(log_file, "2026-03-01T10:01:00Z", **params))
+
+    def test_number_compare_and_errors(self, log_file, create_jsonl_file):
+        assert_test_success(self._run(log_file, 1772359200001, comparison_type="less"))
+        assert_test_error(self._run(log_file, "1", comparison_type="less", regex_match=True))
+        bad = create_jsonl_file("bad.jsonl", [{"ts": 1}, {"ts": "late"}])
+        assert_test_error(self._run(bad, 5, comparison_type="greater"))

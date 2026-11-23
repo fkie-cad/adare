@@ -25,6 +25,8 @@ from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.testset.content import decode_text, read_bytes_capped
 from adarelib.testset.structured import WILDCARD_MODES, compare_count, compare_value, count_parameter_errors
+from adarelib.testset.ordering import OrderingError
+from adarelib.testset.valuecompare import ordered_setup
 
 # configure logging
 import logging
@@ -243,12 +245,22 @@ def value_matches(
     case_sensitive: bool = True,
     encoding: str = None,
     wildcard_mode: str = 'any',
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
 ):
     """Pass when the value of ``key`` in ``section`` of ``dst`` equals (or matches) ``expected_value``.
 
     Use for: asserting a setting's value. With duplicate keys or sections, one matching
     occurrence is enough (``wildcard_mode: all``: every occurrence must match). A missing
     key fails.
+
+    With ``comparison_type`` (``greater``, ``less``, ...), ``tolerance`` or the time
+    parameters the value is compared as a number or timestamp.
 
     Args:
         dst: Guest path to the INI file; a glob must match exactly one path. A missing,
@@ -266,6 +278,18 @@ def value_matches(
         encoding: Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8).
         wildcard_mode: With several occurrences, ``any`` (default): one must match; ``all``:
             every one must match. Other values are an error.
+        comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
+            ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
+            below, compares the value with ``expected_value`` as a number or point in time
+            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
+            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+        value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
+            ``number`` or ``timestamp``.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
 
     Example:
         function: ini.value_matches
@@ -277,6 +301,20 @@ def value_matches(
     """
     if wildcard_mode not in WILDCARD_MODES:
         return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
+    ordered, problem = ordered_setup(
+        ctx,
+        expected_value,
+        regex_match,
+        comparison_type,
+        value_type,
+        tolerance,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
+    )
+    if problem is not None:
+        return problem
     ini, error = _load_ini(ctx.resolve_globfilepath(dst), dst, encoding)
     if error is not None:
         return error
@@ -285,8 +323,11 @@ def value_matches(
         return TestResult.failed([f'{_where(section, key)} does not exist'])
     expected = _expected_text(expected_value)
     try:
-        results = [(e, *compare_value(ctx, e.value, expected, regex_match)) for e in found]
-    except re.error as e:
+        if ordered is not None:
+            results = [(e, *ordered.compare(e.value, expected)) for e in found]
+        else:
+            results = [(e, *compare_value(ctx, e.value, expected, regex_match)) for e in found]
+    except (re.error, OrderingError) as e:
         return TestResult.error([str(e)])
     if len(results) == 1:
         _, ok, message = results[0]

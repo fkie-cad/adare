@@ -383,10 +383,15 @@ class GuestToHostTestExecutor:
         no longer exists on the guest, so dst and its sidecars come from the same
         moment — a stale -wal next to a fresh database would corrupt the result.
 
+        A dst that is itself a sidecar (``app.db-wal``) has no companions of its own:
+        nothing is probed (no ``app.db-wal-wal``).
+
         Returns:
             Guest paths of sidecars that exist but could not be pulled
         """
-        missing = []
+        missing: list[str] = []
+        if guest_path.endswith(suffixes):
+            return missing
         for suffix in suffixes:
             sidecar = guest_path + suffix
             if await self.guest_file.file_exists(sidecar):

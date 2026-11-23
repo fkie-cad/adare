@@ -152,6 +152,38 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   `image.exif_value_matches` gain `wildcard_mode: any|all`.
 - `scripts/migrate_testfunction_renames.py` rewrites playbooks to the renamed testfunction
   parameters (see Breaking).
+- **Ordered comparisons** for value testfunctions (adare, adarelib; additive):
+  `json`/`yaml`/`toml`/`plist`/`ini.value_matches`, `xml.element_text_matches`,
+  `xml.attribute_matches`, `jsonl.value_in_any_line`, `excel.cell_value_matches` and
+  `image.exif_value_matches` take `comparison_type` (`equals`, `not_equals`, `greater`,
+  `less`, `greater_equal`, `less_equal`), `value_type` (`auto`, `number`, `timestamp`),
+  `tolerance` and the time parameters `time_format`, `timestamp_epoch`, `timestamp_unit`,
+  `utc_offset`. Numbers compare exactly, timestamps as points in time (ISO 8601, RFC 2822,
+  `strptime`, numeric epochs). All defaults keep the old equality/regex behaviour. A value
+  that is no number or timestamp, or `!re`/`regex_match` together with an ordered
+  comparison, gives ERROR. Core: `adarelib.testset.ordering`.
+- **`values_compare`** for `json`, `yaml`, `toml`, `plist` and `xml` (adare; additive):
+  compares two values of the same file, e.g. one timestamp earlier than another, within N
+  seconds of it, or one number equal to another plus `offset`. Each side must select one
+  value: none is FAILED, several are ERROR.
+- **`binary` collection** (adare, adarelib; additive) for binary containers without a
+  parser: `binary.struct_value_matches` (an integer, float, fixed-size string, C string or
+  byte run at an offset, compared by equality, regex or ordered comparison),
+  `binary.pattern_count` (bytes, hex, text or a bytes regex in a region),
+  `binary.pair_value_matches` and `binary.pair_count` (separator-delimited key/value
+  string tables). Offsets are numbers (negative from the end) or expressions that follow
+  pointers stored in the file (`u32be@-4+8`) or find a byte pattern (`find:<hex>`). An
+  offset outside the file or a malformed expression gives ERROR.
+- **SQLite views of the write-ahead log** (adare; additive): `sqlite.query_result` and
+  `sqlite.row_count` take `view`: `current` (default, the `-wal` replayed, as before),
+  `main_file` (the main database file alone, what is already checkpointed), `wal_added`
+  (result rows in `current` but not in `main_file`) and `wal_removed` (rows still in the
+  main file but gone from `current`, e.g. deleted and not yet checkpointed). Both sides of a
+  difference come from one snapshot; a hot `-journal` is rolled back in every view.
+- **`sqlite.wal_frame_count`** (adare, adarelib; additive): counts the `valid` frames of a
+  database's `-wal` (what SQLite would replay: salts and checksum chain intact, up to the
+  last commit), `commits` (transactions), `all` or `stale` (left from before a WAL reset).
+  A missing `-wal` next to an existing database is 0 frames; a corrupt header is ERROR.
 
 ### Changed
 - `adare experiment run` exit codes (adare): `0` only when every run passed, `1` when any
@@ -217,6 +249,8 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   paths (browser profiles, office suites, registry keys); a unit test keeps it that way.
 
 ### Fixed
+- Host mode no longer probes `<dst>-wal-wal` / `<dst>-wal-journal` (and deletes stale local
+  copies of them) when `dst` is itself a sidecar such as `data.db-wal`.
 - Host mode read stale files: one file cache served the whole run, so a test after an
   action got the copy an earlier test had pulled, and before/after tests compared the same
   copy. Every test now pulls its file fresh from the guest.
