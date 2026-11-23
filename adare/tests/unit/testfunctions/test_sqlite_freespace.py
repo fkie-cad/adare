@@ -46,8 +46,8 @@ def _sha256(path):
 def _connect(path, secure_delete='OFF'):
     conn = sqlite3.connect(str(path), isolation_level=None)
     try:
+        conn.execute(f'PRAGMA page_size={PAGE}')  # first, like the adarelib helper (older SQLite may fix it otherwise)
         conn.execute('PRAGMA auto_vacuum=NONE')
-        conn.execute(f'PRAGMA page_size={PAGE}')
         conn.execute(f'PRAGMA secure_delete={secure_delete}')
         yield conn
     finally:
