@@ -25,6 +25,7 @@ from PIL import ExifTags, Image, UnidentifiedImageError
 from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
+from adarelib.testset.compare import regex_expected_problem
 from adarelib.testset.content import read_bytes_capped
 from adarelib.testset.structured import WILDCARD_MODES, compare_count, compare_value, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
@@ -398,6 +399,9 @@ def png_text_matches(
     """
     if wildcard_mode not in WILDCARD_MODES:
         return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
+    problem = regex_expected_problem(ctx, [expected_value], regex_match)
+    if problem is not None:
+        return problem
     texts, error = _load_png_text(ctx.resolve_globfilepath(dst), dst)
     if error is not None:
         return error
@@ -471,6 +475,9 @@ def png_text_count(
     problems = count_parameter_errors(expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
+    problem = regex_expected_problem(ctx, [expected_value], regex_match)
+    if problem is not None:
+        return problem
     texts, error = _load_png_text(resolved, dst)
     if error is not None:
         return error
@@ -579,6 +586,10 @@ def exif_value_matches(
     )
     if problem is not None:
         return problem
+    if ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     found, error = _exif_values(ctx.resolve_globfilepath(dst), dst, tag)
     if error is not None:
         return error
@@ -650,6 +661,9 @@ def exif_value_count(
     problems = count_parameter_errors(expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
+    problem = regex_expected_problem(ctx, [expected_value], regex_match)
+    if problem is not None:
+        return problem
     found, error = _exif_values(resolved, dst, tag)
     if error is not None:
         return error

@@ -23,6 +23,7 @@ from typing import Any
 from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
+from adarelib.testset.compare import regex_expected_problem
 from adarelib.testset.content import decode_text, read_bytes_capped
 from adarelib.testset.structured import WILDCARD_MODES, compare_count, compare_value, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
@@ -275,7 +276,7 @@ def value_matches(
             number or boolean is compared as its text (``8080``, ``true``/``false``). A
             ``!re``/``!timestamp`` tag or ``{{placeholder}}`` is matched by type.
         regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
-            An invalid regex is an error.
+            An invalid regex is an error even when the key is absent.
         case_sensitive: ``False`` compares section and key names case-insensitively; values
             are always compared as given.
         encoding: Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8).
@@ -329,6 +330,10 @@ def value_matches(
     )
     if problem is not None:
         return problem
+    if ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     ini, error = _load_ini(ctx.resolve_globfilepath(dst), dst, encoding)
     if error is not None:
         return error
@@ -398,6 +403,7 @@ def value_count(
         expected_value: Count only occurrences whose raw value equals/matches this (same
             rules as ini.value_matches); ``None`` (default) counts every occurrence.
         regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
+            An invalid regex is an error even when the key is absent.
         comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
             ``less_equal``; other values are an error.
         case_sensitive: ``False`` compares section and key names case-insensitively.
@@ -416,6 +422,10 @@ def value_count(
     problems = count_parameter_errors(expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
+    if expected_value is not None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     ini, error = _load_ini(resolved, dst, encoding)
     if error is not None:
         return error

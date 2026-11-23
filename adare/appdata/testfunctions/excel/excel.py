@@ -6,7 +6,12 @@ from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
-from adarelib.testset.compare import row_matches_pattern
+from adarelib.testset.compare import (
+    regex_expected_problem,
+    regex_pattern_problem,
+    row_matches_pattern,
+    rows_regex_problem,
+)
 from adarelib.testset.structured import compare_count, count_parameter_errors
 from adarelib.testset.valuecompare import ordered_setup
 from adarelib.testset.workbook import (
@@ -50,7 +55,8 @@ def sheet_exists(ctx: TestContext, dst: str, sheet: str, regex_match: bool = Fal
             unreadable file is an error.
         sheet: Exact, case-sensitive sheet name, or a regex if ``regex_match``.
         regex_match: Treat ``sheet`` as a Python regex searched in each sheet name
-            (``re.search``, unanchored; ``^...$`` for the whole name); an invalid regex is an error.
+            (``re.search``, unanchored; ``^...$`` for the whole name); an invalid regex is an error,
+            even when the workbook has no sheet.
 
     Example:
         function: excel.sheet_exists
@@ -58,6 +64,10 @@ def sheet_exists(ctx: TestContext, dst: str, sheet: str, regex_match: bool = Fal
           dst: /home/user/Documents/budget.xlsx
           sheet: Q3
     """
+    if regex_match:
+        problem = regex_pattern_problem(sheet)
+        if problem is not None:
+            return problem
     # Resolve file path
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
@@ -176,6 +186,10 @@ def cell_value_matches(
     )
     if problem is not None:
         return problem
+    if ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     # Resolve file path
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
@@ -246,6 +260,9 @@ def contains_row(
           dst: /home/user/Documents/inventory.xlsx
           entry: [Laptop, '3', Office]
     """
+    problem = rows_regex_problem(ctx, [entry])
+    if problem is not None:
+        return problem
     # Resolve file path
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
@@ -314,6 +331,9 @@ def row_count(
         problems.append(f'header_row must be a non-negative integer or None, got {header_row!r}')
     if problems:
         return TestResult.error(problems)
+    problem = rows_regex_problem(ctx, [entry])
+    if problem is not None:
+        return problem
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
         return _unresolved_path_error('file', dst, status)
@@ -436,6 +456,18 @@ def validate_columns(
 # ============================================================================
 
 
+def _embedded_rows_problem(ctx: TestContext, reference_rows) -> TestResult | None:
+    """ERROR result for ``reference_rows`` that are no non-empty list of lists or hold an invalid regex."""
+    if not isinstance(reference_rows, list):
+        return TestResult.error(['reference_rows must be a list of rows'])
+    if not reference_rows:
+        return TestResult.error(['reference_rows cannot be empty'])
+    for i, row_item in enumerate(reference_rows):
+        if not isinstance(row_item, list):
+            return TestResult.error([f'reference_rows[{i}] must be a list, got {type(row_item).__name__}'])
+    return rows_regex_problem(ctx, reference_rows)
+
+
 @testfunction(
     name='compare_rows',
     description='compares sheet rows against reference data (embedded or external file)',
@@ -514,19 +546,10 @@ def compare_rows(
         except UNREADABLE_WORKBOOK_ERRORS as e:
             return TestResult.execution_error(e, f"Cannot parse reference Excel file {ref_file_path}")
     else:
-        # Existing validation for embedded reference_rows
         ref_rows = reference_rows
-
-        # Validate reference_rows structure
-        if not isinstance(ref_rows, list):
-            return TestResult.error(['reference_rows must be a list of rows'])
-
-        if not ref_rows:
-            return TestResult.error(['reference_rows cannot be empty'])
-
-        for i, row_item in enumerate(ref_rows):
-            if not isinstance(row_item, list):
-                return TestResult.error([f'reference_rows[{i}] must be a list, got {type(row_item).__name__}'])
+        problem = _embedded_rows_problem(ctx, ref_rows)
+        if problem is not None:
+            return problem
 
     try:
         # Read sheet
