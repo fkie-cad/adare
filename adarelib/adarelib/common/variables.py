@@ -29,10 +29,42 @@ class VariableType(Enum):
     DICT = "dict"
 
 
-class ValidationError(Exception):
-    """Raised when variable validation fails."""
+class ValidationError(ValueError):
+    """Raised when variable validation fails.
 
-    pass
+    A ``ValueError`` so that callers loading a playbook (which already report ``ValueError`` as a
+    playbook error) report a bad variable too instead of crashing.
+    """
+
+
+_UTC_OFFSET_RE = re.compile(r'([+-])(\d{2})(?::?(\d{2}))?')
+
+
+def _apply_timezone(dt: datetime.datetime, timezone_str: str) -> datetime.datetime:
+    """Give a naive datetime the time zone ``timezone_str`` (the wall-clock time is kept).
+
+    ``timezone_str`` is a UTC offset (``+02:00``, ``-0500``, ``+02``) or a zone name
+    (``Europe/Berlin``, ``UTC``). An aware datetime already has its zone and is returned unchanged.
+
+    :raises ValidationError: the offset is malformed or out of range, or the zone name is unknown
+    """
+    if dt.tzinfo is not None:
+        return dt
+    if timezone_str.startswith(('+', '-')):
+        match = _UTC_OFFSET_RE.fullmatch(timezone_str)
+        if not match:
+            raise ValidationError(f"Invalid timezone offset '{timezone_str}' (expected e.g. +02:00 or -0500)")
+        sign, hours, minutes = match.groups()
+        offset = datetime.timedelta(hours=int(hours), minutes=int(minutes or 0))
+        try:
+            tz = datetime.timezone(-offset if sign == '-' else offset)
+        except ValueError as e:  # the offset must be strictly between -24h and +24h
+            raise ValidationError(f"Invalid timezone offset '{timezone_str}': {e}") from e
+    else:
+        tz = dateutil.tz.gettz(timezone_str)
+        if tz is None:
+            raise ValidationError(f"Unknown timezone '{timezone_str}'")
+    return dt.replace(tzinfo=tz)
 
 
 @attrs.define
@@ -60,7 +92,19 @@ class TimestampMetadata:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TimestampMetadata:
-        """Create from dict."""
+        """Create from dict.
+
+        :raises ValidationError: the time zone is unknown or malformed, or the format is not a
+            string (checked here, when the playbook loads, rather than mid-run)
+        """
+        timezone_str = data.get('timezone')
+        if timezone_str is not None:
+            if not isinstance(timezone_str, str):
+                raise ValidationError(f"Timezone must be a string, got {timezone_str!r}")
+            _apply_timezone(datetime.datetime(2000, 1, 1), timezone_str)
+        format_str = data.get('format')
+        if format_str is not None and not isinstance(format_str, str):
+            raise ValidationError(f"Timestamp format must be a string, got {format_str!r}")
         tolerance = data.get('tolerance', [0, 0])
         if isinstance(tolerance, (list, tuple)) and len(tolerance) >= 2:
             tolerance_upper, tolerance_lower = tolerance[0], tolerance[1]
@@ -70,8 +114,8 @@ class TimestampMetadata:
             tolerance_upper = tolerance_lower = 0
 
         return cls(
-            timezone=data.get('timezone'),
-            format_str=data.get('format'),
+            timezone=timezone_str,
+            format_str=format_str,
             tolerance_upper=tolerance_upper,
             tolerance_lower=tolerance_lower,
             localtime=data.get('localtime', False),
@@ -225,9 +269,6 @@ class Variable:
 
     def __attrs_post_init__(self):
         """Validate and coerce value on creation."""
-        log.info(
-            f"CLAUDE: Variable.__attrs_post_init__ called - value='{self.value}', type={self.type}, metadata={self.metadata}"
-        )
         self.value = self._validate_and_coerce(self.value, self.type)
         # Create structured metadata if available
         if self.metadata and not self.structured_metadata:
@@ -242,7 +283,6 @@ class Variable:
     @classmethod
     def from_dict(cls, data: dict) -> Variable:
         """Create Variable from explicit dict definition."""
-        log.info(f"CLAUDE: Variable.from_dict called with data: {data}")
 
         # Collect metadata from both explicit metadata dict and top-level properties
         metadata = data.get("metadata", {}).copy()
@@ -252,9 +292,6 @@ class Variable:
             for key in ["timezone", "format", "tolerance", "localtime"]:
                 if key in data:
                     metadata[key] = data[key]
-                    log.info(f"CLAUDE: Collected {key}='{data[key]}' into metadata")
-
-        log.info(f"CLAUDE: Final metadata for Variable.from_dict: {metadata}")
 
         return cls(
             value=data["value"],
@@ -297,7 +334,6 @@ class Variable:
     @classmethod
     def auto_infer(cls, value: Any, description: str = "", metadata: dict[str, Any] = None) -> Variable:
         """Create Variable with automatic type inference."""
-        log.info(f"CLAUDE: Variable.auto_infer called with value='{value}', metadata={metadata}")
 
         if isinstance(value, bool):
             var_type = VariableType.BOOLEAN
@@ -322,7 +358,6 @@ class Variable:
         else:
             var_type = VariableType.STRING
 
-        log.info(f"CLAUDE: auto_infer determined type: {var_type}")
         return cls(value, var_type, description, metadata or {})
 
     @classmethod
@@ -374,7 +409,6 @@ class Variable:
 
     def _validate_and_coerce(self, value: Any, var_type: VariableType) -> Any:
         """Validate and coerce value to match the specified type."""
-        log.info(f"CLAUDE: _validate_and_coerce called with value='{value}', type={var_type}")
         try:
             # Handle raw string literals for string-like types
             if var_type in (VariableType.STRING, VariableType.PATH, VariableType.REGEX):
@@ -406,7 +440,7 @@ class Variable:
                     Path(path_str)
                     return path_str
                 except (ValueError, OSError) as e:
-                    raise ValidationError(f"Invalid path format '{path_str}': {e}")
+                    raise ValidationError(f"Invalid path format '{path_str}': {e}") from e
 
             elif var_type == VariableType.REGEX:
                 regex_str = str(value)
@@ -415,60 +449,25 @@ class Variable:
                     re.compile(regex_str)
                     return regex_str
                 except re.error as e:
-                    raise ValidationError(f"Invalid regex '{regex_str}': {e}")
+                    raise ValidationError(f"Invalid regex '{regex_str}': {e}") from e
 
             elif var_type == VariableType.TIMESTAMP:
                 if isinstance(value, datetime.datetime):
                     # Already a datetime - convert to Unix timestamp if has timezone info
-                    if value.tzinfo is not None:
-                        return value.timestamp()
-                    return value
+                    return value.timestamp() if value.tzinfo is not None else value
                 timestamp_str = str(value)
                 try:
                     parsed_dt = parse_timestamp_text(timestamp_str)
-
-                    # Apply timezone metadata if available and datetime is naive
-                    log.info(
-                        f"CLAUDE: Timezone conversion check - parsed_dt.tzinfo: {parsed_dt.tzinfo}, hasattr(self, 'metadata'): {hasattr(self, 'metadata')}"
-                    )
-                    if hasattr(self, 'metadata'):
-                        log.info(f"CLAUDE: self.metadata: {self.metadata}")
-
-                    if parsed_dt.tzinfo is None and hasattr(self, 'metadata') and self.metadata:
-                        timezone_str = self.metadata.get('timezone')
-                        log.info(f"CLAUDE: Found timezone in metadata: '{timezone_str}'")
-                        if timezone_str:
-                            try:
-                                # Parse timezone offset (e.g., "+04:00", "-05:00")
-                                if timezone_str.startswith(('+', '-')):
-                                    # Create timezone from offset string
-                                    tz = dateutil.tz.gettz(timezone_str)
-                                    if tz:
-                                        parsed_dt = parsed_dt.replace(tzinfo=tz)
-                                        log.info(
-                                            f"CLAUDE: Applied offset timezone '{timezone_str}' to timestamp: {parsed_dt}"
-                                        )
-                                else:
-                                    # Named timezone (e.g., "UTC", "US/Eastern")
-                                    tz = dateutil.tz.gettz(timezone_str)
-                                    if tz:
-                                        parsed_dt = parsed_dt.replace(tzinfo=tz)
-                                        log.info(
-                                            f"CLAUDE: Applied named timezone '{timezone_str}' to timestamp: {parsed_dt}"
-                                        )
-                            except Exception as e:
-                                log.warning(f"Failed to apply timezone '{timezone_str}': {e}", exc_info=True)
-
-                    # Convert timezone-aware datetime to UTC Unix timestamp for consistent storage
-                    if parsed_dt.tzinfo is not None:
-                        unix_timestamp = parsed_dt.timestamp()
-                        log.info(f"CLAUDE: Converted timezone-aware timestamp to Unix timestamp: {unix_timestamp}")
-                        return unix_timestamp
-                    # Keep naive datetime as-is for backward compatibility
-                    return parsed_dt
-
                 except ValueError as e:  # dateutil ParserError included
-                    raise ValidationError(f"Invalid timestamp '{timestamp_str}': {e}")
+                    raise ValidationError(f"Invalid timestamp '{timestamp_str}': {e}") from e
+
+                # A naive timestamp takes the zone from the metadata (a bad zone raises)
+                timezone_str = self.metadata.get('timezone') if self.metadata else None
+                if timezone_str:
+                    parsed_dt = _apply_timezone(parsed_dt, timezone_str)
+
+                # Timezone-aware: store as UTC Unix timestamp; naive stays a datetime (backward compatible)
+                return parsed_dt.timestamp() if parsed_dt.tzinfo is not None else parsed_dt
 
             elif var_type == VariableType.LIST:
                 if isinstance(value, list):
@@ -483,8 +482,10 @@ class Variable:
             else:
                 return value
 
-        except (ValueError, TypeError) as e:
-            raise ValidationError(f"Cannot convert '{value}' to {var_type.value}: {e}")
+        except ValidationError:
+            raise
+        except (ValueError, TypeError, OverflowError, OSError) as e:
+            raise ValidationError(f"Cannot convert '{value}' to {var_type.value}: {e}") from e
 
     def to_yaml_tag(self):
         """Convert Variable back to YAML custom tag for processing."""
@@ -858,8 +859,6 @@ class VariableRegistry:
         def _scan_for_variables(obj):
             if isinstance(obj, str):
                 # Look for {{variable_name}} patterns
-                import re
-
                 variable_pattern = r'\{\{\s*(\w+)(?:\s*\|[^}]*)?\s*\}\}'
                 matches = re.findall(variable_pattern, obj)
                 for match in matches:
@@ -916,8 +915,6 @@ class VariableRegistry:
         Returns:
             Set of variable names found in the template
         """
-        import re
-
         variable_pattern = r'\{\{\s*(\w+)(?:\s*\|[^}]*)?\s*\}\}'
         matches = re.findall(variable_pattern, template_str)
         return set(matches)
@@ -986,6 +983,42 @@ class VariableRegistry:
 
         return metadata
 
+    @staticmethod
+    def _resolve_timestamp(var: Variable) -> Any:
+        """Resolve a timestamp variable: Unix timestamp, formatted string or ISO string.
+
+        :raises ValidationError: the value cannot be parsed, its time zone cannot be applied or
+            the format cannot be used (never a silent fallback to a wrong value)
+        """
+        structured = var.structured_metadata if isinstance(var.structured_metadata, TimestampMetadata) else None
+        try:
+            if isinstance(var.value, (int, float)):
+                # Unix timestamp - already UTC
+                result = datetime.datetime.fromtimestamp(var.value, datetime.timezone.utc)
+            elif isinstance(var.value, datetime.datetime):
+                result = var.value
+            else:
+                # String timestamp - parse and apply the zone to a naive result
+                result = parse_timestamp_text(str(var.value))
+                timezone_str = structured.timezone if structured else (var.metadata or {}).get('timezone')
+                if timezone_str and result.tzinfo is None:
+                    return _apply_timezone(result, timezone_str).timestamp()
+        except (ValueError, TypeError, OverflowError, OSError) as e:  # ValidationError, dateutil ParserError included
+            raise ValidationError(f"Cannot resolve timestamp variable '{var.name}' (value {var.value!r}): {e}") from e
+
+        # Note: Timestamp variables with tolerance are handled by placeholder system in to_execution_context()
+        if structured and structured.format_str:
+            try:
+                return result.strftime(structured.format_str)
+            except (ValueError, TypeError) as e:
+                raise ValidationError(
+                    f"Timestamp variable '{var.name}': cannot apply format {structured.format_str!r}: {e}"
+                ) from e
+
+        # A Unix timestamp variable is returned as is (matches the save_timestamp behavior),
+        # a datetime as ISO string
+        return var.value if isinstance(var.value, (int, float)) else result.isoformat()
+
     def _get_variable_resolved_value(self, var: Variable, resolution_context: dict[str, str] = None) -> Any:
         """Get fully resolved value for variable (apply timezone, format, and template resolution).
 
@@ -996,108 +1029,8 @@ class VariableRegistry:
 
         # Note: Regex variables are handled by placeholder system in to_execution_context()
 
-        # Handle TIMESTAMP variables
         if var.type == VariableType.TIMESTAMP:
-            log.info(
-                f"CLAUDE: Processing timestamp variable '{var.name}' - value='{var.value}', metadata={var.metadata}"
-            )
-
-            # Handle both Unix timestamps (float) and datetime objects
-            if isinstance(var.value, (int, float)):
-                # Unix timestamp - convert to UTC datetime for processing
-                result = datetime.datetime.fromtimestamp(var.value, datetime.timezone.utc)
-                log.debug(f"Converted Unix timestamp {var.value} to UTC datetime: {result}")
-            elif isinstance(var.value, datetime.datetime):
-                result = var.value
-                log.debug(f"Using datetime object: {result}")
-            else:
-                # String timestamp - parse and apply timezone if available
-                try:
-                    result = parse_timestamp_text(str(var.value))
-                    log.debug(f"Parsed timestamp string: {result}")
-
-                    # Apply timezone conversion if timezone metadata is available
-                    timezone_str = None
-                    if var.structured_metadata and isinstance(var.structured_metadata, TimestampMetadata):
-                        timezone_str = var.structured_metadata.timezone
-                    elif var.metadata and 'timezone' in var.metadata:
-                        timezone_str = var.metadata['timezone']
-
-                    if timezone_str and result.tzinfo is None:
-                        log.info(f"CLAUDE: Applying timezone '{timezone_str}' to naive timestamp")
-                        try:
-                            # Apply timezone to naive datetime
-                            if timezone_str.startswith(('+', '-')):
-                                # Parse timezone offset (e.g., "+04:00", "-05:00")
-                                import re
-
-                                log.info(f"CLAUDE: Parsing timezone offset '{timezone_str}'")
-                                offset_match = re.match(r'([+-])(\d{2}):?(\d{2})', timezone_str)
-                                if offset_match:
-                                    sign, hours, minutes = offset_match.groups()
-                                    log.info(f"CLAUDE: Regex matched - sign={sign}, hours={hours}, minutes={minutes}")
-                                    offset_hours = int(hours) + int(minutes) / 60
-                                    if sign == '-':
-                                        offset_hours = -offset_hours
-                                    log.info(f"CLAUDE: Calculated offset_hours: {offset_hours}")
-
-                                    # Create timezone object from offset
-                                    tz = datetime.timezone(datetime.timedelta(hours=offset_hours))
-                                    result = result.replace(tzinfo=tz)
-                                    log.info(f"CLAUDE: Applied timezone offset '{timezone_str}': {result}")
-                                    log.info(f"CLAUDE: result.tzinfo after applying timezone: {result.tzinfo}")
-                                else:
-                                    log.warning(
-                                        f"CLAUDE: Failed to parse timezone offset '{timezone_str}' - regex didn't match"
-                                    )
-                            else:
-                                # Named timezone (e.g., "UTC", "US/Eastern")
-                                tz = dateutil.tz.gettz(timezone_str)
-                                if tz:
-                                    result = result.replace(tzinfo=tz)
-                                    log.info(f"CLAUDE: Applied named timezone '{timezone_str}': {result}")
-
-                            # Convert to UTC Unix timestamp for consistent storage
-                            log.info(f"CLAUDE: Checking if result has timezone: {result.tzinfo is not None}")
-                            if result.tzinfo is not None:
-                                unix_timestamp = result.timestamp()
-                                log.info(
-                                    f"CLAUDE: SUCCESS! Converted timezone-aware timestamp to UTC Unix timestamp: {unix_timestamp}"
-                                )
-                                return unix_timestamp
-                            log.warning("CLAUDE: No timezone info available after conversion attempt")
-
-                        except Exception as e:
-                            log.warning(f"CLAUDE: Exception during timezone conversion: {e}")
-                            import traceback
-
-                            log.warning(f"CLAUDE: Traceback: {traceback.format_exc()}")
-
-                except Exception as e:
-                    log.warning(f"Failed to parse timestamp value '{var.value}': {e}")
-                    return str(var.value)
-
-            # Note: Timestamp variables with tolerance are handled by placeholder system in to_execution_context()
-
-            # Apply variable-level transformations (not test-specific ones)
-            if var.structured_metadata and isinstance(var.structured_metadata, TimestampMetadata):
-                metadata = var.structured_metadata
-
-                # Skip timezone conversion for Unix timestamps since they're already UTC
-                # Only apply format if specified
-                if metadata.format_str:
-                    try:
-                        return result.strftime(metadata.format_str)
-                    except Exception as e:
-                        log.warning(f"Failed to apply format '{metadata.format_str}': {e}")
-
-            # For Unix timestamp variables (already UTC), return the timestamp directly
-            # This matches the save_timestamp behavior
-            if isinstance(var.value, (int, float)):
-                return var.value
-
-            # For datetime objects, return as ISO string if no format specified
-            return result.isoformat()
+            return self._resolve_timestamp(var)
         # For non-timestamp variables, get string value and apply template resolution
         base_value = var.get_string_value()
 
@@ -1338,27 +1271,20 @@ class VariableRegistry:
     @classmethod
     def from_dict(cls, var_dict: dict[str, Any]) -> VariableRegistry:
         """Create registry from mixed variable definitions."""
-        log.info(f"CLAUDE: VariableRegistry.from_dict called with: {var_dict}")
         registry = cls()
 
         for name, value in var_dict.items():
-            log.info(f"CLAUDE: Processing variable '{name}' with value: {value} (type: {type(value)})")
             if isinstance(value, Variable):
-                log.info(f"CLAUDE: '{name}' is already a Variable object")
                 registry.add(name, value)
             elif isinstance(value, dict) and "type" in value:
                 # Explicit type definition
-                log.info(f"CLAUDE: '{name}' is dict with type, calling Variable.from_dict")
                 registry.add(name, Variable.from_dict(value))
             elif hasattr(value, 'yaml_tag'):  # YAML custom tag
-                log.info(f"CLAUDE: '{name}' has yaml_tag, calling Variable.from_yaml_tag")
                 registry.add(name, Variable.from_yaml_tag(value))
             else:
                 # Auto-infer type
-                log.info(f"CLAUDE: '{name}' auto-inferring type")
                 registry.add(name, Variable.auto_infer(value))
 
-        log.info(f"CLAUDE: VariableRegistry.from_dict created registry with {len(registry.variables)} variables")
         return registry
 
 
