@@ -7,9 +7,9 @@ Pins what SQLite writes (databases built with the stdlib sqlite3 module) for del
   divider; its old bytes are free space (a freeblock or unallocated space);
 * a **table** b-tree interior page keeps only rowids as dividers, and those survive the
   deletion of their rows (even with ``secure_delete``). There is no text in them;
-* the tail of an **overflow page** in use is not free space, and keeps the old bytes of the
-  page when SQLite reuses a page freed in the same transaction, so text of a deleted row can
-  sit there unreported;
+* the tail of an **overflow page** in use keeps the old bytes of the page when SQLite reuses
+  a page freed in the same transaction, so text of a deleted row can sit there; the parser
+  reports it as an ``overflow_tail`` region;
 * ``sqlite_stat4`` samples and the segments of a full-text index (FTS5) are live rows of
   b-trees, with the values of deleted rows, until the next ANALYZE or merge.
 
@@ -173,24 +173,28 @@ def _overflow_slack_database(path, secure_delete):
     return before, path.read_bytes()
 
 
-def test_overflow_page_tail_keeps_deleted_text_outside_free_space(tmp_path):
+def test_overflow_page_tail_keeps_deleted_text_and_is_a_region(tmp_path):
     before, after = _overflow_slack_database(tmp_path / 'a.db', 'OFF')
     space = parse_free_space(after)
 
     # page 5 was a leaf of notes, was freed by the delete and taken again as the overflow page
     assert after[4 * PAGE : 4 * PAGE + 4] == b'\x00\x00\x00\x00'  # last page of the chain: no next page
     assert after[4 * PAGE + 4 : 4 * PAGE + 8] == b'ZZZZ'
-    assert all(r.page != 5 for r in space.regions)  # neither freelist nor b-tree: no region at all
-    stale = [at for i in range(1, 200) for at in _outside_free_space(after, f'SECRET-{i:04d}-'.encode())]
-    assert stale  # deleted rows, found nowhere in the free space
-    assert {_page(after, at) for at in stale} == {5}
-    assert all(4 * PAGE + 4 + 600 - 103 <= at < 5 * PAGE for at in stale)  # after the live bytes of the page
+    assert space.overflow_pages == 1
+    page5 = [r for r in space.regions if r.page == 5]
+    assert [(r.kind, r.start, r.end) for r in page5] == [
+        ('overflow_tail', 4 * PAGE + 4 + 603 - 103, 5 * PAGE)
+    ]  # 603 payload bytes, 103 in the cell
+    # every copy of the deleted text on that page is in the tail region, none outside any region
+    assert not _outside_free_space(after, b'SECRET-')
+    stale = [
+        at for i in range(1, 200) for at in _occurrences(after, f'SECRET-{i:04d}-'.encode()) if _page(after, at) == 5
+    ]
+    assert stale  # deleted rows, sitting on the overflow page
+    assert all(page5[0].start <= at < page5[0].end for at in stale)
     # the text never moved: each copy is at the offset it had while the row was live
     assert all(after[at : at + 12] == before[at : at + 12] for at in stale)
-    free_copies = sum(
-        after[r.start : r.end].count(b'SECRET-') for r in space.regions
-    )  # the rest of the deleted text is reported
-    assert free_copies + len(stale) >= 199 - 10  # a few cells were overwritten by the new live bytes
+    assert after[page5[0].start : page5[0].end].count(b'SECRET-') == len(stale)
 
 
 def test_secure_delete_leaves_no_text_in_an_overflow_page_tail(tmp_path):

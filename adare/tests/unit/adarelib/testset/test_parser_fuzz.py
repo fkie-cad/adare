@@ -269,7 +269,10 @@ def _freespace_seed() -> list[bytes]:
             conn.execute('PRAGMA secure_delete=OFF')
             conn.execute('CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)')
             conn.executemany('INSERT INTO items VALUES (?, ?)', [(i, f'entry-{i}' * 4) for i in range(60)])
-            conn.execute('INSERT INTO items VALUES (100, ?)', ('large' * 400,))  # overflow pages
+            conn.execute('INSERT INTO items VALUES (100, ?)', ('large' * 400,))  # overflow pages, freed below
+            conn.execute('INSERT INTO items VALUES (101, ?)', ('kept' * 300,))  # an overflow chain in use
+            conn.execute('CREATE TABLE keys (k TEXT PRIMARY KEY) WITHOUT ROWID')  # index cells that overflow
+            conn.executemany('INSERT INTO keys VALUES (?)', [(f'{i:03d}-' + 'k' * (50 + 40 * i),) for i in range(12)])
             conn.commit()
             conn.execute('DELETE FROM items WHERE id % 3 = 0 OR id = 100')  # freeblocks + freelist
             conn.commit()
@@ -298,6 +301,9 @@ _FREESPACE_FIELDS = (
     Field(_FREESPACE_PAGE + 1, 2, 'big'),
     Field(_FREESPACE_PAGE + 3, 2, 'big'),
     Field(_FREESPACE_PAGE + 5, 2, 'big'),
+    Field(_FREESPACE_PAGE + 8, 2, 'big'),  # the first cell pointer of page 2
+    # the first four bytes of pages 3 to 14: the next-page number of an overflow page
+    *(Field((page - 1) * _FREESPACE_PAGE, 4, 'big') for page in range(3, 15)),
 )
 
 
