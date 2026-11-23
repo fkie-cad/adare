@@ -52,6 +52,9 @@ class WalInfo:
     valid_frames: int  # frames SQLite replays: valid prefix up to the last commit frame
     commit_frames: int  # commit frames among the valid frames (= transactions)
     trailing_bytes: int  # bytes after the last complete frame (an incompletely written frame)
+    # 1-based index of each commit frame among the valid frames, in file order: the WAL
+    # truncated after frame commit_frame_indices[k - 1] replays exactly the first k transactions
+    commit_frame_indices: tuple[int, ...] = ()
 
     @property
     def stale_frames(self) -> int:
@@ -133,6 +136,7 @@ def parse_wal(path: str) -> WalInfo:
 
         frame_size = WAL_FRAME_HEADER_SIZE + page_size
         total = valid = commits = valid_through_commit = 0
+        commit_indices: list[int] = []
         in_valid_prefix = True
         trailing = 0
         while True:
@@ -156,6 +160,7 @@ def parse_wal(path: str) -> WalInfo:
             if db_size:
                 commits += 1
                 valid_through_commit = valid
+                commit_indices.append(valid)
 
     return WalInfo(
         big_endian_checksums=big_endian,
@@ -167,4 +172,10 @@ def parse_wal(path: str) -> WalInfo:
         valid_frames=valid_through_commit,
         commit_frames=commits,
         trailing_bytes=trailing,
+        commit_frame_indices=tuple(commit_indices),
     )
+
+
+def frame_offset(page_size: int, frame_index: int) -> int:
+    """Offset of the end of frame ``frame_index`` (1-based; 0 = the end of the header) in a WAL."""
+    return WAL_HEADER_SIZE + frame_index * (WAL_FRAME_HEADER_SIZE + page_size)

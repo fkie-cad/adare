@@ -34,6 +34,8 @@ FILE_COLLECTIONS = (
     'image',
     'text',
     'binary',
+    # round 2: sqlite
+    'sqlite',
 )
 
 _DUMMIES = {str: 'x', int: 1, float: 1.0, bool: False, list: [], dict: {}}
