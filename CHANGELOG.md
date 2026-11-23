@@ -38,7 +38,9 @@ is published to PyPI. A failed check leaves no release; fix it, delete the tag
 
 ## [Unreleased]
 
-Versions: `adare` 0.2.0 and `adarelib` 0.3.0 (minor bumps: breaking changes below).
+## [adare 0.1.2] - 2026-11-23
+
+Versions: `adare` 0.1.2 and `adarelib` 0.3.0 (breaking changes below).
 Guests need no re-provisioning: agent wheels are reinstalled when their code changes.
 
 ### Breaking
