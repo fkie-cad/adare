@@ -3,10 +3,9 @@ name: "{{ experiment }}"
 description: "Brief description of what this experiment does"
 
 # Specify which environments this experiment can run on
-environments:
-  # Add environment names here, e.g.:
-  # - win11
-  # - ubuntu22
+# Add environment names here (or later with `adare experiment add-env`), e.g.:
+#   environments: [win11, ubuntu22]
+environments: []
 
 # For advanced metadata options, see:
 # https://docs.adare.example.com/experiments/metadata-reference

@@ -401,6 +401,20 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
     # The summary already shows the failure status clearly
 
 
+def unlisted_environment_message(experiment_name: str, environment_name: str, experiment) -> str:
+    """Warning for ``experiment run -e`` on an environment the experiment does not list.
+
+    An explicit ``-e`` is allowed either way (the run registers the environment); an experiment
+    that lists no environment at all gets the hint to add one.
+    """
+    if not any(env is not None for env in experiment.environments):
+        return (
+            f'WARNING: experiment "{experiment_name}" lists no environments in its metadata.yml; '
+            f'add "{environment_name}" with: adare experiment add-env {experiment_name} {environment_name}'
+        )
+    return f'WARNING: environment "{environment_name}" is not listed in {experiment_name}/metadata.yml'
+
+
 def _single_run_summary(
     experiment_name, environment_name, was_interrupted, was_successful, verdict, run_started, run_ended
 ):
@@ -571,9 +585,7 @@ def exec_experiment_run(arguments):
                         )
 
                     # Environment is unlisted - print warning but continue
-                    log.warning(
-                        f'WARNING: environment "{environment_name}" is not listed in {experiment_name}/metadata.yml'
-                    )
+                    log.warning(unlisted_environment_message(experiment_name, environment_name, experiment))
                     log.warning('         Running experiment anyway as explicitly requested via -e flag')
 
             # Build kwargs, including file_log_level if specified

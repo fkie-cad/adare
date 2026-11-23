@@ -535,6 +535,10 @@ async def _prepare_qemu_run_instance(
     from adare.backend.vm.run_instances import allocate_qemu_run_instance, reconcile_instances
     from adare.backend.vm.run_reaper import start_run_reaper
     from adare.backend.vm.slots import acquire_slot
+    from adare.hypervisor.qemu.socket_paths import check_run_socket_paths
+
+    # Fail before reserving anything if the run's QMP/QGA socket paths cannot fit the OS limit.
+    check_run_socket_paths(str(source_vm.name), machine_key)
 
     # Crashed runs leave rows (holding ports) and run files behind; reap them first.
     report = await reconcile_instances()

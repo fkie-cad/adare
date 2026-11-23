@@ -13,6 +13,7 @@ from typing import Any
 import jinja2
 import yaml
 
+from adare.exceptions import TestfunctionUploadError
 from adarelib.testset.renames import rename_problems
 
 log = logging.getLogger(__name__)
@@ -108,12 +109,17 @@ class TestLoader:
                         f"Uploading {len(required_files)} testfunction files for functions: {sorted(used_function_names)}"
                     )
                     try:
-                        await websocket_client.upload_testfunctions(global_testfunctions_path, required_files)
-                    except OSError as e:
-                        log.error(f"Failed to upload testfunctions due to file system error: {e}")
-                    except (ValueError, TypeError) as e:
-                        log.error(f"Failed to upload testfunctions due to invalid data: {e}")
+                        result = await websocket_client.upload_testfunctions(global_testfunctions_path, required_files)
+                    except (OSError, ValueError, TypeError) as e:
+                        # A failed upload must stop the run: the guest would report every test as "not found".
+                        raise TestfunctionUploadError(log, f"Failed to upload testfunctions to the guest: {e}") from e
+                    if isinstance(result, dict) and result.get("status") == "error":
+                        raise TestfunctionUploadError(
+                            log, f"The guest rejected the testfunction upload: {result.get('message', 'unknown error')}"
+                        )
                 else:
+                    # legitimate when every used function runs on the host (visual.*); an unknown
+                    # function is reported per test by the guest
                     log.warning("No testfunction files found for the used functions - uploading nothing")
             else:
                 log.info("No testfunctions used in playbook - skipping testfunction upload")
@@ -491,15 +497,11 @@ class TestLoader:
             )
             return testfunction_files
 
-        except (ImportError, AttributeError) as e:
-            log.error(f"Failed to import or access testfunction database API: {e}")
-            return set()
-        except (KeyError, ValueError) as e:
-            log.error(f"Database query or data processing error: {e}")
-            return set()
-        except OSError as e:
-            log.error(f"File system error while mapping testfunction files: {e}")
-            return set()
+        except (ImportError, AttributeError, KeyError, ValueError, OSError) as e:
+            # an empty set would upload nothing and turn every test into "not found"
+            raise TestfunctionUploadError(
+                log, f"Cannot map the playbook's testfunctions to their files ({type(e).__name__}: {e})"
+            ) from e
 
     def _replace_variables_for_tests(self, text: str) -> str:
         """Replace variables in test content using test-aware context with smart resolution."""
