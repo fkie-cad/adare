@@ -114,6 +114,9 @@ class ExperimentRunCtx:
     cached_agent_commands: Any | None = None  # Cached CommandSet for dev mode restores
     cached_env_info: Any | None = None  # Cached EnvironmentInfo for dev mode restores
 
+    # Failed-but-allowed post-setup steps, one line each, for the run summary
+    postsetup_warnings: list[str] = field(default_factory=list)
+
     # --- Host-side backend ---
     hostside: Any = None  # HostsideSession when config.backend == 'hostside'
 

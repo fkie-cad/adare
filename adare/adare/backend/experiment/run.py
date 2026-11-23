@@ -736,6 +736,7 @@ async def experiment_run(
                     duration=total_duration,
                     was_interrupted=user_interrupt_event.is_set(),
                     breakdown=tally,
+                    postsetup_warnings=experiment_run_context.postsetup_warnings,
                 )
             elif execution_result:
                 flow_console.log_experiment_summary(
@@ -748,6 +749,7 @@ async def experiment_run(
                     successful_tests=execution_result.successful_tests,
                     failed_tests=execution_result.failed_tests,
                     duration=total_duration,
+                    postsetup_warnings=experiment_run_context.postsetup_warnings,
                 )
             else:
                 flow_console.log_experiment_summary(

@@ -29,6 +29,7 @@ class DevSessionStartRequest:
     vm_memory: int | None = None
     vm_cpus: int | None = None
     debug_screenshots: bool = False
+    run_postsetup: bool = True  # run the environment's post-setup steps after the agent connects
     log_file: Path | None = None
     console_ulid: str | None = None
     shared_directories: dict[str, dict[str, Path]] | None = None

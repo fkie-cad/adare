@@ -157,7 +157,11 @@ all projects) and versioned.
   Options:
     * ``-n, --name TEXT`` - Name for the new environment (required)
     * ``-i, --install TEXT`` - Post-setup install as ``name:command`` (repeatable)
-    * ``--from-file PATH`` - YAML file with post-setup installations to add
+    * ``--from-file PATH`` - YAML file with post-setup installations to add (per-step ``admin``, ``allow_failure``, ``timeout``)
+    * ``--shell``, ``--cwd TEXT`` - Applied to every ``--install`` command
+    * ``--admin`` - Run every ``--install`` command elevated (root via sudo / Windows admin)
+    * ``--allow-failure`` - A failing ``--install`` command only warns; the run continues
+    * ``--timeout SECONDS`` - Per-command timeout for ``--install`` commands (default 600)
     * ``--interactive/--manual`` - Boot the base in a GUI window for manual customization
     * ``--console`` - With ``--interactive``: also open a REPL that records typed commands as installs
     * ``-d, --description TEXT``, ``-t, --tag TEXT`` - Metadata for the new environment
@@ -536,7 +540,8 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
 **Session Management**
 
 ``adare dev start``
-  Start a new dev mode session. Boots the VM, takes a base snapshot, and prepares for interactive use.
+  Start a new dev mode session. Boots the VM, runs the environment's post-setup steps (as a run
+  does; a failing step fails the start), takes a base snapshot, and prepares for interactive use.
 
   Options:
     * ``-e, --environment TEXT`` - Environment name (required)
@@ -549,6 +554,7 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
     * ``--debug-screenshots`` - Save screenshots for debugging
     * ``--reuse`` - Attach to the most recent running session of the project instead of booting a new VM
     * ``--watch`` - Open the VM's live screen in the browser (needs ``adare ui start``)
+    * ``--no-postsetup`` - Skip the environment's post-setup steps
 
 ``adare dev stop [session_id]``
   Stop a running dev mode session. Shuts down the VM but preserves all resources for later resumption.

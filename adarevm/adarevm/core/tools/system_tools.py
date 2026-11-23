@@ -592,6 +592,7 @@ class SystemToolsMixin:
                     "message": "Shell command executed successfully",
                     "returncode": result['returncode'],
                     "stdout": result['stdout'],
+                    "stderr": result.get('stderr', ''),
                     "command_id": command_id,
                     "execution_time": execution_time,
                 }
@@ -612,6 +613,7 @@ class SystemToolsMixin:
                 "message": f"Shell command failed with return code {result['returncode']}",
                 "returncode": result['returncode'],
                 "stdout": result['stdout'],
+                "stderr": result.get('stderr', ''),
                 "command_id": command_id,
                 "execution_time": execution_time,
             }

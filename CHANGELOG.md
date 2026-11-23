@@ -38,6 +38,33 @@ is published to PyPI. A failed check leaves no release; fix it, delete the tag
 
 ## [Unreleased]
 
+### Breaking
+- **A failed post-setup step fails the run** (adare). A step in an environment's
+  `postsetupinstallations` that exits non-zero, times out or loses its transport stops the setup:
+  stage and run end FAILED with a message naming the step, exit code, duration and the last 20
+  lines of stderr (or stdout). It used to be logged and skipped, and the run passed. Mark optional
+  steps `allow_failure: true`.
+- **Post-setup steps run as the VM user unless `admin: true`**, on every path. Host tests and host
+  GUI runs (QEMU guest agent) used to run them as root, the host-side backend wrote their files as
+  root. Steps that write system paths (`/etc`, packages) need `admin: true`. Windows steps run
+  elevated in any case (agent: elevated account, guest agent: SYSTEM).
+- **Unknown keys in a post-setup step are a load error** naming the key and the step (`admn:` used
+  to be dropped silently).
+
+### Added
+- Post-setup steps take `admin` (root / elevated), `allow_failure` (a failure is a stage warning
+  and a line in the run summary, the run goes on) and `timeout` (seconds, default 600). `adare env
+  extend --install` gains `--admin`, `--allow-failure` and `--timeout`. Every step's command,
+  rights, cwd, exit code, duration, stdout and stderr go to `<run>/logs/postsetup.log`.
+- `adare dev start` runs the environment's post-setup steps after the agent connects, like a run
+  does; `--no-postsetup` skips them.
+
+### Fixed
+- Post-setup steps run in file order (stored as a position per environment; existing
+  environments are backfilled in insertion order), honour `cwd`, report the guest's stderr, and a
+  WebSocket timeout ends the step as a failure instead of making the run INTERRUPTED. Host tests
+  apply the step timeout (it was a fixed 300 s).
+
 ## [adare 0.1.2] - 2026-11-23
 
 Versions: `adare` 0.1.2 and `adarelib` 0.3.0 (breaking changes below).

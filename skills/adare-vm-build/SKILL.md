@@ -75,6 +75,11 @@ adare env verify <name>                                          # run the built
 
 - **Declarative `extend`** (default) adds installs on top of the source's; the new
   env is a strict superset sharing the same underlying disk — **no new VM created**.
+  `--admin` / `--allow-failure` / `--timeout SECONDS` apply to every `--install` of
+  that command; per-step settings go in `--from-file` (YAML list with `admin`,
+  `allow_failure`, `timeout`). Steps run in file order, by default as the VM user
+  (`admin: true` = root/elevated), 600 s each; a failed step fails the run unless
+  `allow_failure`. Output: `<run>/logs/postsetup.log`. Unknown step keys are a load error.
 - **`--interactive`** (QEMU only) boots a throwaway overlay in a GUI window so you
   install by hand; on shutdown you choose to store (flatten into a new standalone
   disk + register a new base VM/env) or discard. `--console` also records typed

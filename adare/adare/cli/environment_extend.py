@@ -30,6 +30,11 @@ def exec_environment_extend(arguments):
         exit(1)
         return
 
+    if arguments.timeout is not None and arguments.timeout <= 0:
+        print_error_message(title='--timeout must be greater than 0 seconds')
+        exit(1)
+        return
+
     from_file = Path(arguments.from_file) if arguments.from_file else None
 
     if arguments.console and not arguments.interactive:
@@ -44,6 +49,9 @@ def exec_environment_extend(arguments):
             from_file=from_file,
             shell=arguments.shell,
             cwd=arguments.cwd,
+            admin=arguments.admin,
+            allow_failure=arguments.allow_failure,
+            timeout=arguments.timeout,
             interactive=arguments.interactive,
             console=arguments.console,
             ram=arguments.ram,

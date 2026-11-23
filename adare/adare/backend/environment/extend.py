@@ -20,7 +20,6 @@ import tempfile
 from pathlib import Path
 
 import attrs
-import cattrs
 from sqlalchemy.exc import SQLAlchemyError
 
 from adare.backend.environment.commands import environment_load
@@ -30,7 +29,7 @@ from adare.backend.vm.database import get_vm_by_name
 from adare.database.api.environment import EnvironmentDbApi
 from adare.exceptions import DataStructuringError
 from adare.hypervisor.exceptions import HypervisorException
-from adare.types.environment import PostsetupInstallations, parse_environment_file
+from adare.types.environment import PostsetupInstallations, parse_environment_file, structure_postsetup_steps
 from adarelib.helper.yaml import dict_to_yaml, yaml_to_dict
 
 log = logging.getLogger(__name__)
@@ -54,13 +53,18 @@ def _os_dict(osinfo) -> dict:
 def _installation_dict(installation) -> dict:
     """Convert a PostSetupInstallation row (or PostsetupInstallations attrs
     instance) to the plain dict shape used in the generated YAML."""
-    return {
-        'name': installation.name,
-        'command': installation.command,
-        'description': installation.description or '',
-        'cwd': installation.cwd or '',
-        'shell': bool(installation.shell),
+    fields = {field.name: getattr(installation, field.name) for field in attrs.fields(PostsetupInstallations)}
+    step = {
+        **fields,
+        'description': fields['description'] or '',
+        'cwd': fields['cwd'] or '',
+        'shell': bool(fields['shell']),
+        'admin': bool(fields['admin']),
+        'allow_failure': bool(fields['allow_failure']),
     }
+    if step['timeout'] is None:
+        del step['timeout']
+    return step
 
 
 def _resolve_source(source: str) -> dict:
@@ -128,26 +132,47 @@ def _resolve_source(source: str) -> dict:
 
 
 def _merged_installations(
-    existing: list[dict], installs: list[tuple[str, str]], from_file: Path | None, shell: bool, cwd: str | None
+    existing: list[dict],
+    installs: list[tuple[str, str]],
+    from_file: Path | None,
+    shell: bool,
+    cwd: str | None,
+    admin: bool = False,
+    allow_failure: bool = False,
+    timeout: float | None = None,
 ) -> list[dict]:
     """
     Merge the source's existing installs with new ones from --install and
     --from-file, deduped by name (later entries win). Existing installs are
     inserted first so the result is a strict superset of the source.
+
+    ``shell``/``cwd``/``admin``/``allow_failure``/``timeout`` apply to every ``--install``
+    entry; steps that need different settings belong in ``--from-file``.
     """
     merged: dict[str, dict] = {inst['name']: inst for inst in existing}
 
     for name, command in installs:
-        merged[name] = {
-            'name': name,
-            'command': command,
-            'description': '',
-            'cwd': cwd or '',
-            'shell': shell,
-        }
+        merged[name] = _installation_dict(
+            PostsetupInstallations(
+                name=name,
+                command=command,
+                cwd=cwd or '',
+                shell=shell,
+                admin=admin,
+                allow_failure=allow_failure,
+                timeout=timeout,
+            )
+        )
 
     if from_file:
-        file_installs = cattrs.structure(yaml_to_dict(from_file), list[PostsetupInstallations])
+        try:
+            file_installs = structure_postsetup_steps(yaml_to_dict(from_file))
+        except ValueError as e:
+            raise DataStructuringError(
+                log,
+                message=f'invalid post-setup steps in {from_file}: {e}',
+                possible_solutions=['fix the --from-file YAML: a list of steps with name and command'],
+            ) from e
         for inst in file_installs:
             merged[inst.name] = _installation_dict(inst)
 
@@ -295,7 +320,14 @@ def environment_extend(request) -> tuple[str | None, bool]:
     source_view = _resolve_source(request.source)
 
     installations = _merged_installations(
-        source_view['installations'], request.installs, request.from_file, request.shell, request.cwd
+        source_view['installations'],
+        request.installs,
+        request.from_file,
+        request.shell,
+        request.cwd,
+        request.admin,
+        request.allow_failure,
+        request.timeout,
     )
     tags = list(dict.fromkeys([*source_view['tags'], *request.tags]))
 

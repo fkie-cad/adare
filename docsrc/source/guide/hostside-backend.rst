@@ -86,7 +86,10 @@ playbook controller, the action executors and the CV/VLM grounding are unchanged
      - ``/etc/os-release`` from the image (the agent backend asks the guest).
    * - environment installations
      - Classified like playbook commands; file effects are staged, the rest
-       fails before boot.
+       fails before boot. Rights follow the step's ``admin`` flag (default: the VM
+       user), exactly as on the agent backend; ``allow_failure`` and ``timeout`` are
+       honoured the same way, and the outcome of each step goes to
+       ``logs/postsetup.log`` (see :ref:`postsetup-steps`).
 
 Run flow (compared with the agent backend):
 

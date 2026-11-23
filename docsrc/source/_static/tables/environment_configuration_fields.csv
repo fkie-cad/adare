@@ -15,3 +15,6 @@ postsetupinstallations.command|str|The command to run (e.g. apt-get install -y p
 postsetupinstallations.description*|str|A description of the installation
 postsetupinstallations.cwd*|str|The directory to run the command in
 postsetupinstallations.shell*|bool|value to indicate if the command should be run in a dedicated shell (default: false)
+postsetupinstallations.admin*|bool|run the command as root (Linux, via sudo) or elevated (Windows) instead of as the VM user (default: false)
+postsetupinstallations.allow_failure*|bool|a failing command only produces a warning and the run continues (default: false)
+postsetupinstallations.timeout*|float|seconds the command may run, must be greater than 0 (default: 600)

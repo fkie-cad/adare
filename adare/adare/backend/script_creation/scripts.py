@@ -9,28 +9,6 @@ from adare.backend.script_creation.Script import Script
 log = logging.getLogger(__name__)
 
 
-class PostsetupInstallationsScript(Script):
-    def __init__(
-        self,
-        name: str,
-        source_directory: Path,
-        log_directory: Path,
-        postsetup_installations: list,
-        render_wrapper: bool = False,
-    ):
-        super().__init__(name, source_directory, log_directory=log_directory, render_wrapper=render_wrapper)
-        if postsetup_installations:
-            var = {
-                'installations': [
-                    [installation.name, installation.description, installation.command]
-                    for installation in postsetup_installations
-                ],
-            }
-            self.update_variables(var)
-        else:
-            self.disable_render()
-
-
 class RunExperimentScript(Script):
     def __init__(
         self,
