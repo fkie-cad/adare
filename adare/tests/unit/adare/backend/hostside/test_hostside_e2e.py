@@ -20,6 +20,9 @@ Stubbed (the narrowest layers that need a VM or an installed ADARE home):
 import asyncio
 import io
 import json
+import sqlite3
+import struct
+import tempfile
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -31,7 +34,7 @@ from adare.backend.experiment.execution import base as execution_base
 from adare.backend.experiment.execution import test_actions
 from adare.backend.experiment.variable_resolver import VariableResolver
 from adare.backend.hostside.guestfs import GuestFileNotFound, GuestFS, PatchedGuestFS, StagedOp
-from adare.backend.hostside.testing import HostsideTestExecutor
+from adare.backend.hostside.testing import GuestFSFileProxy, HostsideTestExecutor
 from adare.types.playbook import ActionTestAction, parse_playbook
 from adarelib.common.automatic_variables import AutomaticVariables
 from adarelib.constants import StatusEnum
@@ -62,6 +65,30 @@ def _zip(members: dict[str, bytes]) -> bytes:
     return buf.getvalue()
 
 
+def _wal_database() -> tuple[bytes, bytes]:
+    """(main file, -wal) of a WAL database: row 1 checkpointed, rows 2 and 3 only in the -wal."""
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / 'state.db'
+        conn = sqlite3.connect(str(db))
+        try:
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute('PRAGMA wal_autocheckpoint=0')
+            conn.execute('CREATE TABLE items (id INTEGER, name TEXT)')
+            conn.execute("INSERT INTO items VALUES (1, 'alpha')")
+            conn.commit()
+            conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+            for i, name in ((2, 'beta'), (3, 'gamma')):  # one transaction each
+                conn.execute('INSERT INTO items VALUES (?, ?)', (i, name))
+                conn.commit()
+            return db.read_bytes(), Path(f'{db}-wal').read_bytes()
+        finally:
+            conn.close()
+
+
+WAL_DB, WAL_LOG = _wal_database()
+# a container header: magic, u16be version, u32be record count
+HEADER_BIN = b'CNTR' + struct.pack('>HI', 3, 42)
+
 GUEST_FILES = {
     '/home/user/data/settings.json': json.dumps(DOC).encode(),
     '/home/user/logs/a.log': b'one\n',
@@ -69,6 +96,9 @@ GUEST_FILES = {
     '/home/user/logs/c.txt': b'not a log\n',
     '/home/user/notes.txt': b'secret token, another secret, SECRET',
     '/home/user/backup.zip': _zip({'conf/app.json': json.dumps({'version': '2.4.1'}).encode()}),
+    '/home/user/data/state.db': WAL_DB,
+    '/home/user/data/state.db-wal': WAL_LOG,
+    '/home/user/blobs.zip': _zip({'data/header.bin': HEADER_BIN}),
 }
 
 PLAYBOOK = """
@@ -164,6 +194,34 @@ tests:
       dst: /home/user/gone.zip!/conf/app.json
       key_path: version
       expected_value: 2.4.1
+  - name: sqlite_wal_added
+    function: sqlite.row_count
+    parameter:
+      dst: /home/user/data/state.db
+      query: SELECT id FROM items
+      view: wal_added
+      expected_count: 2
+  - name: sqlite_main_file
+    function: sqlite.row_count
+    parameter:
+      dst: /home/user/data/state.db
+      query: SELECT id FROM items
+      view: main_file
+      expected_count: 1
+  - name: wal_frames_of_the_wal_itself
+    function: sqlite.wal_frame_count
+    parameter:
+      dst: /home/user/data/state.db-wal
+      frames: commits
+      expected_count: 2
+  - name: struct_value_in_archive_member
+    function: binary.struct_value_matches
+    parameter:
+      dst: /home/user/blobs.zip!/data/header.bin
+      offset: 6
+      value_format: u32be
+      expected_value: 40
+      comparison_type: greater
 """
 
 
@@ -257,6 +315,10 @@ def _status(result):
         ('archive_member_missing', StatusEnum.ERROR),
         ('missing_file', StatusEnum.ERROR),
         ('missing_archive', StatusEnum.ERROR),
+        ('sqlite_wal_added', StatusEnum.SUCCESS),
+        ('sqlite_main_file', StatusEnum.SUCCESS),
+        ('wal_frames_of_the_wal_itself', StatusEnum.SUCCESS),
+        ('struct_value_in_archive_member', StatusEnum.SUCCESS),
     ],
 )
 def test_playbook_test_verdict(chain, name, status):
@@ -319,3 +381,37 @@ def test_dst_is_restored_after_the_run(chain, monkeypatch):
     chain('occurrences')
 
     assert [i.parameter.dst for i in instances] == ['/home/user/backup.zip!/conf/app.json', '/home/user/notes.txt']
+
+
+def _guest_access(monkeypatch):
+    """Record the guest paths pulled and probed through the GuestFS proxy."""
+    seen = {'pulled': [], 'probed': []}
+    original_pull = GuestFSFileProxy.pull_file
+    original_exists = GuestFSFileProxy.file_exists
+
+    async def pull_file(self, guest_path, force=False):
+        seen['pulled'].append(guest_path)
+        return await original_pull(self, guest_path, force=force)
+
+    async def file_exists(self, guest_path):
+        seen['probed'].append(guest_path)
+        return await original_exists(self, guest_path)
+
+    monkeypatch.setattr(GuestFSFileProxy, 'pull_file', pull_file)
+    monkeypatch.setattr(GuestFSFileProxy, 'file_exists', file_exists)
+    return seen
+
+
+def test_wal_view_pulls_the_database_and_its_wal_once(chain, monkeypatch):
+    seen = _guest_access(monkeypatch)
+
+    assert _status(chain('sqlite_wal_added')) == StatusEnum.SUCCESS
+    assert sorted(seen['pulled']) == ['/home/user/data/state.db', '/home/user/data/state.db-wal']
+
+
+def test_wal_given_as_dst_has_no_companion_probes(chain, monkeypatch):
+    seen = _guest_access(monkeypatch)
+
+    assert _status(chain('wal_frames_of_the_wal_itself')) == StatusEnum.SUCCESS
+    assert seen['pulled'] == ['/home/user/data/state.db-wal']
+    assert not [p for p in seen['probed'] if p.endswith(('-wal-wal', '-wal-journal'))]
