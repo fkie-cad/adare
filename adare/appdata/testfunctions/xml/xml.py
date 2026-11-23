@@ -34,9 +34,10 @@ from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.testset.compare import compare_with_single_placeholder
-from adarelib.testset.structured import compare_count, count_parameter_errors
+from adarelib.testset.structured import StructuredFormat, compare_count, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
-from adarelib.testset.valuecompare import build_comparison, compare_pair, ordered_setup
+from adarelib.testset.valuecompare import ordered_setup, structured_values_compare
+from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
 
 # configure logging
 import logging
@@ -121,8 +122,12 @@ def _find_elements(root, xpath, namespaces=None):
         raise ValueError(f"Invalid XPath expression '{xpath}': {e}") from e
 
 
-def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sensitive=True, ordered=None, what='text'):
+def _compare_values(
+    ctx, actual_text, expected_text, regex_match=False, case_sensitive=True, ordered=None, what='text', decoder=None
+):
     """Compare values using the same logic as JSON testfunctions (``ordered``: ordered mode)"""
+    if decoder is not None:
+        actual_text = decoder(actual_text, as_text=True)
     if ordered is not None:
         return ordered.compare(actual_text, expected_text)
     expected_str = str(expected_text)
@@ -152,7 +157,15 @@ def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sen
 
 
 def _handle_wildcard_matching(
-    ctx, elements, expected_text, wildcard_mode, xpath, regex_match=False, case_sensitive=True, ordered=None
+    ctx,
+    elements,
+    expected_text,
+    wildcard_mode,
+    xpath,
+    regex_match=False,
+    case_sensitive=True,
+    ordered=None,
+    decoder=None,
 ):
     """Handle matching logic for multiple elements with 'any' or 'all' modes"""
     if not elements:
@@ -168,7 +181,9 @@ def _handle_wildcard_matching(
     # Check each element's text against expected using unified comparison method
     for i, element in enumerate(elements):
         element_text = element.text or ""
-        is_match, message = _compare_values(ctx, element_text, expected_text, regex_match, case_sensitive, ordered)
+        is_match, message = _compare_values(
+            ctx, element_text, expected_text, regex_match, case_sensitive, ordered, decoder=decoder
+        )
         if is_match:
             matches.append((i, element_text, message))
         else:
@@ -342,6 +357,8 @@ def element_text_matches(
     timestamp_epoch: int | None = None,
     timestamp_unit: str | None = None,
     utc_offset: str | None = None,
+    value_decode: list[str] | str | None = None,
+    decoded_key_path: str | None = None,
 ):
     """Pass when the text of the element(s) selected by ``xpath`` equals/matches ``expected_value``.
 
@@ -375,8 +392,8 @@ def element_text_matches(
         comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
             ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
             below, compares the value with ``expected_value`` as a number or point in time
-            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
-            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+            (ordered mode; ``less`` = earlier); ``!re`` / ``regex_match`` are then errors, a lone
+            ``{{ name }}`` is the saved variable; a value that is no number or timestamp is an error.
         value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
             ``number`` or ``timestamp``.
         tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
@@ -384,6 +401,13 @@ def element_text_matches(
         timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
         timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
         utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+        value_decode: Decode the value read from the file before comparing: one step or a
+            list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16``
+            (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes
+            left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
+            unknown step, is an error.
+        decoded_key_path: Key path into the value ``json`` decoded (dot path as in json.value_matches);
+            it must select one value. Required with ``json``, an error without it.
 
     Example:
         function: xml.element_text_matches
@@ -392,7 +416,10 @@ def element_text_matches(
           xpath: ./general/language
           expected_value: de_DE
     """
-    ordered, problem = ordered_setup(
+    decoder, problem = decoder_setup(value_decode, decoded_key_path)
+    if problem is not None:
+        return problem
+    ordered, expected_value, problem = ordered_setup(
         ctx,
         expected_value,
         regex_match,
@@ -422,16 +449,18 @@ def element_text_matches(
         # Handle multiple elements based on wildcard mode
         if len(elements) > 1:
             return _handle_wildcard_matching(
-                ctx, elements, expected_value, wildcard_mode, xpath, regex_match, case_sensitive, ordered
+                ctx, elements, expected_value, wildcard_mode, xpath, regex_match, case_sensitive, ordered, decoder
             )
         # Single element matching
         element_text = elements[0].text or ""
-        is_match, message = _compare_values(ctx, element_text, expected_value, regex_match, case_sensitive, ordered)
+        is_match, message = _compare_values(
+            ctx, element_text, expected_value, regex_match, case_sensitive, ordered, decoder=decoder
+        )
         if is_match:
             return TestResult.success([message])
         return TestResult.failed([message])
 
-    except OrderingError as e:
+    except (OrderingError, ValueDecodeError) as e:
         return TestResult.error([str(e)])
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
@@ -462,6 +491,8 @@ def attribute_matches(
     timestamp_epoch: int | None = None,
     timestamp_unit: str | None = None,
     utc_offset: str | None = None,
+    value_decode: list[str] | str | None = None,
+    decoded_key_path: str | None = None,
 ):
     """Pass when ``attribute`` of the FIRST element selected by ``xpath`` equals/matches ``expected_value``.
 
@@ -490,8 +521,8 @@ def attribute_matches(
         comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
             ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
             below, compares the value with ``expected_value`` as a number or point in time
-            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
-            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+            (ordered mode; ``less`` = earlier); ``!re`` / ``regex_match`` are then errors, a lone
+            ``{{ name }}`` is the saved variable; a value that is no number or timestamp is an error.
         value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
             ``number`` or ``timestamp``.
         tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
@@ -499,6 +530,13 @@ def attribute_matches(
         timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
         timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
         utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+        value_decode: Decode the value read from the file before comparing: one step or a
+            list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16``
+            (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes
+            left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
+            unknown step, is an error.
+        decoded_key_path: Key path into the value ``json`` decoded (dot path as in json.value_matches);
+            it must select one value. Required with ``json``, an error without it.
 
     Example:
         function: xml.attribute_matches
@@ -508,7 +546,10 @@ def attribute_matches(
           attribute: modified
           expected_value: !re '20[0-9]{2}-'
     """
-    ordered, problem = ordered_setup(
+    decoder, problem = decoder_setup(value_decode, decoded_key_path)
+    if problem is not None:
+        return problem
+    ordered, expected_value, problem = ordered_setup(
         ctx,
         expected_value,
         regex_match,
@@ -542,13 +583,13 @@ def attribute_matches(
 
         actual_value = element.attrib[attribute]
         is_match, message = _compare_values(
-            ctx, actual_value, expected_value, regex_match, case_sensitive, ordered, what='attribute value'
+            ctx, actual_value, expected_value, regex_match, case_sensitive, ordered, 'attribute value', decoder
         )
         if is_match:
             return TestResult.success([message])
         return TestResult.failed([message])
 
-    except OrderingError as e:
+    except (OrderingError, ValueDecodeError) as e:
         return TestResult.error([str(e)])
     except ValueError as e:
         return TestResult.execution_error(e, "XML processing error")
@@ -768,6 +809,9 @@ def namespace_matches(
         return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
 
 
+_XML_FORMAT = StructuredFormat(label='XML', load=_parse_xml, errors=(ValueError,))
+
+
 def _side_values(root, xpath, attribute, namespaces):
     """``(label, values)`` of one side: the text or ``attribute`` of every element ``xpath`` selects."""
     elements = _find_elements(root, xpath, namespaces)
@@ -779,7 +823,7 @@ def _side_values(root, xpath, attribute, namespaces):
 
 @testfunction(
     name='values_compare',
-    description='compares two values (element text or attribute) of one XML file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)',
+    description='compares two values (element text or attribute) of one XML file (or of two files) as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)',
     category=HostModeCategory.FILE_CONTENT,
 )
 def values_compare(
@@ -798,11 +842,15 @@ def values_compare(
     timestamp_unit: str | None = None,
     utc_offset: str | None = None,
     namespaces: dict[str, str] = None,
+    other_dst: str | None = None,
+    value_decode: list[str] | str | None = None,
+    decoded_key_path: str | None = None,
 ):
     """Pass when the value selected by ``xpath`` compares to the one selected by ``other_xpath`` (+ ``offset``).
 
-    Use for: relations inside one XML file: a last-saved value later than the first-opened
-    one (two attributes, or two elements), two timestamps within a few seconds of each other,
+    Use for: relations inside one XML file (or between two, ``other_dst``): a last-saved
+    value later than the first-opened one (two attributes, or two elements), two timestamps
+    within a few seconds of each other,
     a counter one above another (``comparison_type: equals`` with ``offset: 1``). To compare
     one value with a constant use xml.element_text_matches or xml.attribute_matches with
     ``comparison_type``.
@@ -826,13 +874,18 @@ def values_compare(
             ``number`` or ``timestamp``. A value that is no number or timestamp is an error.
         tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
         offset: Added to the second value before comparing (seconds for timestamps, may be
-            negative): ``first <comparison_type> second + offset``.
+            negative; ``'{{ name }}'`` = a saved number): ``first <comparison_type> second + offset``.
         time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
         timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
         timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
         utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
         namespaces: Prefix -> URI map for prefixed names in both XPaths (``{ns: 'http://...'}`` +
             ``//ns:item``); ``{uri}tag`` also works without it.
+        other_dst: Guest path of a second XML file to read ``other_xpath`` from (same rules as
+            ``dst``, ``archive!/member`` included); default ``None``: ``dst``. A missing file is
+            an error. Compares a file with a copy saved before an action.
+        value_decode: Decode both values before comparing (steps as in xml.element_text_matches).
+        decoded_key_path: With ``json`` in ``value_decode``: key path into the decoded value.
 
     Example:
         function: xml.values_compare
@@ -844,26 +897,30 @@ def values_compare(
           other_attribute: created
           comparison_type: greater_equal
     """
-    try:
-        ordered = build_comparison(
-            comparison_type, value_type, tolerance, time_format, timestamp_epoch, timestamp_unit, utc_offset, offset
-        )
-    except OrderingError as e:
-        return TestResult.error([str(e)])
-    dst_resolved, status = ctx.resolve_globfilepath(dst)
-    if not dst_resolved:
-        return TestResult.error([f'XML file {dst} not found ({status})'])
 
-    log.debug(f'dst file {dst_resolved} will be used for test values_compare')
+    def side(root, path, first):
+        return _side_values(root, path, attribute if first else other_attribute, namespaces)
 
-    try:
-        root = _parse_xml(dst_resolved)
-        label, values = _side_values(root, xpath, attribute, namespaces)
-        other_label, other_values = _side_values(root, other_xpath, other_attribute, namespaces)
-    except ValueError as e:
-        return TestResult.execution_error(e, "XML processing error")
-    except FileNotFoundError:
-        return TestResult.error([f'XML file {dst_resolved} does not exist'])
-    except (PermissionError, OSError) as e:
-        return TestResult.execution_error(e, f"Cannot read XML file {dst_resolved}")
-    return compare_pair(label, values, other_label, other_values, ordered)
+    return structured_values_compare(
+        ctx,
+        dst,
+        xpath,
+        other_xpath,
+        _XML_FORMAT,
+        comparison_type,
+        value_type,
+        tolerance,
+        offset,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
+        other_dst,
+        value_decode,
+        decoded_key_path,
+        side,
+    )
+
+
+# host mode pulls other_dst like dst
+values_compare._test_class.host_mode_path_params = ('other_dst',)

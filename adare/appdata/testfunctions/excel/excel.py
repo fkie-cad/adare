@@ -213,8 +213,8 @@ def cell_value_matches(
         comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
             ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
             below, compares the value with ``expected_value`` as a number or point in time
-            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
-            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+            (ordered mode; ``less`` = earlier); ``!re`` / ``regex_match`` are then errors, a lone
+            ``{{ name }}`` is the saved variable; a value that is no number or timestamp is an error.
         value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
             ``number`` or ``timestamp``.
         tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
@@ -231,7 +231,7 @@ def cell_value_matches(
           column: 2
           expected_value: '1500'
     """
-    ordered, problem = ordered_setup(
+    ordered, expected_value, problem = ordered_setup(
         ctx,
         expected_value,
         regex_match,

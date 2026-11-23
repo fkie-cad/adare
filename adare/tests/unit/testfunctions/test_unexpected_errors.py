@@ -54,7 +54,9 @@ def _file_testfunctions():
             test_class = getattr(obj, '_test_class', None)
             source = inspect.getsource(obj) if test_class is not None else ''
             # file tests resolve dst themselves or through adarelib.testset.structured
-            if not any(marker in source for marker in ('resolve_globfilepath', 'structured.', 'load_data(')):
+            markers = ('resolve_globfilepath', 'structured.', 'load_data(')
+            markers += ('structured_values_compare(',)  # round 2: values_compare other_dst / value_decode
+            if not any(marker in source for marker in markers):
                 continue
             yield pytest.param(obj, id=f'{collection}.{name}')
 

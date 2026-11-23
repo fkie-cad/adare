@@ -117,6 +117,8 @@ def test_normalize_test_parameters():
     assert normalize_test_parameters(test)['parameter'] == {'dst': '/a.zip!/x', 'k': 1}
     plain = {'name': 't', 'parameter': {'dst': '/x'}}
     assert normalize_test_parameters(plain) is plain
+    both = {'parameter': {'dst': '/x', 'other_dst': {'archive': '/b.tar.gz', 'member': '/s.json'}}}
+    assert normalize_test_parameters(both)['parameter'] == {'dst': '/x', 'other_dst': '/b.tar.gz!/s.json'}
 
 
 def test_max_bytes_from_env(monkeypatch):

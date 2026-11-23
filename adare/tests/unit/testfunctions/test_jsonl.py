@@ -824,3 +824,24 @@ class TestValueInAnyLineOrdered:
         assert_test_error(self._run(log_file, "1", comparison_type="less", regex_match=True))
         bad = create_jsonl_file("bad.jsonl", [{"ts": 1}, {"ts": "late"}])
         assert_test_error(self._run(bad, 5, comparison_type="greater"))
+
+
+# --- round 2: value_decode, values_compare with other_dst --------------------------------
+
+
+def test_value_in_any_line_value_decode(tmp_path):
+    path = tmp_path / 'r2.jsonl'
+    path.write_text('{"event": {"payload": "eyJpZCI6IDd9"}}\n{"event": {"payload": "eyJpZCI6IDl9"}}\n')
+
+    def run(**params):
+        parameter = ValueInAnyLineParameter(dst=str(path), key_path='event.payload', **params)
+        return ValueInAnyLine(name='t', parameter=parameter).test()
+
+    assert run(expected_value=9, value_decode=['base64', 'json'], decoded_key_path='id').status == StatusEnum.SUCCESS
+    assert run(expected_value=10, value_decode=['base64', 'json'], decoded_key_path='id').status == StatusEnum.FAILED
+    assert (
+        run(expected_value=8, comparison_type='greater', value_decode=['base64', 'json'], decoded_key_path='id').status
+        == StatusEnum.SUCCESS
+    )
+    assert run(expected_value=9, value_decode='json', decoded_key_path='id').status == StatusEnum.ERROR
+    assert run(expected_value=9, value_decode='sideways').status == StatusEnum.ERROR

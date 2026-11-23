@@ -13,6 +13,7 @@ from adarelib.testset.content import open_text
 from adarelib.testset.structured import compare_count, compare_value, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.valuecompare import ordered_setup
+from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
 
 # configure logging
 import logging
@@ -30,6 +31,11 @@ def _compare_values(test_instance, actual_value, expected_value, regex_match=Fal
     if regex_match and expected_value == "*":
         return True, f'field exists with value "{actual_value}"'
     return compare_value(test_instance, actual_value, expected_value, regex_match=regex_match)
+
+
+def _decoded(decoder, value):
+    """``value`` decoded by ``value_decode`` (unchanged without a decoder)."""
+    return value if decoder is None else decoder(value)
 
 
 def _count_range(expected_count) -> tuple[int, float] | None:
@@ -446,6 +452,8 @@ def value_in_any_line(
     timestamp_epoch: int | None = None,
     timestamp_unit: str | None = None,
     utc_offset: str | None = None,
+    value_decode: list[str] | str | None = None,
+    decoded_key_path: str | None = None,
 ):
     """Pass when ``key_path`` has a value matching ``expected_value`` in at least one JSONL line.
 
@@ -472,8 +480,8 @@ def value_in_any_line(
         comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
             ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
             below, compares the value with ``expected_value`` as a number or point in time
-            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
-            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+            (ordered mode; ``less`` = earlier); ``!re`` / ``regex_match`` are then errors, a lone
+            ``{{ name }}`` is the saved variable; a value that is no number or timestamp is an error.
         value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
             ``number`` or ``timestamp``.
         tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
@@ -481,6 +489,13 @@ def value_in_any_line(
         timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
         timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
         utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
+        value_decode: Decode the value read from the file before comparing: one step or a
+            list applied in order: ``url`` (percent-decoding), ``base64``, ``hex``, ``utf16``
+            (bytes as UTF-16 text), ``json`` (parse, then take ``decoded_key_path``). Bytes
+            left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
+            unknown step, is an error.
+        decoded_key_path: Key path into the value ``json`` decoded (dot path, numeric indexes allowed);
+            it must select one value. Required with ``json``, an error without it.
 
     Example:
         function: jsonl.value_in_any_line
@@ -490,7 +505,10 @@ def value_in_any_line(
           expected_value: example
           regex_match: true
     """
-    ordered, problem = ordered_setup(
+    decoder, problem = decoder_setup(value_decode, decoded_key_path)
+    if problem is not None:
+        return problem
+    ordered, expected_value, problem = ordered_setup(
         ctx,
         expected_value,
         regex_match,
@@ -554,12 +572,12 @@ def value_in_any_line(
                 # Handle multiple values from wildcards
                 if isinstance(value, list):
                     for v in value:
-                        is_match, msg = _compare_values(ctx, v, expected_value, regex_match, ordered)
+                        is_match, msg = _compare_values(ctx, _decoded(decoder, v), expected_value, regex_match, ordered)
                         if is_match:
                             matching_lines.append((line_num, v, msg))
                             break  # Only record once per line
                 else:
-                    is_match, msg = _compare_values(ctx, value, expected_value, regex_match, ordered)
+                    is_match, msg = _compare_values(ctx, _decoded(decoder, value), expected_value, regex_match, ordered)
                     if is_match:
                         matching_lines.append((line_num, value, msg))
 
@@ -586,7 +604,7 @@ def value_in_any_line(
             messages.append(f'Key path "{key_path}" not found in any line')
         return TestResult.failed(messages)
 
-    except OrderingError as e:
+    except (OrderingError, ValueDecodeError) as e:
         return TestResult.error([f'line {line_num}: {e}'])
     except FileNotFoundError:
         return TestResult.error([f'JSONL file {dst} does not exist'])

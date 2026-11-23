@@ -494,6 +494,118 @@ class TestSidecarPulling:
         guest_file.file_exists.assert_not_awaited()
 
 
+@attrs.define
+class PathParam(Parameter):
+    dst: str = '/home/user/after.db'
+    other_dst: str | None = '/home/user/before.db'
+
+
+@attrs.define
+class PathParamTest(SidecarTest):
+    """A values_compare-like test: other_dst is a second guest file (with sidecars)."""
+
+    host_mode_path_params: ClassVar[tuple[str, ...]] = ('other_dst',)
+
+    parameter: PathParam = attrs.Factory(PathParam)
+
+
+class TestPathParams:
+    """host_mode_path_params (other_dst) are pulled like dst, with sidecars, and restored after."""
+
+    def _make_executor(self, tmp_path, existing=frozenset()):
+        guest_file = MagicMock()
+        guest_file.pull_file = AsyncMock(side_effect=lambda p, force=False: tmp_path / p.lstrip('/'))
+        guest_file.file_exists = AsyncMock(side_effect=lambda p: p in existing)
+        guest_file._guest_path_to_local = lambda p: tmp_path / p.lstrip('/')
+        executor = GuestToHostTestExecutor(guest_file=guest_file, guest_command=MagicMock(), testfunction_collection={})
+        seen = {}
+
+        async def run(instance):
+            seen.update(dst=instance.parameter.dst, other_dst=instance.parameter.other_dst)
+            return TestResult.failed([f'{instance.parameter.other_dst} differs'])
+
+        executor._run_test = AsyncMock(side_effect=run)
+        return executor, guest_file, seen
+
+    @pytest.mark.asyncio
+    async def test_pulls_other_dst_and_its_sidecars(self, tmp_path):
+        executor, guest_file, seen = self._make_executor(tmp_path, {'/home/user/before.db-wal'})
+        test = PathParamTest()
+
+        result = await executor._execute_file_based_test('t', 'sqlite.values_compare', test)
+
+        pulled = [c.args[0] for c in guest_file.pull_file.await_args_list]
+        assert pulled == ['/home/user/before.db', '/home/user/before.db-wal', '/home/user/after.db']
+        assert seen == {'dst': str(tmp_path / 'home/user/after.db'), 'other_dst': str(tmp_path / 'home/user/before.db')}
+        # restored for reporting, and the details show the guest path
+        assert (test.parameter.dst, test.parameter.other_dst) == ('/home/user/after.db', '/home/user/before.db')
+        assert result.details == ['/home/user/before.db differs']
+
+    @pytest.mark.asyncio
+    async def test_unset_param_is_not_pulled(self, tmp_path):
+        executor, guest_file, seen = self._make_executor(tmp_path)
+        test = PathParamTest(parameter=PathParam(other_dst=None))
+
+        await executor._execute_file_based_test('t', 'json.values_compare', test)
+
+        assert [c.args[0] for c in guest_file.pull_file.await_args_list] == ['/home/user/after.db']
+        assert seen['other_dst'] is None
+
+    @pytest.mark.asyncio
+    async def test_missing_other_dst_runs_on_the_missing_local_path(self, tmp_path):
+        stale = tmp_path / 'home/user/before.db'
+        stale.parent.mkdir(parents=True)
+        stale.write_bytes(b'from an earlier pull')
+        executor, guest_file, seen = self._make_executor(tmp_path)
+
+        async def pull(path, force=False):
+            if path == '/home/user/before.db':
+                raise FileNotFoundError('no such file')
+            return tmp_path / path.lstrip('/')
+
+        guest_file.pull_file.side_effect = pull
+
+        await executor._execute_file_based_test('t', 'json.values_compare', PathParamTest())
+
+        assert seen['other_dst'] == str(stale) and not stale.exists()  # the test reports it missing
+
+    @pytest.mark.asyncio
+    async def test_other_dst_transport_error_is_an_error(self, tmp_path):
+        executor, guest_file, _ = self._make_executor(tmp_path)
+        guest_file.pull_file.side_effect = RuntimeError('transfer failed')
+        test = PathParamTest()
+
+        result = await executor._execute_file_based_test('t', 'json.values_compare', test)
+
+        assert result.status == StatusEnum.ERROR
+        executor._run_test.assert_not_awaited()
+        assert test.parameter.other_dst == '/home/user/before.db'
+
+    @pytest.mark.asyncio
+    async def test_other_dst_archive_member_pulls_the_archive(self, tmp_path):
+        executor, guest_file, seen = self._make_executor(tmp_path)
+        guest_file.resolve_guest_glob = AsyncMock(return_value=['/home/user/backup-1.tar.gz'])
+        test = PathParamTest(parameter=PathParam(other_dst='/home/user/backup-*.tar.gz!/state.db'))
+
+        await executor._execute_file_based_test('t', 'json.values_compare', test)
+
+        pulled = [c.args[0] for c in guest_file.pull_file.await_args_list]
+        assert pulled == ['/home/user/backup-1.tar.gz', '/home/user/after.db']
+        assert seen['other_dst'] == f'{tmp_path}/home/user/backup-1.tar.gz!/state.db'
+
+    @pytest.mark.asyncio
+    async def test_other_dst_glob_pulls_each_match(self, tmp_path):
+        executor, guest_file, seen = self._make_executor(tmp_path, {'/home/user/b1.db-journal'})
+        guest_file.resolve_guest_glob = AsyncMock(return_value=['/home/user/b1.db'])
+        test = PathParamTest(parameter=PathParam(other_dst='/home/user/b*.db'))
+
+        await executor._execute_file_based_test('t', 'json.values_compare', test)
+
+        pulled = [c.args[0] for c in guest_file.pull_file.await_args_list]
+        assert pulled == ['/home/user/b1.db', '/home/user/b1.db-journal', '/home/user/after.db']
+        assert seen['other_dst'] == str(tmp_path / 'home/user/b*.db')
+
+
 # ============================================================================
 # A real "not found" vs. a transport error
 # ============================================================================

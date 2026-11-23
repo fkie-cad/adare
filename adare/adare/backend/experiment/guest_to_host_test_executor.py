@@ -31,6 +31,15 @@ from adarelib.testset.testfunction import get_testclass_from_testfunction
 log = logging.getLogger(__name__)
 
 
+def _replace_paths(detail, display: dict[str, str]):
+    """``detail`` with local copies shown by their guest path (longest local path first)."""
+    if not isinstance(detail, str):
+        return detail
+    for local in sorted(display, key=len, reverse=True):
+        detail = detail.replace(local, display[local])
+    return detail
+
+
 class GuestToHostTestExecutor:
     """
     Executes tests on the host machine using QGA for guest file/command access.
@@ -162,6 +171,72 @@ class GuestToHostTestExecutor:
         test_function: str,
         test_instance: BasicTest,
     ) -> TestResult:
+        """Pull the paths of the class's ``host_mode_path_params`` (e.g. ``other_dst``), then dst.
+
+        Each path parameter that is set is pulled like dst (glob, archive member, sidecars)
+        and rewritten to its local copy for the run; the guest value is restored afterwards.
+        """
+        names = getattr(type(test_instance), 'host_mode_path_params', ())
+        parameter = getattr(test_instance, 'parameter', None)
+        originals = {n: getattr(parameter, n) for n in names if getattr(parameter, n, None)}
+        sidecars = getattr(type(test_instance), 'host_mode_sidecars', ())
+        display: dict[str, str] = {}
+        try:
+            for name, guest_value in originals.items():
+                local_value, shown, early = await self._pull_path_param(test_name, guest_value, sidecars)
+                if early is not None:
+                    return early
+                display.update(shown)
+                object.__setattr__(parameter, name, local_value)
+            result = await self._execute_dst_test(test_name, test_function, test_instance)
+        finally:
+            for name, guest_value in originals.items():
+                object.__setattr__(parameter, name, guest_value)
+        if display:
+            result.details = [_replace_paths(d, display) for d in result.details]
+        return result
+
+    async def _pull_path_param(
+        self, test_name: str, guest_value: str, sidecars: tuple[str, ...]
+    ) -> tuple[str, dict[str, str], TestResult | None]:
+        """Pull one path parameter like dst: ``(local value, {local: guest} for display, early result)``.
+
+        A missing plain file is not an early result: the test sees the missing local path and
+        reports it (ERROR for content tests), as for dst.
+        """
+        if has_archive_separator(guest_value):
+            archive, members = split_archive_path(guest_value)
+            guest_archive, local_archive, early = await self._pull_archive(test_name, archive)
+            if early is not None:
+                return guest_value, {}, early
+            return join_archive_path(local_archive, members), {local_archive: guest_archive}, None
+        if any(c in guest_value for c in ('*', '?', '[', ']')):
+            try:
+                matching_paths = await self.guest_file.resolve_guest_glob(guest_value)
+            except RuntimeError as e:
+                return guest_value, {}, self._pull_error(test_name, guest_value, e)
+            self._drop_stale_copies(guest_value, matching_paths)
+            for guest_path in matching_paths:
+                try:
+                    await self.guest_file.pull_file(guest_path, force=True)
+                except FileNotFoundError:
+                    self._drop_stale_copies(guest_path, [], literal=True)
+                    continue
+                except RuntimeError as e:
+                    return guest_value, {}, self._pull_error(test_name, guest_path, e)
+                missing = await self._pull_sidecars(guest_path, sidecars)
+                if missing:
+                    return guest_value, {}, self._sidecar_error(missing)
+            return str(self.guest_file._guest_path_to_local(guest_value)), {}, None
+        local_value, early = await self._pull_plain_path(test_name, '', guest_value, sidecars)
+        return local_value, {local_value: guest_value}, early
+
+    async def _execute_dst_test(
+        self,
+        test_name: str,
+        test_function: str,
+        test_instance: BasicTest,
+    ) -> TestResult:
         """Execute a file-based test by pulling files and rewriting dst.
 
         Strategy:
@@ -268,24 +343,9 @@ class GuestToHostTestExecutor:
         Members' sidecars (SQLite -wal) come from the archive, so none are pulled.
         """
         archive, members = split_archive_path(original_dst)
-        if any(c in archive for c in ('*', '?', '[', ']')):
-            try:
-                matches = await self.guest_file.resolve_guest_glob(archive)
-            except RuntimeError as e:
-                return self._pull_error(test_name, archive, e)
-            if len(matches) != 1:
-                found = 'no file matches' if not matches else f'{len(matches)} files match'
-                return TestResult.error([f'archive {archive}: {found} the glob (must be exactly one)'])
-            guest_archive = matches[0]
-        else:
-            guest_archive = archive
-
-        try:
-            local_archive = str(await self.guest_file.pull_file(guest_archive, force=True))
-        except FileNotFoundError as e:
-            return TestResult.error([f'archive {guest_archive} does not exist on guest: {e}'])
-        except RuntimeError as e:
-            return self._pull_error(test_name, guest_archive, e)
+        guest_archive, local_archive, early = await self._pull_archive(test_name, archive)
+        if early is not None:
+            return early
 
         object.__setattr__(test_instance.parameter, 'dst', join_archive_path(local_archive, members))
         try:
@@ -296,6 +356,29 @@ class GuestToHostTestExecutor:
         # report the guest path, not the host's temp copy
         result.details = [d.replace(local_archive, guest_archive) if isinstance(d, str) else d for d in result.details]
         return result
+
+    async def _pull_archive(self, test_name: str, archive: str) -> tuple[str, str, TestResult | None]:
+        """Pull the archive of an ``archive!/member`` path: ``(guest archive, local archive, early result)``.
+
+        A glob must match exactly one archive; a missing archive is an ERROR.
+        """
+        guest_archive = archive
+        if any(c in archive for c in ('*', '?', '[', ']')):
+            try:
+                matches = await self.guest_file.resolve_guest_glob(archive)
+            except RuntimeError as e:
+                return archive, '', self._pull_error(test_name, archive, e)
+            if len(matches) != 1:
+                found = 'no file matches' if not matches else f'{len(matches)} files match'
+                return archive, '', TestResult.error([f'archive {archive}: {found} the glob (must be exactly one)'])
+            guest_archive = matches[0]
+        try:
+            local_archive = str(await self.guest_file.pull_file(guest_archive, force=True))
+        except FileNotFoundError as e:
+            return guest_archive, '', TestResult.error([f'archive {guest_archive} does not exist on guest: {e}'])
+        except RuntimeError as e:
+            return guest_archive, '', self._pull_error(test_name, guest_archive, e)
+        return guest_archive, local_archive, None
 
     def _drop_stale_copies(self, guest_pattern: str, matching_paths: list[str], literal: bool = False) -> None:
         """Remove files from the shared local mirror that match ``guest_pattern`` but are not

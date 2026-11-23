@@ -133,22 +133,25 @@ class SettingsValidator(PlaybookValidator):
 
 
 class ArchiveDstValidator(PlaybookValidator):
-    """Validates the mapping form of a test's ``dst`` (``{archive: ..., member: ...}``)."""
+    """Validates the mapping form (``{archive: ..., member: ...}``) of a test's ``dst`` and ``other_dst``."""
 
     def validate(self, playbook: Playbook) -> ValidationResult:
-        from adarelib.testset.archive import mapping_errors
+        from adarelib.testset.archive import PATH_PARAMETERS, mapping_errors
 
         result = ValidationResult()
         for test in getattr(playbook, 'tests', None) or []:
             parameter = test.parameter if isinstance(test.parameter, dict) else {}
-            dst = parameter.get('dst')
-            if dst is not None and not isinstance(dst, (str, dict)):
-                result.add_error(
-                    f"test '{test.name}': dst must be a path or a mapping with 'archive' (and 'member')",
-                    field_name='parameter.dst',
-                )
-            for message in mapping_errors(dst):
-                result.add_error(f"test '{test.name}': {message}", field_name='parameter.dst')
+            for name in PATH_PARAMETERS:
+                value = parameter.get(name)
+                if value is not None and not isinstance(value, (str, dict)):
+                    result.add_error(
+                        f"test '{test.name}': {name} must be a path or a mapping with 'archive' (and 'member')",
+                        field_name=f'parameter.{name}',
+                    )
+                for message in mapping_errors(value):
+                    if name != 'dst':
+                        message = message.replace('dst mapping', f'{name} mapping')
+                    result.add_error(f"test '{test.name}': {message}", field_name=f'parameter.{name}')
         return result
 
 
