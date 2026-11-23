@@ -12,7 +12,7 @@ query_result
 
 This test function executes a SQL query against a SQLite database and validates the results based on expected row counts or specific result content. It supports complex result validation using placeholders and direct result comparison.
 
-The query never runs on the database file itself. The database and its ``-wal`` / ``-journal`` sidecars are copied to a temporary directory and the copy is queried, so the evidence is not modified and changes that only live in the write-ahead log are included. The SHA-256 of every queried file is reported in the result details.
+The query never runs on the database file itself. The database and its ``-wal`` / ``-journal`` sidecars are copied to a temporary directory and the copy is queried, so the evidence is not modified and changes that only live in the write-ahead log are included. The SHA-256 of every queried file is reported in the result details. With ``wal: ignore`` the ``-wal`` is left out and the main database file alone is queried.
 
 Parameters
 ----------
@@ -39,6 +39,9 @@ Parameters
    * - ``comparison_type``
      - string
      - **Optional.** ``equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal`` for ``expected_count``. Default: ``equals``.
+   * - ``wal``
+     - string
+     - **Optional.** ``apply`` queries the database as SQLite sees it, with the write-ahead log replayed; ``ignore`` leaves ``<dst>-wal`` out of the copy and queries the main file alone, as if the WAL did not exist. A ``-journal`` is copied either way (see *Database Access*). Default: ``apply``.
 
 Timestamps stored as numbers (Unix seconds or milliseconds, microseconds since 1601) are
 compared in ``expected_result`` with ``!timestamp`` and its ``epoch``/``unit`` options; see
@@ -161,6 +164,31 @@ Expected Failure Cases
          expected_count: 10
        description: "Test sqlite_query_result with a wrong expected count"
 
+Rows Only in the Write-Ahead Log
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A row that is committed but not yet checkpointed into the main file is found with the default
+``wal: apply`` and missing with ``wal: ignore``. Two tests express "only in the WAL":
+
+.. code-block:: yaml
+
+   tests:
+     - name: entry_in_database
+       function: sqlite.query_result
+       parameter:
+         dst: /home/user/app/data.db
+         query: "SELECT id FROM items WHERE name = 'example'"
+         expected_count: 1
+     - name: entry_not_in_main_file
+       function: sqlite.query_result
+       parameter:
+         dst: /home/user/app/data.db
+         query: "SELECT id FROM items WHERE name = 'example'"
+         expected_count: 0
+         wal: ignore
+
+:doc:`wal_frame_count` counts the frames and transactions the WAL holds.
+
 ``expect_to_fail`` inverts only a pass or a failure. A database that cannot be evaluated (missing
 file, SQL error) ends with an error, and an error stays an error.
 
@@ -199,9 +227,15 @@ Query Features
   - The database file, ``<dst>-wal`` and ``<dst>-journal`` (when present) are copied to a
     temporary directory; SQLite only ever opens the copy, so the original files are never
     checkpointed, rolled back or otherwise modified
-  - Committed transactions that are still in the write-ahead log (WAL mode, e.g. browser
-    databases of a running application) are visible to the query; an interrupted transaction
+  - Committed transactions that are still in the write-ahead log (WAL mode, e.g. databases
+    of a running application) are visible to the query; an interrupted transaction
     in a hot ``-journal`` is rolled back on the copy. ``-shm`` is not copied, SQLite rebuilds it
+  - ``wal: ignore`` copies the database and ``-journal`` but not ``-wal``, so SQLite opens the
+    copy with an empty write-ahead log, also when the database header says WAL mode. The
+    detail ``wal ignore: not applied: <name>-wal sha256=<hash>`` names the log that was left
+    out. A hot ``-journal`` is still rolled back: it belongs to a rollback-journal database,
+    not to the WAL, and querying the main file without it would show the half-written pages
+    of a transaction that never committed
   - The SHA-256 of each copied file is reported as ``queried snapshot: <name> sha256=<hash>``
     in every result after the query ran, so the result is tied to the exact bytes queried
   - If any of the files changes while it is being copied, a warning detail is added because
@@ -232,6 +266,7 @@ not be evaluated. Every result after the query ran reports the rows read as
   - Database file doesn't exist (no empty database is created)
   - SQL errors: syntax, unknown table or column, a corrupt or unreadable database
   - The glob in ``dst`` does not match exactly one file
+  - ``wal`` is neither ``apply`` nor ``ignore``
   - Database file cannot be read or copied (e.g. permission denied)
   - Invalid placeholder comparisons
 

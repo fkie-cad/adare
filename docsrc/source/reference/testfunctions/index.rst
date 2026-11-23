@@ -53,8 +53,8 @@ a goal? See :doc:`/guide/choosing-testfunctions`.
      - 6
      - XML data validation with XPath, namespace support, regex patterns, and timestamp tolerance
    * - :doc:`sqlite/index`
-     - 2
-     - SQLite database query execution, result validation and row counts
+     - 3
+     - SQLite database query execution, result validation and row counts, write-ahead log frames
    * - :doc:`linux/index`
      - 4
      - Linux system validation including services, processes, users, and logs
