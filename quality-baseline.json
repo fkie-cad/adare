@@ -4,7 +4,7 @@
     "B904": 12,
     "B905": 18,
     "BLE001": 123,
-    "C901": 86,
+    "C901": 85,
     "E402": 171,
     "RET504": 7,
     "S110": 15,
@@ -46,7 +46,6 @@
     "adare/adare/hypervisor/qemu/mixins/commands.py": 1058,
     "adare/adare/hypervisor/qemu/vm.py": 1809,
     "adare/tests/unit/testfunctions/test_csv.py": 1241,
-    "adare/tests/unit/testfunctions/test_excel.py": 1571,
     "adare/tests/unit/testfunctions/test_standard.py": 1123,
     "adare/tests/unit/testfunctions/test_xml.py": 1314,
     "adarelib/adarelib/common/variables.py": 1367
