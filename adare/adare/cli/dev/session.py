@@ -178,6 +178,7 @@ def exec_dev_start(arguments):
                 vm_memory=getattr(arguments, 'vm_memory', None),
                 vm_cpus=getattr(arguments, 'vm_cpus', None),
                 debug_screenshots=getattr(arguments, 'debug_screenshots', False),
+                run_postsetup=not getattr(arguments, 'no_postsetup', False),
                 console_ulid=console_ulid,
                 shared_directories=shared_directories if shared_directories else None,
             )

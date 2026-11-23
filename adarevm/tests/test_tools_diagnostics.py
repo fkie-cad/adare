@@ -36,6 +36,22 @@ async def test_execute_shell_never_logs_environment_values(monkeypatch, caplog):
     assert 'API_TOKEN' in caplog.text  # override keys stay visible for debugging
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('returncode', 'status'), [(0, 'success'), (3, 'error')])
+async def test_execute_shell_returns_stderr(monkeypatch, returncode, status):
+    def fake_execute(command, **options):
+        return {'returncode': returncode, 'stdout': 'out', 'stderr': 'boom'}
+
+    monkeypatch.setattr(system_tools, 'execute_on_shell', fake_execute)
+
+    result = await _Shell()._execute_shell(None, 'false', shell=True)
+
+    assert result['status'] == status
+    assert result['returncode'] == returncode
+    assert result['stdout'] == 'out'
+    assert result['stderr'] == 'boom'
+
+
 @pytest.mark.parametrize(
     ('exc_type', 'message'),
     [

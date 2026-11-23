@@ -33,7 +33,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from adare.backend.hostside import fsdiff
 from adare.backend.hostside.client import HostsideClient, HostsideUnsupportedError
@@ -48,6 +48,9 @@ from adare.backend.hostside.guestfs import (
 from adare.backend.hostside.injector import InjectionError, select_injector
 from adare.backend.hostside.markers import NullMarkerSink, open_markers
 from adare.exceptions import LoggedException
+
+if TYPE_CHECKING:
+    from adare.backend.experiment.postsetup import PostsetupStep
 
 log = logging.getLogger(__name__)
 
@@ -91,6 +94,7 @@ class HostsideSession:
         self.staged_ops: list[StagedOp] = []
         self.late_ops: list[str] = []
         self.unsupported: list[CommandPlan] = []
+        self.postsetup_log: list[tuple[PostsetupStep, CommandPlan]] = []
         self.deferred: list[DeferredTest] = []
         self.test_states: dict[str, str] = {}
         self.pending_pulls: list[tuple[str, Path]] = []
@@ -172,6 +176,7 @@ class HostsideSession:
     def analyze(self, base_fs: GuestFS) -> None:
         """Classify commands and tests; fills :attr:`plans`, :attr:`staged_ops`, :attr:`test_states`."""
         from adare.backend.environment import database as environment_database
+        from adare.backend.experiment.postsetup import normalize_step
         from adare.types.playbook import CommandAction
 
         users = self._users(base_fs)
@@ -183,11 +188,15 @@ class HostsideSession:
         installations = []
         if self.context.environment_ulid:
             installations = environment_database.get_environment_installations(self.context.environment_ulid) or []
-        for inst in installations:
-            command = getattr(inst, 'command', str(inst))
-            plan = planner.plan(command, shell=True, admin=True)
-            plan.reason = f"environment installation '{getattr(inst, 'name', '?')}': {plan.reason}".rstrip(': ')
+        # Same rights as on the other paths: the VM user unless the step says admin (file ownership follows).
+        # A step the planner cannot express offline is rejected before boot even with allow_failure:
+        # that is the backend's limit, not a command that ran and failed.
+        for index, inst in enumerate(installations, 1):
+            step = normalize_step(inst, index)
+            plan = planner.plan(step.command, shell=True, admin=step.admin, cwd=step.cwd)
+            plan.reason = f"environment installation '{step.name}': {plan.reason}".rstrip(': ')
             self._take(plan)
+            self.postsetup_log.append((step, plan))
 
         actions = list(getattr(self.context.playbook, 'actions', []) or [])
         for i, action in enumerate(actions, start=1):
@@ -211,6 +220,22 @@ class HostsideSession:
             if type(action).__name__ == 'ActionTestAction':
                 state = 'initial' if (self.interaction_index is None or i < self.interaction_index) else 'final'
                 self.test_states.setdefault(action.name, state)
+
+    def _write_postsetup_log(self) -> None:
+        """``logs/postsetup.log``: what became of each post-setup step (planned offline, nothing executes)."""
+        from adare.backend.experiment.postsetup import append_log, format_planned_entry
+
+        total = len(self.postsetup_log)
+        for index, (step, plan) in enumerate(self.postsetup_log, 1):
+            rights = 'admin (root-owned files)' if step.admin else 'user (VM-user-owned files)'
+            if plan.category == CLASS_INJECT:
+                verdict = f'staged offline as {len(plan.ops)} operation(s) before first boot'
+            else:
+                verdict = f'rejected before boot, class ({plan.category}): {plan.reason}'
+            append_log(
+                Path(self.context.experiment_run_directory.log_directory) / 'postsetup.log',
+                format_planned_entry(step, index, total, rights, verdict),
+            )
 
     def _take(self, plan: CommandPlan, key: str | None = None) -> None:
         self.plans[key or plan.command.strip()] = plan
@@ -254,6 +279,7 @@ class HostsideSession:
                 tz_name = base_fs.read_text('/etc/timezone').strip()
             self.guest_tz = guest_tzinfo(tz_name)
             self.analyze(base_fs)
+            self._write_postsetup_log()
 
             await asyncio.to_thread(self._load_testfunctions)
             problems = self._test_preflight()

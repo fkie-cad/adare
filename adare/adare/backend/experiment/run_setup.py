@@ -506,11 +506,12 @@ def _machine_views(context: ExperimentRunCtx):
         yield context.primary_machine, context
 
 
-async def _run_per_machine_installations(context: ExperimentRunCtx, install_fn):
+async def _run_per_machine_installations(context: ExperimentRunCtx, install_fn, stage_ulid: str | None = None):
     """Run an installation-execution function once per machine.
 
     Skips the stage entirely when there is nothing to install on any machine, so
     the "Installing environment software" row never appears for empty environments.
+    ``stage_ulid`` routes the stage events to another console (dev mode's), default the run's.
     """
     pending = [
         (key, view)
@@ -521,7 +522,7 @@ async def _run_per_machine_installations(context: ExperimentRunCtx, install_fn):
         log.info("No environment installations to execute; skipping stage")
         return
     with StageCtxManager(
-        InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event
+        InstallationsStage(), stage_ulid or context.experiment_run_ulid, event=context.user_interrupt_event
     ) as stage_ctx:
         for _key, view in pending:
             await install_fn(view, stage_ctx)
@@ -576,10 +577,10 @@ async def step_connect_websocket(context: ExperimentRunCtx):
                 ) from e
 
 
-async def step_execute_installations(context: ExperimentRunCtx):
+async def step_execute_installations(context: ExperimentRunCtx, stage_ulid: str | None = None):
     from adare.backend.experiment.agent_lifecycle import execute_installations_via_websocket
 
-    await _run_per_machine_installations(context, execute_installations_via_websocket)
+    await _run_per_machine_installations(context, execute_installations_via_websocket, stage_ulid)
 
 
 async def step_start_mcp_server(context: ExperimentRunCtx):

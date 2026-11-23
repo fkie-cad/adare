@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from rich.console import Console
 from rich.live import Live
+from rich.markup import escape
 from rich.spinner import SPINNERS
 from rich.text import Text
 
@@ -454,6 +455,7 @@ class ExperimentFlowConsole:
         level: int = 0,
         was_interrupted: bool = False,
         breakdown=None,
+        postsetup_warnings=(),
     ):
         """Render the closing run summary.
 
@@ -564,6 +566,10 @@ class ExperimentFlowConsole:
                 f"{indent}👁️  [bold yellow]{unchanged}[/bold yellow] GUI action(s) showed no screen change "
                 "[dim](reporting/screenshots/effect_unchanged_*.webp)[/dim]"
             )
+
+        # Environment post-setup steps that failed but are allow_failure: the run went on
+        for warning in postsetup_warnings:
+            summary_parts.append(f"{indent}⚠️  [bold yellow]{escape(warning)}[/bold yellow]")
 
         summary_parts.extend([f"{indent}🆔 Run ID: [dim]{ulid}[/dim]"])
         summary_parts.extend(["", separator])
