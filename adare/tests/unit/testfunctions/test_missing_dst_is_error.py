@@ -80,6 +80,9 @@ CASES = {
     'binary.pattern_count': {'pattern': 'a', 'expected_count': 0},
     'binary.pair_value_matches': {'key': 'a', 'expected_value': 'b'},
     'binary.pair_count': {'key': 'a', 'expected_count': 0},
+    # round 2: sqlite
+    'sqlite.values_compare': {'query': 'SELECT 1'},
+    'sqlite.free_space_pattern_count': {'pattern': 'a', 'expected_count': 0},
 }
 TWO_PATHS = {'csv.compare_files', 'excel.compare_sheets', 'excel.compare_files'}
 

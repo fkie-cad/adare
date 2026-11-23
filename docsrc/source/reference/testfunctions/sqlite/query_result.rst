@@ -41,7 +41,7 @@ Parameters
      - **Optional.** ``equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal`` for ``expected_count``. Default: ``equals``.
    * - ``view``
      - string
-     - **Optional.** Which state of the database the query sees; ``expected_count`` and ``expected_result`` apply to its rows. All views come from one snapshot (the files are copied once). ``current``: the database as SQLite sees it, the write-ahead log replayed. ``main_file``: the main database file alone, ``<dst>-wal`` left out. ``wal_added``: result rows of ``current`` that are not in ``main_file``. ``wal_removed``: result rows of ``main_file`` that are not in ``current`` (deleted or changed in the WAL, still in the file). Differences compare whole rows as multisets, so select identifying columns: a changed row appears in both. A ``-journal`` is used in every view (see *Database Access* in :doc:`query_result`). Default: ``current``.
+     - **Optional.** Which state of the database the query sees; ``expected_count`` and ``expected_result`` apply to its rows. All views come from one snapshot (the files are copied once). ``current``: the database as SQLite sees it, the write-ahead log replayed. ``main_file``: the main database file alone, ``<dst>-wal`` left out. ``wal_added``: result rows of ``current`` that are not in ``main_file``. ``wal_removed``: result rows of ``main_file`` that are not in ``current`` (deleted or changed in the WAL, still in the file). Differences compare whole rows as multisets, so select identifying columns: a changed row appears in both. ``commit:N``: the write-ahead log replayed through its N-th transaction (commit frame): ``commit:1`` the first, ``commit:-1`` the last (the same as ``current``), ``commit:0`` the same as ``main_file``; an N beyond the commits in the ``-wal``, or any N but 0 without a ``-wal``, is an error. A ``-journal`` is used in every view (see *Database Access* in :doc:`query_result`). Default: ``current``.
 
 Timestamps stored as numbers (Unix seconds or milliseconds, microseconds since 1601) are
 compared in ``expected_result`` with ``!timestamp`` and its ``epoch``/``unit`` options; see
@@ -192,7 +192,24 @@ compare two queries on one snapshot, ``current`` and ``main_file``:
 Select identifying columns: a row whose ``name`` changed in the WAL is in ``wal_added`` with
 its new value and in ``wal_removed`` with its old one.
 
-:doc:`wal_frame_count` counts the frames and transactions the WAL holds.
+The state after one transaction of several in the WAL is ``view: commit:N``: the copy of the
+``-wal`` is cut after its N-th commit frame, so SQLite replays exactly the first N transactions
+(``commit:-1`` is the last, ``commit:0`` the main file alone):
+
+.. code-block:: yaml
+
+   tests:
+     - name: entry_added_by_the_second_transaction
+       function: sqlite.query_result
+       parameter:
+         dst: /data/app/state.db
+         query: "SELECT id FROM items WHERE name = 'example'"
+         expected_count: 1
+         view: commit:2
+
+:doc:`wal_frame_count` counts the frames and transactions the WAL holds; :doc:`values_compare`
+compares one value between two views (``current`` against ``main_file``, ``commit:2`` against
+``commit:1``) in one check.
 
 ``expect_to_fail`` inverts only a pass or a failure. A database that cannot be evaluated (missing
 file, SQL error) ends with an error, and an error stays an error.
@@ -245,6 +262,10 @@ Query Features
   - Every view other than ``current`` reports ``view: <name>``, ``wal: <name>-wal
     sha256=<hash> (applied in current only)`` (or that there is no ``-wal``) and, for the
     differences, the row counts of both sides
+  - ``view: commit:N`` queries a third copy whose ``-wal`` is truncated after the N-th valid
+    commit frame (parsed as in :doc:`wal_frame_count`); it reports ``view: commit:N (... through
+    commit <k> of <total>, WAL frame <f> of <valid> valid)`` and ``wal: <name>-wal sha256=<hash>
+    (truncated after frame <f>)``, the hash of the ``-wal`` as pulled
   - The SHA-256 of each copied file is reported as ``queried snapshot: <name> sha256=<hash>``
     in every result after the query ran, so the result is tied to the exact bytes queried
   - If any of the files changes while it is being copied, a warning detail is added because
@@ -275,7 +296,8 @@ not be evaluated. Every result after the query ran reports the rows read as
   - Database file doesn't exist (no empty database is created)
   - SQL errors: syntax, unknown table or column, a corrupt or unreadable database
   - The glob in ``dst`` does not match exactly one file
-  - An unknown ``view``; a query that fails on one side of a difference (e.g. a table that
+  - An unknown ``view``; ``commit:N`` with N out of range, without a ``-wal`` (N other than 0)
+    or with a ``-wal`` that is not a valid WAL; a query that fails on one side of a difference (e.g. a table that
     exists only in the WAL) names that side
   - Database file cannot be read or copied (e.g. permission denied)
   - Invalid placeholder comparisons
