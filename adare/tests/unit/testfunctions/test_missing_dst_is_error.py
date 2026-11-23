@@ -83,6 +83,9 @@ CASES = {
     # round 2: sqlite
     'sqlite.values_compare': {'query': 'SELECT 1'},
     'sqlite.free_space_pattern_count': {'pattern': 'a', 'expected_count': 0},
+    # round 2: lines_in_order
+    'text.lines_in_order': {'patterns': ['a']},
+    'jsonl.lines_in_order': {'conditions': [{'a': 1}]},
 }
 TWO_PATHS = {'csv.compare_files', 'excel.compare_sheets', 'excel.compare_files'}
 

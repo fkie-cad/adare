@@ -40,7 +40,7 @@ def _run(path: str, dst: str, status: str, body: Callable[[binary.BinaryFile], T
     with handle:
         try:
             return body(binary.BinaryFile(handle, size, path))
-        except (binary.OffsetError, binary.BinaryParameterError, OrderingError) as e:
+        except (binary.OffsetError, binary.BinaryParameterError, binary.NonFiniteValueError, OrderingError) as e:
             return TestResult.error([f'{path}: {e}'])
         except UnicodeDecodeError as e:
             return TestResult.execution_error(e, f'Cannot decode the value in {path}')
