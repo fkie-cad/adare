@@ -112,9 +112,8 @@ In host test mode ``<dst>-wal`` is pulled from the guest together with ``dst``.
 See also
 --------
 
-- :doc:`row_count` with ``wal: ignore`` counts rows in the main database file alone; with the
-  default ``wal: apply`` it counts them with the WAL replayed. A row found by the second and
-  not the first lives only in the WAL.
+- :doc:`row_count` and :doc:`query_result` with ``view: wal_added`` / ``wal_removed`` show which
+  rows the WAL adds or removes compared with the main database file.
 - :doc:`../text/occurrence_count` finds a value anywhere in the raw bytes of a file, including
   stale WAL frames.
 

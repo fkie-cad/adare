@@ -1,4 +1,4 @@
-"""Unit tests for the write-ahead log side of the sqlite collection: the ``wal`` parameter of
+"""Unit tests for the write-ahead log side of the sqlite collection: the ``view`` parameter of
 sqlite.query_result / sqlite.row_count and sqlite.wal_frame_count.
 
 Databases are built in the test with the stdlib sqlite3 module; evidence files are copied
@@ -91,57 +91,133 @@ def wal_only(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# wal parameter of row_count / query_result
+# view parameter of row_count / query_result
 # ---------------------------------------------------------------------------
 
 
-def test_apply_sees_rows_only_in_the_wal(wal_only):
+@pytest.fixture
+def wal_changes(tmp_path):
+    """data.db with rows 1-3 and two 'dup' rows checkpointed; then, only in the -wal: row 2
+    deleted, row 3 renamed, row 4 inserted and one of the two 'dup' rows deleted."""
+    db = tmp_path / 'live' / 'data.db'
+    db.parent.mkdir()
+    with _writer(db) as conn:
+        conn.executemany(
+            'INSERT INTO items VALUES (?, ?)', [(1, 'alpha'), (2, 'beta'), (3, 'gamma'), (5, 'dup'), (6, 'dup')]
+        )
+        conn.commit()
+        conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        conn.execute('DELETE FROM items WHERE id IN (2, 6)')
+        conn.execute("UPDATE items SET name = 'gamma2' WHERE id = 3")
+        conn.execute("INSERT INTO items VALUES (4, 'delta')")
+        conn.commit()
+        return _seize(db, tmp_path / 'evidence')
+
+
+def test_current_sees_rows_only_in_the_wal(wal_only):
     result = _count(wal_only, query=ALL_ITEMS, expected_count=3)
 
     assert result.status == StatusEnum.SUCCESS, result.details
+    assert 'view: current (the database with the -wal applied)' in result.details
     assert any(d.startswith('queried snapshot: data.db-wal sha256=') for d in result.details)
 
 
-def test_ignore_queries_the_main_file_alone(wal_only):
-    result = _count(wal_only, query=ALL_ITEMS, expected_count=1, wal='ignore')
+def test_main_file_queries_the_main_file_alone(wal_only):
+    result = _count(wal_only, query=ALL_ITEMS, expected_count=1, view='main_file')
 
     assert result.status == StatusEnum.SUCCESS, result.details
     assert "query result: [{'id': 1}]" in result.details
-    assert f'wal ignore: not applied: data.db-wal sha256={_sha256(f"{wal_only}-wal")}' in result.details
-    assert not any(d.startswith('queried snapshot: data.db-wal') for d in result.details)
+    assert 'view: main_file (the main database file alone, the -wal left out)' in result.details
+    assert f'wal: data.db-wal sha256={_sha256(f"{wal_only}-wal")} (applied in current only)' in result.details
 
 
-def test_row_only_in_wal_is_two_checks(wal_only):
-    """The recipe in the docstring: wal=apply finds the row, wal=ignore does not."""
-    row = 'SELECT id FROM items WHERE id = 3'
+def test_row_only_in_wal_is_one_check(wal_only):
+    """The recipe in the docstring: view wal_added holds exactly the uncheckpointed rows."""
+    added = _query(wal_only, query='SELECT id FROM items ORDER BY id', view='wal_added')
+    only_new = _count(wal_only, query='SELECT id FROM items WHERE id = 3', expected_count=1, view='wal_added')
+    checkpointed = _count(wal_only, query='SELECT id FROM items WHERE id = 1', expected_count=0, view='wal_added')
 
-    in_db = _count(wal_only, query=row, expected_count=1, comparison_type='greater_equal')
-    in_main_file = _count(wal_only, query=row, expected_count=0, wal='ignore')
-    checkpointed = _count(wal_only, query='SELECT id FROM items WHERE id = 1', expected_count=0, wal='ignore')
-
-    assert in_db.status == StatusEnum.SUCCESS, in_db.details
-    assert in_main_file.status == StatusEnum.SUCCESS, in_main_file.details
-    assert checkpointed.status == StatusEnum.FAILED, checkpointed.details  # row 1 is in the main file
+    assert added.status == StatusEnum.SUCCESS, added.details
+    assert "query result: [{'id': 2}, {'id': 3}]" in added.details
+    assert 'rows: current 3, main_file 1' in added.details
+    assert only_new.status == StatusEnum.SUCCESS, only_new.details
+    assert checkpointed.status == StatusEnum.SUCCESS, checkpointed.details
 
 
-def test_query_result_ignore(wal_only):
-    result = _query(wal_only, query='SELECT id FROM items ORDER BY id', expected_result=[{'id': 1}], wal='ignore')
-    applied = _query(wal_only, query='SELECT id FROM items ORDER BY id', expected_count=3)
+def test_wal_removed_finds_rows_deleted_in_the_wal(wal_changes):
+    result = _query(
+        wal_changes,
+        query='SELECT id FROM items ORDER BY id',
+        view='wal_removed',
+        expected_result=[{'id': 2}, {'id': 6}],
+    )
+    added = _query(wal_changes, query='SELECT id FROM items ORDER BY id', view='wal_added', expected_result=[{'id': 4}])
 
     assert result.status == StatusEnum.SUCCESS, result.details
-    assert applied.status == StatusEnum.SUCCESS, applied.details
+    assert 'view: wal_removed (rows in main_file, not in current)' in result.details
+    assert added.status == StatusEnum.SUCCESS, added.details
 
 
-def test_ignore_leaves_the_evidence_untouched(wal_only):
-    before = {p.name: _sha256(p) for p in wal_only.parent.iterdir()}
+def test_changed_row_is_in_both_differences(wal_changes):
+    query = 'SELECT id, name FROM items WHERE id IN (1, 3) ORDER BY id'
 
-    _count(wal_only, query=ALL_ITEMS, expected_count=1, wal='ignore')
-    _count(wal_only, query=ALL_ITEMS, expected_count=3)
+    added = _query(wal_changes, query=query, view='wal_added', expected_result=[{'id': 3, 'name': 'gamma2'}])
+    removed = _query(wal_changes, query=query, view='wal_removed', expected_result=[{'id': 3, 'name': 'gamma'}])
 
-    assert {p.name: _sha256(p) for p in wal_only.parent.iterdir()} == before
+    assert added.status == StatusEnum.SUCCESS, added.details
+    assert removed.status == StatusEnum.SUCCESS, removed.details
 
 
-def test_ignore_without_a_wal_file(tmp_path):
+def test_differences_are_multisets(wal_changes):
+    """Two equal 'dup' rows in the main file, one in current: one is removed."""
+    query = "SELECT name FROM items WHERE name = 'dup'"
+
+    removed = _query(wal_changes, query=query, view='wal_removed', expected_result=[{'name': 'dup'}])
+    added = _count(wal_changes, query=query, expected_count=0, view='wal_added')
+
+    assert removed.status == StatusEnum.SUCCESS, removed.details
+    assert added.status == StatusEnum.SUCCESS, added.details
+
+
+def test_row_count_counts_difference_rows(wal_changes):
+    # (2, beta) and (6, dup) deleted, (3, gamma) changed
+    result = _count(wal_changes, query='SELECT id, name FROM items', expected_count=3, view='wal_removed')
+
+    assert result.status == StatusEnum.SUCCESS, result.details
+    assert result.details[0] == 'query returned 3 rows'
+    assert 'rows: current 4, main_file 5' in result.details
+
+
+@pytest.mark.parametrize('view', ['current', 'main_file', 'wal_added', 'wal_removed'])
+def test_every_view_copies_the_evidence_once(wal_changes, monkeypatch, view):
+    """Both sides of a difference come from one snapshot: each original file is read once."""
+    copied = []
+    original_copyfile = shutil.copyfile
+
+    def counting_copyfile(src, dst, *args, **kwargs):
+        copied.append(Path(src).resolve())
+        return original_copyfile(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, 'copyfile', counting_copyfile)
+
+    result = _count(wal_changes, query=ALL_ITEMS, expected_count=0, comparison_type='greater_equal', view=view)
+
+    assert result.status == StatusEnum.SUCCESS, result.details
+    evidence = wal_changes.resolve().parent
+    from_evidence = sorted(p.name for p in copied if p.parent == evidence)
+    assert from_evidence == ['data.db', 'data.db-wal']
+
+
+def test_views_leave_the_evidence_untouched(wal_changes):
+    before = {p.name: _sha256(p) for p in wal_changes.parent.iterdir()}
+
+    for view in ('current', 'main_file', 'wal_added', 'wal_removed'):
+        _count(wal_changes, query=ALL_ITEMS, expected_count=0, comparison_type='greater_equal', view=view)
+
+    assert {p.name: _sha256(p) for p in wal_changes.parent.iterdir()} == before
+
+
+def test_differences_without_a_wal_file_are_empty(tmp_path):
     db = tmp_path / 'live' / 'data.db'
     db.parent.mkdir()
     with _writer(db) as conn:
@@ -149,14 +225,16 @@ def test_ignore_without_a_wal_file(tmp_path):
         conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
         evidence = _seize(db, tmp_path / 'evidence', with_wal=False)
 
-    result = _count(evidence, query=ALL_ITEMS, expected_count=1, wal='ignore')
+    main_file = _count(evidence, query=ALL_ITEMS, expected_count=1, view='main_file')
+    added = _count(evidence, query=ALL_ITEMS, expected_count=0, view='wal_added')
 
-    assert result.status == StatusEnum.SUCCESS, result.details
-    assert 'wal ignore: no data.db-wal next to the database' in result.details
+    assert main_file.status == StatusEnum.SUCCESS, main_file.details
+    assert added.status == StatusEnum.SUCCESS, added.details
+    assert 'wal: no data.db-wal next to the database, current and main_file are the same' in added.details
 
 
-def test_ignore_still_rolls_back_a_hot_journal(tmp_path):
-    """wal=ignore only leaves out the -wal: an interrupted transaction is never seen."""
+def test_main_file_still_rolls_back_a_hot_journal(tmp_path):
+    """main_file only leaves out the -wal: an interrupted transaction is never seen."""
     db = tmp_path / 'live' / 'data.db'
     db.parent.mkdir()
     conn = sqlite3.connect(str(db), isolation_level=None)
@@ -180,26 +258,48 @@ def test_ignore_still_rolls_back_a_hot_journal(tmp_path):
         StatusEnum.SUCCESS
     )
 
-    for wal in ('apply', 'ignore'):
-        result = _count(evidence, query=changed, expected_count=0, wal=wal)
+    for view in ('current', 'main_file', 'wal_added', 'wal_removed'):
+        result = _count(evidence, query=changed, expected_count=0, view=view)
 
-        assert result.status == StatusEnum.SUCCESS, (wal, result.details)
+        assert result.status == StatusEnum.SUCCESS, (view, result.details)
         assert any(d.startswith('queried snapshot: data.db-journal sha256=') for d in result.details)
     assert Path(f'{evidence}-journal').exists()  # the original journal was not rolled back
 
 
-@pytest.mark.parametrize('wal', ['skip', 'APPLY', '', None, True])
-def test_invalid_wal_is_an_error(wal_only, wal):
-    counted = _count(wal_only, query=ALL_ITEMS, expected_count=3, wal=wal)
-    queried = _query(wal_only, query=ALL_ITEMS, wal=wal)
+def test_sql_error_names_the_view(tmp_path):
+    """A table created only in the WAL does not exist in the main file: an error, not 0 rows."""
+    db = tmp_path / 'live' / 'data.db'
+    db.parent.mkdir()
+    with _writer(db) as conn:
+        conn.execute('CREATE TABLE later (id INTEGER)')
+        conn.commit()
+        evidence = _seize(db, tmp_path / 'evidence')
+
+    result = _count(evidence, query='SELECT id FROM later', expected_count=0, view='wal_added')
+
+    assert result.status == StatusEnum.ERROR, result.details
+    assert result.details[0].startswith('SQLite error executing query (main_file view): ')
+
+
+@pytest.mark.parametrize('view', ['apply', 'ignore', 'Current', '', None, True])
+def test_invalid_view_is_an_error(wal_only, view):
+    counted = _count(wal_only, query=ALL_ITEMS, expected_count=3, view=view)
+    queried = _query(wal_only, query=ALL_ITEMS, view=view)
 
     for result in (counted, queried):
         assert result.status == StatusEnum.ERROR, result.details
-        assert 'invalid wal' in result.details[0]
+        assert 'invalid view' in result.details[0]
 
 
-def test_ignore_on_missing_database_is_an_error(tmp_path):
-    result = _count(tmp_path / 'absent.db', query=ALL_ITEMS, expected_count=0, wal='ignore')
+def test_wal_parameter_is_gone():
+    with pytest.raises(TypeError):
+        RowCountParameter(dst='data.db', query=ALL_ITEMS, expected_count=1, wal='apply')
+    with pytest.raises(TypeError):
+        QueryResultParameter(dst='data.db', query=ALL_ITEMS, wal='ignore')
+
+
+def test_view_on_missing_database_is_an_error(tmp_path):
+    result = _count(tmp_path / 'absent.db', query=ALL_ITEMS, expected_count=0, view='wal_removed')
 
     assert result.status == StatusEnum.ERROR, result.details
 
@@ -275,7 +375,7 @@ def test_stale_frames_after_a_wal_reset(tmp_path):
     for result in (commits, stale, everything):
         assert result.status == StatusEnum.SUCCESS, result.details
     # rows 1-4 were checkpointed, row 5 is the only one that is in the WAL alone
-    assert _count(evidence, query=ALL_ITEMS, expected_count=4, wal='ignore').status == StatusEnum.SUCCESS
+    assert _count(evidence, query=ALL_ITEMS, expected_count=4, view='main_file').status == StatusEnum.SUCCESS
 
 
 def test_truncated_wal_has_no_frames(wal_only, tmp_path):

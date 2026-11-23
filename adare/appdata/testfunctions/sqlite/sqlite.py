@@ -1,5 +1,6 @@
 # external imports
 import contextlib
+from collections import Counter
 import hashlib
 import os
 import shutil
@@ -25,11 +26,15 @@ log = logging.getLogger(__name__)
 SIDECAR_SUFFIXES = ('-wal', '-journal')
 WAL_SUFFIX = '-wal'
 
-# wal parameter of query_result / row_count: 'apply' queries the database as SQLite sees it
-# (the WAL replayed), 'ignore' the main database file alone. 'ignore' only leaves out the
-# -wal: a -journal is still copied, so a hot rollback journal is rolled back and the query
-# sees the last committed state, never the half-written pages of an interrupted transaction.
-WAL_MODES = ('apply', 'ignore')
+# view parameter of query_result / row_count, all derived from one snapshot:
+#   current      the database as SQLite sees it, the -wal replayed
+#   main_file    the main database file alone: the -wal left out. A -journal is still
+#                used, so a hot rollback journal is rolled back and the query sees the
+#                last committed state, never the half-written pages of an interrupted
+#                transaction (the journal belongs to rollback mode, not to the WAL)
+#   wal_added    rows of the query in current but not in main_file (multiset difference)
+#   wal_removed  rows of the query in main_file but not in current
+VIEWS = ('current', 'main_file', 'wal_added', 'wal_removed')
 
 # The rows read are reported in every result after the query ran; longer
 # reports are cut so a large SELECT cannot flood the run record.
@@ -59,17 +64,16 @@ def _stat_key(path: str):
     return st.st_size, st.st_mtime_ns
 
 
-def _snapshot(db_path: str, workdir: str, suffixes: tuple[str, ...] = SIDECAR_SUFFIXES) -> tuple[str, list[str], bool]:
-    """Copy the database and those of its sidecars ``suffixes`` names that exist into workdir.
+def _snapshot(db_path: str, workdir: str) -> tuple[str, list[str], bool]:
+    """Copy the database and its existing sidecars into workdir.
 
     The original files are only ever read, never opened by SQLite, so querying
-    cannot checkpoint, roll back or otherwise modify them. A sidecar left out is not
-    in workdir either, so SQLite opening the copy cannot pick it up.
+    cannot checkpoint, roll back or otherwise modify them.
 
     :return: (path of the copied database, one 'name sha256=...' entry per copied
              file, whether the source files changed while being copied)
     """
-    sources = [db_path] + [db_path + s for s in suffixes if os.path.isfile(db_path + s)]
+    sources = [db_path] + [db_path + s for s in SIDECAR_SUFFIXES if os.path.isfile(db_path + s)]
     before = {suffix: _stat_key(db_path + suffix) for suffix in ('',) + SIDECAR_SUFFIXES}
 
     db_copy = os.path.join(workdir, os.path.basename(db_path))
@@ -88,33 +92,82 @@ def _snapshot(db_path: str, workdir: str, suffixes: tuple[str, ...] = SIDECAR_SU
     return db_copy, hashes, before != after
 
 
-def _wal_parameter_errors(wal) -> list[str]:
-    if wal not in WAL_MODES:
-        return [f"invalid wal {wal!r} (allowed: {', '.join(WAL_MODES)})"]
+def _view_parameter_errors(view) -> list[str]:
+    if view not in VIEWS:
+        return [f"invalid view {view!r} (allowed: {', '.join(VIEWS)})"]
     return []
 
 
-def _ignored_wal_detail(db_path: str) -> str:
-    """What wal=ignore left out, for the result details."""
-    name = os.path.basename(db_path) + WAL_SUFFIX
-    try:
-        return f'wal ignore: not applied: {name} sha256={_sha256(db_path + WAL_SUFFIX)}'
-    except FileNotFoundError:
-        return f'wal ignore: no {name} next to the database'
-    except OSError as e:
-        return f'wal ignore: not applied: {name} (not hashed: {e})'
+def _main_file_copy(db_copy: str, workdir: str) -> str:
+    """Copy the snapshot's database and -journal, not its -wal, into a directory of their own.
+
+    Derived from the snapshot (not the original files), so both views show the same moment.
+    Must run before the snapshot copy is opened: closing it checkpoints the -wal into it.
+    """
+    main_dir = os.path.join(workdir, 'main_file')
+    os.mkdir(main_dir)
+    main_copy = os.path.join(main_dir, os.path.basename(db_copy))
+    for suffix in ('',) + tuple(s for s in SIDECAR_SUFFIXES if s != WAL_SUFFIX):
+        if suffix == '' or os.path.isfile(db_copy + suffix):
+            shutil.copyfile(db_copy + suffix, main_copy + suffix)
+    return main_copy
+
+
+def _fetch(db_copy: str, query: str) -> list[sqlite3.Row]:
+    with contextlib.closing(sqlite3.connect(db_copy)) as conn:
+        conn.row_factory = sqlite3.Row
+        return conn.execute(query).fetchall()
+
+
+def _difference(rows: list[sqlite3.Row], other: list[sqlite3.Row]) -> list[dict]:
+    """Rows of ``rows`` not in ``other`` as multisets, in the order of ``rows``.
+
+    A row twice in ``rows`` and once in ``other`` is left once.
+    """
+    remaining = Counter(tuple(row) for row in other)
+    out = []
+    for row in rows:
+        key = tuple(row)
+        if remaining[key]:
+            remaining[key] -= 1
+        else:
+            out.append(dict(row))
+    return out
+
+
+_VIEW_DESCRIPTIONS = {
+    'current': 'the database with the -wal applied',
+    'main_file': 'the main database file alone, the -wal left out',
+    'wal_added': 'rows in current, not in main_file',
+    'wal_removed': 'rows in main_file, not in current',
+}
+
+
+def _view_details(view: str, db_name: str, hashes: list[str], counts: dict) -> list[str]:
+    """Which view was queried and the -wal it applies or leaves out."""
+    wal_name = db_name + WAL_SUFFIX
+    wal_hash = next((h for h in hashes if h.startswith(wal_name + ' ')), None)
+    details = [f'view: {view} ({_VIEW_DESCRIPTIONS[view]})']
+    if view != 'current':
+        if wal_hash is None:
+            details.append(f'wal: no {wal_name} next to the database, current and main_file are the same')
+        else:
+            details.append(f'wal: {wal_hash} (applied in current only)')
+    if len(counts) == 2:
+        details.append(f"rows: current {counts['current']}, main_file {counts['main_file']}")
+    return details
 
 
 def _run_query(
-    ctx: TestContext, dst: str, query: str, wal: str = 'apply'
+    ctx: TestContext, dst: str, query: str, view: str = 'current'
 ) -> tuple[list[dict], list[str], TestResult | None]:
-    """Run ``query`` on a snapshot of the database ``dst`` (see :func:`_snapshot`).
+    """Run ``query`` on the ``view`` (see :data:`VIEWS`) of one snapshot of the database ``dst``.
 
-    ``wal='ignore'`` leaves the -wal out of the snapshot: the copy of a database whose
-    header says WAL mode then opens with an empty WAL, i.e. as the main file alone.
+    The original files are copied once (:func:`_snapshot`); main_file is a second copy made
+    from the snapshot without its -wal, so a difference never mixes two moments.
 
-    :return: (rows as ``{column: value}`` dicts, ``queried snapshot`` details, an ERROR
-             result when the database cannot be found or the query fails, else None)
+    :return: (rows as ``{column: value}`` dicts, the view and ``queried snapshot`` details,
+             an ERROR result when the database cannot be found or the query fails, else None)
     """
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
@@ -130,29 +183,43 @@ def _run_query(
     if not os.path.isfile(dst_resolved):
         return [], [], TestResult.error([f'database file {dst} does not exist'])
 
-    log.debug(f'dst database {dst_resolved} will be used for query {query!r}')
+    log.debug(f'dst database {dst_resolved} will be used for query {query!r} (view {view})')
 
-    suffixes = SIDECAR_SUFFIXES if wal == 'apply' else tuple(s for s in SIDECAR_SUFFIXES if s != WAL_SUFFIX)
     with tempfile.TemporaryDirectory(prefix='adare_sqlite_') as workdir:
-        db_copy, hashes, changed = _snapshot(dst_resolved, workdir, suffixes)
+        db_copy, hashes, changed = _snapshot(dst_resolved, workdir)
         snapshot_details = [f'queried snapshot: {h}' for h in hashes]
-        if wal == 'ignore':
-            snapshot_details.append(_ignored_wal_detail(dst_resolved))
         if changed:
             snapshot_details.append(
                 'warning: database files changed while being copied; the snapshot may be inconsistent'
             )
-        try:
-            with contextlib.closing(sqlite3.connect(db_copy)) as conn:
-                conn.row_factory = sqlite3.Row
-                rows = conn.execute(query).fetchall()
-        except sqlite3.Error as e:
-            return (
-                [],
-                snapshot_details,
-                TestResult.error([f"SQLite error executing query: {query} - {e}"] + snapshot_details),
-            )
-    return [dict(row) for row in rows], snapshot_details, None
+        copies = {}
+        if view != 'main_file':
+            copies['current'] = db_copy
+        if view != 'current':
+            try:
+                copies['main_file'] = _main_file_copy(db_copy, workdir)
+            except OSError as e:
+                return [], snapshot_details, TestResult.error([f'could not copy the snapshot: {e}'] + snapshot_details)
+        fetched = {}
+        for name, copy in copies.items():
+            try:
+                fetched[name] = _fetch(copy, query)
+            except sqlite3.Error as e:
+                where = '' if view == 'current' else f' ({name} view)'
+                return (
+                    [],
+                    snapshot_details,
+                    TestResult.error([f'SQLite error executing query{where}: {query} - {e}'] + snapshot_details),
+                )
+    if view == 'wal_added':
+        rows = _difference(fetched['current'], fetched['main_file'])
+    elif view == 'wal_removed':
+        rows = _difference(fetched['main_file'], fetched['current'])
+    else:
+        rows = [dict(row) for row in fetched[view]]
+    counts = {name: len(found) for name, found in fetched.items()}
+    details = _view_details(view, os.path.basename(dst_resolved), hashes, counts)
+    return rows, details + snapshot_details, None
 
 
 @testfunction(
@@ -167,14 +234,14 @@ def query_result(
     expected_count: int | None = None,
     expected_result: list | None = None,
     comparison_type: str = 'equals',
-    wal: str = 'apply',
+    view: str = 'current',
 ):
     """Pass when ``query`` runs on the SQLite database and its result matches the expectations.
 
-    Use for: asserting that a row was written, changed or removed; with ``wal: ignore``,
-    what the main database file alone holds (a row only in the write-ahead log, not yet
-    checkpointed: one test with ``wal: apply`` finds it, a second with ``wal: ignore`` does
-    not). The original file is never opened: ``dst`` and any ``-wal``/``-journal``
+    Use for: asserting that a row was written, changed or removed; which rows exist only in
+    the write-ahead log, not yet checkpointed into the main file (``view: wal_added``), or are
+    still in the main file but deleted or changed in the WAL (``view: wal_removed``). The
+    original file is never opened: ``dst`` and any ``-wal``/``-journal``
     sidecar are copied to a temp dir and the copy is queried, so uncheckpointed changes are
     seen and the evidence is not modified. Details report ``queried snapshot: <file> sha256=...``
     per copied file and, once the query ran, the rows read (``query result: [...]``, also on
@@ -198,11 +265,16 @@ def query_result(
             query order; ``None`` skips the check. Placeholders compare the stringified result.
         comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
             ``less_equal`` for ``expected_count``; other values are an error.
-        wal: ``apply`` (default) queries the database as SQLite sees it, the ``-wal``
-            replayed; ``ignore`` leaves the ``-wal`` out of the copy and queries the main
-            file alone (details: ``wal ignore: not applied: <file> sha256=...``). A
-            ``-journal`` is copied either way, so a hot rollback journal is rolled back and
-            an interrupted transaction is never seen. Other values are an error.
+        view: Which state of the database the query sees, compared with
+            ``expected_count`` / ``expected_result``; all views come from one snapshot
+            (the files are copied once). ``current`` (default): the database as SQLite sees
+            it, the ``-wal`` replayed. ``main_file``: the main database file alone, the
+            ``-wal`` left out. ``wal_added``: the result rows of ``current`` that are not in
+            ``main_file``; ``wal_removed``: the rows of ``main_file`` not in ``current``
+            (multiset difference of whole rows, in query order). Select identifying columns
+            for the differences: a changed row appears in both. A ``-journal`` is used in
+            every view, so a hot rollback journal is rolled back. Details name the view and
+            the ``-wal`` sha256. Other values are an error.
 
     Example:
         function: sqlite.query_result
@@ -211,13 +283,13 @@ def query_result(
           query: SELECT name FROM items WHERE name LIKE '%example%'
           expected_count: 0
     """
-    problems = _wal_parameter_errors(wal)
+    problems = _view_parameter_errors(view)
     if expected_count is not None or comparison_type != 'equals':
         problems += count_parameter_errors(expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
 
-    result, snapshot_details, error = _run_query(ctx, dst, query, wal)
+    result, snapshot_details, error = _run_query(ctx, dst, query, view)
     if error is not None:
         return error
 
@@ -254,15 +326,14 @@ def row_count(
     query: str,
     expected_count: int,
     comparison_type: str = 'equals',
-    wal: str = 'apply',
+    view: str = 'current',
 ):
     """Pass when the number of rows ``query`` returns on the SQLite database satisfies ``comparison_type``.
 
     Use for: asserting how many records an action left behind (exactly one history entry
     for a URL); asserting a record is gone: ``expected_count: 0``; asserting a row is only in
-    the write-ahead log, not yet checkpointed into the main file: two tests, ``wal: apply``
-    with ``expected_count: 1`` and ``comparison_type: greater_equal``, and ``wal: ignore``
-    with ``expected_count: 0``. Queried like
+    the write-ahead log, not yet checkpointed into the main file: one test with
+    ``view: wal_added`` and ``expected_count: 1``. Queried like
     sqlite.query_result: ``dst`` and any ``-wal``/``-journal`` sidecar are copied to a temp
     dir and the copy is queried, so uncheckpointed changes are seen and the evidence is not
     modified. Details report the count, the rows read (``query result: [...]``) and
@@ -278,10 +349,15 @@ def row_count(
         expected_count: Non-negative integer to compare against; anything else is an error.
         comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
             ``less_equal``; other values are an error.
-        wal: ``apply`` (default) counts in the database as SQLite sees it, the ``-wal``
-            replayed; ``ignore`` counts in the main file alone (the ``-wal`` is not copied, a
-            ``-journal`` still is, so a hot rollback journal is rolled back). Other values
-            are an error.
+        view: Which state of the database is counted; all views come from one snapshot
+            (the files are copied once). ``current`` (default): the database as SQLite sees
+            it, the ``-wal`` replayed. ``main_file``: the main database file alone, the
+            ``-wal`` left out. ``wal_added``: the result rows of ``current`` that are not in
+            ``main_file``; ``wal_removed``: the rows of ``main_file`` not in ``current``
+            (multiset difference of whole rows; their number is counted). Select identifying
+            columns for the differences: a changed row appears in both. A ``-journal`` is
+            used in every view, so a hot rollback journal is rolled back. Details name the
+            view and the ``-wal`` sha256. Other values are an error.
 
     Example:
         function: sqlite.row_count
@@ -290,13 +366,13 @@ def row_count(
           query: SELECT id FROM items WHERE name LIKE '%example%'
           expected_count: 1
     """
-    problems = count_parameter_errors(expected_count, comparison_type) + _wal_parameter_errors(wal)
+    problems = count_parameter_errors(expected_count, comparison_type) + _view_parameter_errors(view)
     if not isinstance(query, str) or not query.strip():
         problems.append(f'query must be a non-empty SQL string, got {query!r}')
     if problems:
         return TestResult.error(problems)
 
-    result, snapshot_details, error = _run_query(ctx, dst, query, wal)
+    result, snapshot_details, error = _run_query(ctx, dst, query, view)
     if error is not None:
         return error
 
@@ -348,7 +424,7 @@ def wal_frame_count(
     The WAL is parsed per the SQLite file format, without SQLite: header magic and version,
     page size, salts and the checksum chain. A copy of the WAL is read, never the original.
     Details report the header fields, all four counts and ``read snapshot: <file> sha256=...``.
-    To find which rows live only in the WAL use sqlite.row_count with ``wal: ignore``.
+    To find which rows live only in the WAL use sqlite.row_count with ``view: wal_added``.
 
     Args:
         dst: Guest path to the database; its ``<dst>-wal`` is read. A missing ``-wal`` next

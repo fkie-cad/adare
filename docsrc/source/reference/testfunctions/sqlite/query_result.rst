@@ -12,7 +12,7 @@ query_result
 
 This test function executes a SQL query against a SQLite database and validates the results based on expected row counts or specific result content. It supports complex result validation using placeholders and direct result comparison.
 
-The query never runs on the database file itself. The database and its ``-wal`` / ``-journal`` sidecars are copied to a temporary directory and the copy is queried, so the evidence is not modified and changes that only live in the write-ahead log are included. The SHA-256 of every queried file is reported in the result details. With ``wal: ignore`` the ``-wal`` is left out and the main database file alone is queried.
+The query never runs on the database file itself. The database and its ``-wal`` / ``-journal`` sidecars are copied to a temporary directory and the copy is queried, so the evidence is not modified and changes that only live in the write-ahead log are included. The SHA-256 of every queried file is reported in the result details. With ``view`` the query sees the main database file alone, or only the rows the write-ahead log adds or removes.
 
 Parameters
 ----------
@@ -39,9 +39,9 @@ Parameters
    * - ``comparison_type``
      - string
      - **Optional.** ``equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal`` for ``expected_count``. Default: ``equals``.
-   * - ``wal``
+   * - ``view``
      - string
-     - **Optional.** ``apply`` queries the database as SQLite sees it, with the write-ahead log replayed; ``ignore`` leaves ``<dst>-wal`` out of the copy and queries the main file alone, as if the WAL did not exist. A ``-journal`` is copied either way (see *Database Access*). Default: ``apply``.
+     - **Optional.** Which state of the database the query sees; ``expected_count`` and ``expected_result`` apply to its rows. All views come from one snapshot (the files are copied once). ``current``: the database as SQLite sees it, the write-ahead log replayed. ``main_file``: the main database file alone, ``<dst>-wal`` left out. ``wal_added``: result rows of ``current`` that are not in ``main_file``. ``wal_removed``: result rows of ``main_file`` that are not in ``current`` (deleted or changed in the WAL, still in the file). Differences compare whole rows as multisets, so select identifying columns: a changed row appears in both. A ``-journal`` is used in every view (see *Database Access* in :doc:`query_result`). Default: ``current``.
 
 Timestamps stored as numbers (Unix seconds or milliseconds, microseconds since 1601) are
 compared in ``expected_result`` with ``!timestamp`` and its ``epoch``/``unit`` options; see
@@ -167,25 +167,30 @@ Expected Failure Cases
 Rows Only in the Write-Ahead Log
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A row that is committed but not yet checkpointed into the main file is found with the default
-``wal: apply`` and missing with ``wal: ignore``. Two tests express "only in the WAL":
+A row that is committed but not yet checkpointed into the main file is in ``view: wal_added``;
+a row deleted in the WAL but still in the main file is in ``view: wal_removed``. Both views
+compare two queries on one snapshot, ``current`` and ``main_file``:
 
 .. code-block:: yaml
 
    tests:
-     - name: entry_in_database
+     - name: entry_only_in_wal
        function: sqlite.query_result
        parameter:
          dst: /home/user/app/data.db
          query: "SELECT id FROM items WHERE name = 'example'"
          expected_count: 1
-     - name: entry_not_in_main_file
+         view: wal_added
+     - name: deleted_entry_still_in_main_file
        function: sqlite.query_result
        parameter:
          dst: /home/user/app/data.db
-         query: "SELECT id FROM items WHERE name = 'example'"
-         expected_count: 0
-         wal: ignore
+         query: SELECT id, name FROM items ORDER BY id
+         expected_result: [{"id": 7, "name": "removed-entry"}]
+         view: wal_removed
+
+Select identifying columns: a row whose ``name`` changed in the WAL is in ``wal_added`` with
+its new value and in ``wal_removed`` with its old one.
 
 :doc:`wal_frame_count` counts the frames and transactions the WAL holds.
 
@@ -230,12 +235,16 @@ Query Features
   - Committed transactions that are still in the write-ahead log (WAL mode, e.g. databases
     of a running application) are visible to the query; an interrupted transaction
     in a hot ``-journal`` is rolled back on the copy. ``-shm`` is not copied, SQLite rebuilds it
-  - ``wal: ignore`` copies the database and ``-journal`` but not ``-wal``, so SQLite opens the
-    copy with an empty write-ahead log, also when the database header says WAL mode. The
-    detail ``wal ignore: not applied: <name>-wal sha256=<hash>`` names the log that was left
-    out. A hot ``-journal`` is still rolled back: it belongs to a rollback-journal database,
-    not to the WAL, and querying the main file without it would show the half-written pages
-    of a transaction that never committed
+  - ``view: main_file`` queries a second copy made from the snapshot (not from the original
+    files) with the database and ``-journal`` but not ``-wal``, so SQLite opens it with an
+    empty write-ahead log, also when the database header says WAL mode. ``wal_added`` and
+    ``wal_removed`` run the query on both copies and report the multiset difference of the
+    rows, so both sides show the same moment. A hot ``-journal`` is rolled back in every view:
+    it belongs to a rollback-journal database, not to the WAL, and querying the main file
+    without it would show the half-written pages of a transaction that never committed
+  - Every view other than ``current`` reports ``view: <name>``, ``wal: <name>-wal
+    sha256=<hash> (applied in current only)`` (or that there is no ``-wal``) and, for the
+    differences, the row counts of both sides
   - The SHA-256 of each copied file is reported as ``queried snapshot: <name> sha256=<hash>``
     in every result after the query ran, so the result is tied to the exact bytes queried
   - If any of the files changes while it is being copied, a warning detail is added because
@@ -266,7 +275,8 @@ not be evaluated. Every result after the query ran reports the rows read as
   - Database file doesn't exist (no empty database is created)
   - SQL errors: syntax, unknown table or column, a corrupt or unreadable database
   - The glob in ``dst`` does not match exactly one file
-  - ``wal`` is neither ``apply`` nor ``ignore``
+  - An unknown ``view``; a query that fails on one side of a difference (e.g. a table that
+    exists only in the WAL) names that side
   - Database file cannot be read or copied (e.g. permission denied)
   - Invalid placeholder comparisons
 
