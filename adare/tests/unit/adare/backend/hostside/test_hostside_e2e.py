@@ -523,7 +523,9 @@ def test_saved_variable_reaches_an_ordered_comparison(chain):
     """save_variable / capture values are filled in before the test runs; unset is an ERROR."""
     assert _status(chain('saved_variable_ordered', {'ms_before': UNIX_S * 1000 - 1})) == StatusEnum.SUCCESS
     assert _status(chain('saved_variable_ordered', {'ms_before': UNIX_S * 1000})) == StatusEnum.FAILED
-    assert _status(chain('saved_variable_ordered')) == StatusEnum.ERROR
+    unset = chain('saved_variable_ordered')  # never saved: the template cannot be rendered, the test is ERROR
+    assert unset.data['test_status'] == 'ERROR'
+    assert 'ms_before' in unset.data['result']['details'][0]
 
 
 def test_saved_timestamp_reaches_an_ordered_comparison(chain, monkeypatch):

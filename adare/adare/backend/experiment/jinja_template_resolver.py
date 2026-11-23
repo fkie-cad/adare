@@ -10,8 +10,18 @@ import jinja2
 import pytz
 
 from adare.backend.experiment.placeholders import FilterAnalysis, MetadataManager, ToleranceDetector
+from adare.exceptions import TemplateResolutionError
+from adarelib.common.timezones import _apply_timezone
 
 log = logging.getLogger(__name__)
+
+# What rendering a template (or applying a filter to its value) can raise. Never swallowed: a test
+# resolved to the unrendered ``{{ ... }}`` text would run, and pass or fail, on a wrong value.
+_RENDER_ERRORS = (jinja2.TemplateError, TypeError, ValueError, KeyError, AttributeError)
+
+
+def _cannot_render(template: str, error: Exception) -> TemplateResolutionError:
+    return TemplateResolutionError(log, f"Cannot render test template '{template}': {type(error).__name__}: {error}")
 
 
 class JinjaTemplateResolver:
@@ -33,7 +43,9 @@ class JinjaTemplateResolver:
             metadata_manager: MetadataManager instance for storing metadata
             yaml_tag_processor: YamlTagProcessor for creating placeholders
         """
-        self.jinja_env = jinja_env
+        # Test templates are strict: an undefined variable is an error (the test is ERROR), never ''.
+        # An overlay shares the filters of the given environment but not its (lenient) ``undefined``.
+        self.jinja_env: Any = jinja_env.overlay(undefined=jinja2.StrictUndefined) if jinja_env else None
         self.tolerance_detector = tolerance_detector
         self.metadata_manager = metadata_manager
         self.yaml_tag_processor = yaml_tag_processor
@@ -53,28 +65,21 @@ class JinjaTemplateResolver:
 
         Returns:
             Resolved string with variables substituted
-        """
-        if not template_context:
-            log.warning(f"No template context available to resolve '{template_string}'")
-            return template_string
 
+        Raises:
+            TemplateResolutionError: the template cannot be rendered (undefined variable, unknown filter, syntax
+                error, a filter rejecting its value, ...)
+        """
         try:
             if self.jinja_env:
                 template = self.jinja_env.from_string(template_string)
-                resolved = template.render(template_context)
             else:
-                import jinja2
-
-                template = jinja2.Template(template_string)
-                resolved = template.render(template_context)
-            log.debug(f"Resolved template '{template_string}' to '{resolved}'")
-            return resolved
-        except (jinja2.TemplateError, jinja2.UndefinedError, TypeError, ValueError) as e:
-            log.warning(f"Template resolution error for '{template_string}': {e}")
-            return template_string
-        except (KeyError, AttributeError) as e:
-            log.warning(f"Unexpected error resolving template '{template_string}': {e}", exc_info=True)
-            return template_string
+                template = jinja2.Template(template_string, undefined=jinja2.StrictUndefined)
+            resolved = template.render(template_context or {})
+        except _RENDER_ERRORS as e:
+            raise _cannot_render(template_string, e) from e
+        log.debug(f"Resolved template '{template_string}' to '{resolved}'")
+        return resolved
 
     def process_mixed_template_content(self, content: str, template_context: dict[str, Any]) -> str:
         """
@@ -131,9 +136,8 @@ class JinjaTemplateResolver:
                         template = self.jinja_env.from_string(template_expr)
                         replacement = template.render(template_context)
                         log.debug(f"Resolved template '{template_expr}' to '{replacement}' in mixed content")
-                    except (jinja2.TemplateError, jinja2.UndefinedError, KeyError, TypeError, ValueError) as e:
-                        log.warning(f"Failed to resolve template '{template_expr}': {e}")
-                        replacement = template_expr  # Keep original if resolution fails
+                    except _RENDER_ERRORS as e:
+                        raise _cannot_render(template_expr, e) from e
 
             # Replace this template in the result
             result = result[:start_pos] + replacement + result[end_pos:]
@@ -175,35 +179,35 @@ class JinjaTemplateResolver:
         self, template_expr: str, filter_analysis: FilterAnalysis, template_context: dict[str, Any]
     ) -> str:
         """Apply timestamp formatting for format-only cases (no tolerance)."""
-        try:
-            variable_name = filter_analysis.variable_name
-            format_string = filter_analysis.format_string
+        variable_name = filter_analysis.variable_name
+        format_string = filter_analysis.format_string
 
-            if not variable_name or not format_string:
-                log.warning(f"Missing variable name or format string for template: {template_expr}")
-                return template_expr
-
-            if variable_name not in template_context:
-                log.warning(f"Variable '{variable_name}' not found in template context for formatting")
-                return template_expr
-
-            timestamp_value = template_context[variable_name]
-            log.debug(
-                f"Formatting timestamp '{variable_name}' with value '{timestamp_value}' using format '{format_string}'"
+        if not variable_name or not format_string:
+            raise TemplateResolutionError(
+                log, f"Cannot render test template '{template_expr}': no variable or format string found in it"
+            )
+        if variable_name not in template_context:
+            raise TemplateResolutionError(
+                log,
+                f"Cannot render test template '{template_expr}': variable '{variable_name}' "
+                f"is not set (it must be defined before the test runs)",
             )
 
+        timestamp_value = template_context[variable_name]
+        log.debug(
+            f"Formatting timestamp '{variable_name}' with value '{timestamp_value}' using format '{format_string}'"
+        )
+        try:
             # Convert to datetime and apply timezone if needed
             dt = self._parse_timestamp_value(timestamp_value)
             dt = self._apply_timezone_conversion(dt, variable_name)
 
             # Apply format string
             formatted = dt.strftime(format_string)
-            log.info(f"Successfully formatted timestamp '{variable_name}' -> '{formatted}'")
-            return formatted
-
-        except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as e:
-            log.warning(f"Failed to apply format filter to '{template_expr}': {e}")
-            return template_expr
+        except (*_RENDER_ERRORS, OverflowError, OSError) as e:
+            raise _cannot_render(template_expr, e) from e
+        log.info(f"Successfully formatted timestamp '{variable_name}' -> '{formatted}'")
+        return formatted
 
     def _parse_timestamp_value(self, timestamp_value: Any) -> datetime.datetime:
         """Parse various timestamp formats into datetime object."""
@@ -229,29 +233,13 @@ class JinjaTemplateResolver:
         if not (hasattr(self, 'metadata_manager') and self.metadata_manager.variable_registry):
             return dt
 
-        try:
-            source_var = self.metadata_manager.variable_registry.get(variable_name)
-            if not (source_var and hasattr(source_var, 'structured_metadata') and source_var.structured_metadata):
-                return dt
-
-            tz_str = source_var.structured_metadata.timezone
-            if not tz_str:
-                return dt
-
-            target_tz = self._parse_timezone(tz_str)
-            return dt.astimezone(target_tz)
-
-        except (ValueError, TypeError, KeyError, AttributeError, pytz.exceptions.UnknownTimeZoneError) as e:
-            log.debug(f"Could not apply timezone conversion: {e}")
+        source_var = self.metadata_manager.variable_registry.get(variable_name)
+        if not (source_var and hasattr(source_var, 'structured_metadata') and source_var.structured_metadata):
             return dt
 
-    def _parse_timezone(self, tz_str: str) -> datetime.timezone:
-        """Parse timezone string into timezone object."""
-        if tz_str.startswith(('+', '-')):
-            # Parse offset format like "+04:00"
-            sign = 1 if tz_str[0] == '+' else -1
-            hours, minutes = map(int, tz_str[1:].split(':'))
-            offset = sign * (hours * 60 + minutes)
-            return datetime.timezone(datetime.timedelta(minutes=offset))
-        # Named timezone
-        return pytz.timezone(tz_str)
+        tz_str = source_var.structured_metadata.timezone
+        if not tz_str:
+            return dt
+
+        # adarelib parses the zone like everywhere else; a bad one raises ValidationError (a ValueError)
+        return dt.astimezone(_apply_timezone(datetime.datetime(2000, 1, 1), tz_str).tzinfo)
