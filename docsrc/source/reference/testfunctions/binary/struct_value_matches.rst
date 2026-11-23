@@ -35,7 +35,7 @@ Parameters
      - **Required.** ``u8``, ``i8``, ``u16le`` ... ``i64be`` (integers), ``f32le``, ``f32be``, ``f64le``, ``f64be`` (floats), ``bytes:<n>`` (compared as lowercase hex), ``string:<n>`` (n bytes decoded with ``encoding``, trailing NULs dropped) or ``cstring`` (up to the first NUL; ``\x00\x00`` in UTF-16; at most 64 KiB).
    * - ``expected_value``
      - string/int/float
-     - **Required.** Numbers and timestamps compare by value; strings as text (a number written here as its text); ``bytes:<n>`` as hex, whitespace ignored (``de ad be ef``). A ``!re`` tag or a ``{{placeholder}}`` compares the value's text; a ``!timestamp`` placeholder with ``epoch``/``unit`` reads a numeric field as a time.
+     - **Required.** Numbers and timestamps compare by value; strings as text (a number written here as its text); ``bytes:<n>`` as hex, whitespace ignored (``de ad be ef``). A ``!re`` tag or a ``{{placeholder}}`` compares the value's text; a ``!timestamp`` placeholder with ``epoch``/``unit`` reads a numeric field as a time. With an ordered ``comparison_type`` or ``tolerance``, a lone ``{{ name }}`` is the saved number or timestamp of that variable (not set yet, a ``!re`` variable or a timestamp with tolerance: ERROR).
    * - ``comparison_type``
      - string
      - **Optional.** ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal``, ``less_equal``. Ordered comparisons need numbers or timestamps; text and ``bytes`` take ``equals`` / ``not_equals`` only.

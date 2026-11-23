@@ -8,7 +8,7 @@ values_compare
 :Category: JSON Data
 :Function Name: ``values_compare``
 
-**Compares two values of one JSON file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset).**
+**Compares two values of one JSON file (or of two files) as numbers or timestamps (earlier/later, within a tolerance, A = B + offset).**
 
 Passes when ``value(key_path) <comparison_type> value(other_key_path) + offset`` holds in one JSON file. Both values are compared as numbers or as points in time; the time parameters say how to read timestamps (ISO 8601 and RFC 2822 by default, ``time_format`` for others, ``timestamp_epoch`` for numeric counts).
 
@@ -42,7 +42,7 @@ Parameters
      - **Optional.** Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
    * - ``offset``
      - number
-     - **Optional.** Added to the second value before comparing (seconds for timestamps, may be negative): ``first <comparison_type> second + offset``.
+     - **Optional.** Added to the second value before comparing (seconds for timestamps, may be negative): ``first <comparison_type> second + offset``. ``'{{ name }}'`` takes a saved number (:ref:`ordered-comparison`).
    * - ``time_format``
      - string
      - **Optional.** ``strptime`` format of text timestamps; default ISO 8601 or RFC 2822.
@@ -58,6 +58,15 @@ Parameters
    * - ``encoding``
      - string
      - **Optional.** ``null`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it.
+   * - ``other_dst``
+     - string
+     - **Optional.** Path of a second file to read the second value from, loaded like ``dst`` (``archive.zip!/member`` included); default: ``dst``. A missing file is an ERROR. Compares a file with a copy saved before an action: :ref:`before-after-action`.
+   * - ``value_decode``
+     - list / string
+     - **Optional.** Decode both values before comparing (steps as in :doc:`value_matches`; see "Decoding a stored value" under :ref:`ordered-comparison`).
+   * - ``decoded_key_path``
+     - string
+     - **Optional.** With ``json`` in ``value_decode``: key path into the decoded value.
 
 Usage Example
 -------------
@@ -83,6 +92,15 @@ Usage Example
          other_key_path: counters.last
          offset: 1
 
+     - name: counter_grew_by_the_action
+       function: json.values_compare
+       parameter:
+         dst: /data/app/state.json
+         key_path: counter
+         other_dst: /data/app/state.before.json   # copied by a command action before the action
+         other_key_path: counter
+         comparison_type: greater
+
 Common Use Cases
 ----------------
 
@@ -94,6 +112,9 @@ Common Use Cases
 
 **A = B + n**
   A counter or sequence number one above another (``offset: 1``), or a time a fixed interval after another (``offset`` in seconds).
+
+**Before and after an action**
+  The same value in the file and in a copy saved before the action (``other_dst``); see :ref:`before-after-action`.
 
 See Also
 --------
@@ -111,6 +132,6 @@ Return Values
   The file was read and a side selects nothing, or the comparison does not hold.
 
 **Error**
-  The file does not exist, a glob matches no file or more than one, the file cannot be read or is invalid;
+  The file (or ``other_dst``) does not exist, a glob matches no file or more than one, the file cannot be read or is invalid;
   a side selects several values; a value is no number or timestamp (or one is a number, the other a timestamp);
   invalid parameters (``comparison_type``, ``value_type``, ``tolerance`` with an order comparison, ``timestamp_epoch``, ...).

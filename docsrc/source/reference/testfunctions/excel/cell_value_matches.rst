@@ -42,7 +42,7 @@ Parameters
      - **Optional.** Treat ``expected_value`` as a regex searched in the cell value (``re.search``, unanchored; write ``^...$`` for the whole value). Default: ``false``.
    * - ``comparison_type``
      - string
-     - **Optional.** ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any of the parameters below, compares the value with ``expected_value`` as a number or timestamp (see :ref:`ordered-comparison`); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an ERROR.
+     - **Optional.** ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any of the parameters below, compares the value with ``expected_value`` as a number or timestamp (see :ref:`ordered-comparison`); a ``!re`` tag or ``regex_match`` is then an ERROR, a lone ``{{ name }}`` is the saved variable's value.
    * - ``value_type``
      - string
      - **Optional.** ``auto`` (default: numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``.
@@ -65,7 +65,7 @@ Parameters
 Numbers and Timestamps
 ----------------------
 
-With ``comparison_type``, ``value_type``, ``tolerance`` or a time parameter the value is compared as a number or a point in time instead of by equality: greater/less (earlier/later), or equal within a tolerance. A value that is no number or timestamp is an ERROR (the test looked at the wrong field), as is a regex or placeholder ``expected_value``. See :ref:`ordered-comparison`.
+With ``comparison_type``, ``value_type``, ``tolerance`` or a time parameter the value is compared as a number or a point in time instead of by equality: greater/less (earlier/later), or equal within a tolerance. A value that is no number or timestamp is an ERROR (the test looked at the wrong field), as is a regex ``expected_value``; a lone ``{{ name }}`` placeholder compares with the saved variable. See :ref:`ordered-comparison`.
 
 .. code-block:: yaml
 

@@ -42,7 +42,7 @@ Parameters
      - **Optional.** ``null`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. An unknown name is an ERROR.
    * - ``comparison_type``
      - string
-     - **Optional.** ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any of the parameters below, compares the value with ``expected_value`` as a number or timestamp (see :ref:`ordered-comparison`); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an ERROR.
+     - **Optional.** ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any of the parameters below, compares the value with ``expected_value`` as a number or timestamp (see :ref:`ordered-comparison`); a ``!re`` tag or ``regex_match`` is then an ERROR, a lone ``{{ name }}`` is the saved variable's value.
    * - ``value_type``
      - string
      - **Optional.** ``auto`` (default: numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``.
@@ -61,11 +61,17 @@ Parameters
    * - ``utc_offset``
      - string
      - **Optional.** Zone of timestamps without one (``+02:00``); default UTC.
+   * - ``value_decode``
+     - list / string
+     - **Optional.** Decode the value read from the file before comparing: one step or a list applied in order: ``url``, ``base64``, ``hex``, ``utf16``, ``json`` (see "Decoding a stored value" under :ref:`ordered-comparison`). A value a step cannot decode, or an unknown step, is an ERROR.
+   * - ``decoded_key_path``
+     - string
+     - **Optional.** With ``json`` in ``value_decode``: key path into the decoded value; it must select one value. Required with ``json``, an ERROR without it.
 
 Numbers and Timestamps
 ----------------------
 
-With ``comparison_type``, ``value_type``, ``tolerance`` or a time parameter the value is compared as a number or a point in time instead of by equality: greater/less (earlier/later), or equal within a tolerance. To compare two values of one file use :doc:`values_compare`. A value that is no number or timestamp is an ERROR (the test looked at the wrong field), as is a regex or placeholder ``expected_value``. See :ref:`ordered-comparison`.
+With ``comparison_type``, ``value_type``, ``tolerance`` or a time parameter the value is compared as a number or a point in time instead of by equality: greater/less (earlier/later), or equal within a tolerance. To compare two values of one file use :doc:`values_compare`. A value that is no number or timestamp is an ERROR (the test looked at the wrong field), as is a regex ``expected_value``; a lone ``{{ name }}`` placeholder compares with the saved variable. See :ref:`ordered-comparison`.
 
 .. code-block:: yaml
 
