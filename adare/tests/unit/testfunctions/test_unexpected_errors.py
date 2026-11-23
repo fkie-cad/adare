@@ -45,6 +45,8 @@ VALID_PARAMS = {
     # round 2: lines_in_order
     'text.lines_in_order': {'patterns': ['x']},
     'jsonl.lines_in_order': {'conditions': [{'x': 1}]},
+    # optional in the signature, but required before the file is read
+    'xml.namespace_matches': {'expected_namespaces': {'': 'urn:x'}},
 }
 
 
