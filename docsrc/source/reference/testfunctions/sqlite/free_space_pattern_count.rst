@@ -22,9 +22,20 @@ format, without SQLite, locates the free space and counts the occurrences of ``p
   start of the cell content area.
 
 The reserved bytes at the end of each page and fragments of fewer than 4 bytes are not
-searched. Occurrences are counted per region, so a match never spans two regions. B-tree pages
-are recognised by their page type byte; pointer-map pages (auto-vacuum databases) and the
-lock-byte page are skipped.
+searched. Regions never overlap, and occurrences are counted per region, so a match never spans
+two regions. B-tree pages are recognised by their page type byte; pointer-map pages
+(auto-vacuum databases) and the lock-byte page are skipped.
+
+.. note::
+
+   What is recoverable depends on what SQLite did. It can leave a record in the file **twice**:
+   when a b-tree page is split, the old page keeps its cells (as unallocated space) next to the
+   copies on the new pages, so a deleted record can match once per copy, and a live record can
+   match in the free space too. And it can **overwrite** freed data: when it rewrites or merges
+   pages (for example the tree collapsing back into its root after a large row was deleted),
+   the stale cells and freeblocks of the rewritten page are gone, even though an earlier delete
+   in the same transaction is still on a page that became a freelist page. Use
+   ``comparison_type: greater_equal`` unless the exact number of copies is the point.
 
 Combine it with :doc:`row_count` (``expected_count: 0``) to show that a record is gone from the
 live data but still recoverable from the file.
