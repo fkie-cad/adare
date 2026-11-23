@@ -19,12 +19,20 @@ format, without SQLite, locates the free space and counts the occurrences of ``p
   The overflow pages of a deleted large row end up here;
 * **freeblocks**: freed cells inside a b-tree page, chained from the page header;
 * **unallocated** space of each b-tree page: between the end of the cell pointer array and the
-  start of the cell content area.
+  start of the cell content area;
+* the **overflow tail**: a value too large for its b-tree cell continues on a chain of overflow
+  pages (the number of the next page, then the value); the last page of the chain is rarely full,
+  and the bytes after the value keep whatever the page held before. When SQLite frees a page and
+  takes it again as an overflow page within one transaction, those bytes are the old rows, and
+  ``secure_delete`` does not wipe them. Every in-use chain of a table leaf, index leaf or index
+  interior cell is walked, and the region is ``[4 + bytes of the value on the page, usable size)``
+  of its last page.
 
 The reserved bytes at the end of each page and fragments of fewer than 4 bytes are not
 searched. Regions never overlap, and occurrences are counted per region, so a match never spans
 two regions. B-tree pages are recognised by their page type byte; pointer-map pages
-(auto-vacuum databases) and the lock-byte page are skipped.
+(auto-vacuum databases) and the lock-byte page are skipped. A page that an overflow chain claims
+is an overflow page whatever its first byte says.
 
 .. note::
 
@@ -42,58 +50,62 @@ live data but still recoverable from the file.
 
 .. warning::
 
-   **Free space is not every stale byte.** ``expected_count: 0`` here proves only that the text is
-   not in the free space; it can still be in the file. What this test does *not* search:
+   **Free space is not every byte of the file.** ``expected_count: 0`` on a free-space region
+   proves only that the text is not in that free space. What the free-space regions do *not*
+   cover, and ``region: whole_file`` does:
 
-   * **Index interior cells are not a gap.** An index is a b-tree whose interior cells are index
-     entries (not copies of leaf keys). Deleting an entry on an interior page replaces it with the
-     entry before it, and the old cell becomes a freeblock or unallocated space, which is searched.
-   * **Table interior pages** keep the *rowids* of deleted rows as dividers until the page is
-     rebalanced or the table rewritten (``secure_delete`` does not remove them). They hold numbers,
-     not text, and a pattern search cannot single them out (a rowid is a short varint).
    * **``sqlite_stat4``** (after ``ANALYZE`` or ``PRAGMA optimize``) stores up to 24 sampled index
      keys per index as live rows. A deleted row whose key was sampled stays there, even with
-     ``secure_delete``, until the next ANALYZE. A query reads it:
+     ``secure_delete``, until the next ANALYZE. A query reads it too:
      ``SELECT 1 FROM sqlite_stat4 WHERE instr(sample, CAST('text' AS BLOB)) > 0``.
    * **Full-text indexes** (FTS5: ``<name>_data``; FTS3/4: ``<name>_segments``) keep the terms of a
      deleted document in their segments until a merge or ``optimize``, again with ``secure_delete``.
      Terms are stored prefix-compressed, so only the part after the shared prefix may match.
-   * **The unused tail of an overflow page in use.** When SQLite frees a page and takes it again as
-     the last overflow page of a big value within one transaction, the bytes after the value keep
-     the old content of the page. The page is neither on the freelist nor a b-tree page, so no
-     region covers it. ``secure_delete`` zeroes freed pages, so this needs the default (off).
-   * Reserved bytes at the end of each page, fragments of fewer than 4 bytes, bytes after the last
-     complete page, and the ``-wal`` file (``view: current`` folds it into the copy first).
+   * **The write-ahead log and the rollback journal.** ``view: current`` folds the ``-wal`` into a
+     copy, which can overwrite the very pages that hold old data; ``whole_file`` searches the
+     ``-wal`` and the ``-journal`` as seized.
+   * Reserved bytes at the end of each page, fragments of fewer than 4 bytes and bytes after the
+     last complete page (only ``whole_file`` sees them).
 
-   In a table with an index on a text column, 400 rows and 100 deleted (10 runs, 1000 deleted
-   values), every deleted value was in the free space with the default settings, and none was
-   anywhere in the file with ``secure_delete`` on. After ``ANALYZE`` with ``secure_delete`` on,
-   55 of the 1000 were still in ``sqlite_stat4`` and none in the free space.
+   Two things that look like gaps are not: an **index** interior cell is a real index entry that
+   deleting replaces, so the old cell is free space (a freeblock or unallocated space); and the
+   **table interior pages** keep only the *rowids* of deleted rows as dividers (numbers, not text;
+   ``secure_delete`` does not remove them).
 
-   To assert that a value is **gone from the whole file**, search all of it, in the encodings
-   the database uses, and the write-ahead log if there is one:
+   To assert that a value is **gone from the evidence**, use ``region: whole_file``: it counts
+   the pattern in every byte of the database file and of its ``-wal`` and ``-journal`` (those that
+   exist), each file on its own, so a match never spans two files. Live rows are counted too, and an
+   indexed value is in the file at least twice while the row lives (table cell and index entry),
+   so "deleted but still in the file" is :doc:`row_count` ``expected_count: 0`` together with a
+   ``whole_file`` count of at least 1. Search each encoding the database uses (a second test with
+   ``encoding: utf-16-le``). ``view`` has no meaning there and ``current`` is an error: the files
+   are searched as seized, nothing is checkpointed or parsed (so even a damaged database can be
+   searched).
 
    .. code-block:: yaml
 
       tests:
-        - name: value_not_in_main_file
-          function: text.occurrence_count
+        - name: value_not_anywhere
+          function: sqlite.free_space_pattern_count
           parameter:
             dst: /data/app/state.db
-            content: deleted-note-title
-            encoding: [utf-8, utf-16-le]
+            pattern: deleted-note-title
+            region: whole_file
             expected_count: 0
-        - name: value_not_in_wal
-          function: text.occurrence_count
+        - name: value_not_anywhere_utf16
+          function: sqlite.free_space_pattern_count
           parameter:
-            dst: /data/app/state.db-wal   # an error when there is no -wal
-            content: deleted-note-title
+            dst: /data/app/state.db
+            pattern: deleted-note-title
+            encoding: utf-16-le
+            region: whole_file
             expected_count: 0
 
-   :doc:`../binary/pattern_count` does the same for a pattern type of ``bytes``, ``hex`` or ``regex``.
-   Live rows are counted too, and each indexed value is in the file at least twice while the row
-   lives (table cell and index entry), so "deleted but still in the file" is
-   :doc:`row_count` ``expected_count: 0`` together with a whole-file count of at least 1.
+   In a table with an index on a text column, 400 rows and 100 deleted (10 runs, 1000 deleted
+   values), every deleted value was in the free space with the default settings, and none was
+   anywhere in the file with ``secure_delete`` on. After ``ANALYZE`` with ``secure_delete`` on,
+   55 of the 1000 were still in ``sqlite_stat4`` and none in the free space; ``whole_file`` finds
+   them.
 
 Parameters
 ----------
@@ -119,10 +131,10 @@ Parameters
      - **Optional.** Encoding for ``text``: ``utf-8`` (default), ``utf-16-le`` or ``utf-16-be`` for databases with a UTF-16 text encoding.
    * - ``region``
      - string
-     - **Optional.** Which free space is searched: ``all`` (default), ``freelist``, ``freeblocks`` or ``unallocated``.
+     - **Optional.** Which free space is searched: ``all`` (default: ``freelist``, ``freeblocks``, ``unallocated`` and ``overflow_tail``), ``freelist``, ``freeblocks``, ``unallocated`` or ``overflow_tail``. Or ``whole_file``, which is not free space: every byte of the database file and of its ``-wal`` and ``-journal`` that exist (they are not required), each file counted on its own.
    * - ``view``
      - string
-     - **Optional.** ``main_file`` (default): the main database file as it is, ``<dst>-wal`` left out. ``current``: the copy after ``PRAGMA wal_checkpoint(TRUNCATE)``, i.e. with the write-ahead log folded in as SQLite would on a checkpoint (a hot ``-journal`` is rolled back first).
+     - **Optional.** ``main_file`` (default): the main database file as it is, ``<dst>-wal`` left out. ``current``: the copy after ``PRAGMA wal_checkpoint(TRUNCATE)``, i.e. with the write-ahead log folded in as SQLite would on a checkpoint (a hot ``-journal`` is rolled back first). ``current`` is an error with ``region: whole_file``.
    * - ``expected_count``
      - integer
      - **Optional.** Non-negative number to compare the occurrences with. Default: ``1``. ``0`` asserts absence.
@@ -162,6 +174,15 @@ Usage Example
          expected_count: 1
          comparison_type: greater_equal
 
+     # the delete left nothing, anywhere in the database file or its -wal / -journal
+     - name: nothing_left_anywhere
+       function: sqlite.free_space_pattern_count
+       parameter:
+         dst: /data/app/state.db
+         pattern: deleted-note-title
+         region: whole_file
+         expected_count: 0
+
      # the application erases deleted records (secure delete)
      - name: nothing_left_after_checkpoint
        function: sqlite.free_space_pattern_count
@@ -174,10 +195,16 @@ Usage Example
 Return Values
 -------------
 
-Every result after the file was parsed reports the count (``<n> occurrence(s) of <type>
+With ``region: whole_file`` the result reports the count over the whole evidence
+(``<n> occurrence(s) of <type> '<pattern>' in the whole evidence (<k> file(s); region whole_file)``),
+the comparison, one line per file that exists (``state.db-wal: 1 occurrence(s) in 4152 bytes,
+sha256=<hash>``) and the ``read snapshot`` lines.
+
+Every other result after the file was parsed reports the count (``<n> occurrence(s) of <type>
 '<pattern>' in <k> free region(s) (<bytes> bytes; region <region>)``), the comparison, the
 matching regions (``matches: page 5 freelist [16384, 20480): 2; ...`` with absolute file
-offsets, the first 20), the size of each kind of free space, the view and one
+offsets, the first 20), the size of each kind of free space (the overflow tail with its number of
+overflow pages), the view and one
 ``read snapshot: <file> sha256=<hash>`` per copied file (for ``current`` also the hash of the
 checkpointed copy that was parsed).
 
@@ -191,15 +218,18 @@ checkpointed copy that was parsed).
   The database does not exist or a glob matches no file or several; the file is not an SQLite
   database or its header is impossible (page size, reserved bytes); a broken freelist (a page
   number outside the file, a page listed twice, a trunk listing more leaves than fit, a page
-  count that differs from the header's) or freeblock chain (off the page, not in ascending
-  order); SQLite cannot checkpoint the copy (``view: current``); an empty or invalid pattern,
-  an unknown ``pattern_type``, ``encoding``, ``region`` or ``view``; a negative
+  count that differs from the header's), freeblock chain (off the page, not in ascending
+  order) or overflow chain (a page out of range, on the freelist or claimed twice, a cycle, a
+  chain that ends before or goes on after the size of the value; not for ``whole_file``); SQLite cannot checkpoint the copy (``view: current``); an empty or invalid pattern,
+  an unknown ``pattern_type``, ``encoding``, ``region`` or ``view``, ``view: current`` with
+  ``region: whole_file``; a negative
   ``expected_count`` or an unknown ``comparison_type``.
 
 See also
 --------
 
 - :doc:`row_count` shows that the record is gone from the live data.
-- :doc:`../binary/pattern_count` counts a pattern in any byte range of a file, live rows included.
+- :doc:`../binary/pattern_count` counts a pattern in any byte range of a file, live rows included
+  (``region: whole_file`` does it for the database and its sidecars at once).
 - :doc:`wal_frame_count` and ``view: commit:N`` in :doc:`query_result` look at older versions of
   pages in the write-ahead log.

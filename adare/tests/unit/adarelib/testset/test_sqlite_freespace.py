@@ -283,10 +283,14 @@ def _marker_db(path, rnd, page_size, encoding, auto_vacuum):
         conn.execute(f"PRAGMA encoding='{encoding}'")
         conn.execute('PRAGMA secure_delete=OFF')
         conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY, body TEXT)')
+        # an index b-tree whose big keys overflow in leaf and interior cells (no marker in them)
+        conn.execute('CREATE TABLE k (key TEXT PRIMARY KEY) WITHOUT ROWID')
         conn.execute('BEGIN')
         for i in range(rnd.randint(20, 60)):
             fill = 'Q' * rnd.randint(page_size, 3 * page_size) if rnd.random() < 0.15 else 'q' * rnd.randint(5, 60)
             conn.execute('INSERT INTO t VALUES (?, ?)', (i, f'MK{i:04d}-{fill}'))
+            kfill = 'K' * rnd.randint(page_size // 2, 2 * page_size) if rnd.random() < 0.4 else 'k' * rnd.randint(1, 30)
+            conn.execute('INSERT INTO k VALUES (?)', (f'{i:04d}-{kfill}',))
         conn.execute('COMMIT')
         ids = [row[0] for row in conn.execute('SELECT id FROM t')]
         deleted = set()
@@ -294,6 +298,7 @@ def _marker_db(path, rnd, page_size, encoding, auto_vacuum):
             conn.execute('BEGIN')
             for i in rnd.sample(ids, rnd.randint(1, len(ids) // 2)):
                 conn.execute('DELETE FROM t WHERE id = ?', (i,))
+                conn.execute('DELETE FROM k WHERE key LIKE ?', (f'{i:04d}-%',))
                 deleted.add(i)
             conn.execute('COMMIT')
     finally:
@@ -318,6 +323,7 @@ def test_regions_are_sorted_disjoint_inside_their_page_and_miss_no_deleted_data(
 
     assert space.page_size == page_size
     assert space.regions
+    assert set(space.of_kind('overflow_tail')) <= set(space.regions)
     for r in space.regions:
         assert 0 <= (r.page - 1) * page_size <= r.start < r.end <= r.page * page_size <= len(data)
         assert r.end <= (r.page - 1) * page_size + space.usable_size
