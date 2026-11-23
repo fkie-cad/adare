@@ -13,7 +13,7 @@ from typing import Any
 import jinja2
 import yaml
 
-from adare.exceptions import TestfunctionUploadError
+from adare.exceptions import TemplateResolutionError, TestfunctionUploadError
 from adarelib.testset.renames import rename_problems
 
 log = logging.getLogger(__name__)
@@ -289,9 +289,11 @@ class TestLoader:
         except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError) as e:
             log.error(f"Failed to resolve test '{test_name}' locally: {e}")
             return None
-        except (OSError, yaml.YAMLError, ValueError, TypeError, KeyError, jinja2.TemplateError) as e:
+        except (OSError, yaml.YAMLError) as e:
             log.error(f"Unexpected error resolving test '{test_name}' locally: {e}", exc_info=True)
             return None
+        except (ValueError, TypeError, KeyError, jinja2.TemplateError) as e:
+            raise TemplateResolutionError(log, f"Cannot resolve test '{test_name}': {type(e).__name__}: {e}") from e
 
     async def resolve_test_with_runtime_context(
         self, test_name: str, runtime_execution_context: dict[str, Any]
@@ -353,9 +355,11 @@ class TestLoader:
         except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError) as e:
             log.error(f"Failed to resolve test '{test_name}' with runtime context: {e}")
             return None
-        except (OSError, yaml.YAMLError, ValueError, TypeError, KeyError, jinja2.TemplateError) as e:
+        except (OSError, yaml.YAMLError) as e:
             log.error(f"Unexpected error resolving test '{test_name}' with runtime context: {e}", exc_info=True)
             return None
+        except (ValueError, TypeError, KeyError, jinja2.TemplateError) as e:
+            raise TemplateResolutionError(log, f"Cannot resolve test '{test_name}': {type(e).__name__}: {e}") from e
 
     def _resolve_test_content(self, test_data: dict[str, Any]) -> dict[str, Any]:
         """Enhanced test content resolution using unified variable resolver with lazy loading."""
@@ -526,7 +530,7 @@ class TestLoader:
             formatted_context = self.variable_resolver.get_formatted_context(for_tests=True)
 
             log.debug(f"Processing test template: '{text}' with context keys: {list(formatted_context.keys())}")
-            template = jinja2.Template(text)
+            template = jinja2.Template(text, undefined=jinja2.StrictUndefined)
 
             # Add custom filters for metadata capture
             custom_filters = (
@@ -540,12 +544,11 @@ class TestLoader:
             log.debug(f"Test template result: '{result}'")
 
             return result
-        except (ValueError, TypeError, KeyError) as e:
-            log.warning(f"Failed to replace variables in test text '{text}': {e}")
-            return text
-        except (jinja2.TemplateError, AttributeError) as e:
-            log.warning(f"Unexpected error replacing variables in test text '{text}': {e}", exc_info=True)
-            return text
+        except (ValueError, TypeError, KeyError, jinja2.TemplateError, AttributeError) as e:
+            # Never hand the unrendered text to the test: it would run (and pass or fail) on a wrong value
+            raise TemplateResolutionError(
+                log, f"Cannot render the template '{text}' of a test: {type(e).__name__}: {e}"
+            ) from e
 
     def _is_test_action_result(self, action_result) -> bool:
         """Check if an action result corresponds to a test execution."""
