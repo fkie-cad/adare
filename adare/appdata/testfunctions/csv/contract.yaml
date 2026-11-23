@@ -1,0 +1,403 @@
+# Contract of the csv collection: what each function can and cannot do, and runnable examples.
+# Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run in the
+# unit suite (test_contract_examples.py); `adare test info csv.<name>` shows all of it.
+
+collection:
+  title: CSV
+  summary: >-
+    Comma-separated files an application or a tool exports: one record exists, how many records
+    match a layout, and the whole file against rows written in the playbook or against a second
+    CSV file. Files are parsed with Python's default ``csv`` dialect (comma, double quotes); the
+    header row is a normal row, and a quoted field with a line break is one record. Every
+    function takes ``encoding``: a BOM (UTF-8/16/32) or BOM-less UTF-16 is detected, otherwise
+    UTF-8 is read unless a codec is named.
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  # a timeline export: header + three records, one with a quoted line break
+  timeline: &timeline
+    text: "name,time,action\nreport.docx,2026-01-01T10:00:00,Created\nreport.docx,2026-01-01T10:05:00,Modified\n\"notes\nold.txt\",2026-01-01T10:06:00,Deleted\n"
+  export: &export
+    text: "name,size\nreport.docx,1024\nnotes.txt,512\n"
+  export_reordered: &export_reordered
+    text: "name,size\nnotes.txt,512\nreport.docx,1024\n"
+
+functions:
+  contains_line:
+    asserts: [exists]
+    formats: [csv]
+    features: [archive_dst, glob_dst, regex_tag, timestamp_tag, placeholder, encoding]
+    not_for:
+      - goal: a record is absent, or how often it occurs
+        use: csv.row_count
+      - goal: the whole file, every row
+        use: csv.compare_rows
+      - goal: physical lines of a text file containing a string
+        use: text.line_count
+      - goal: a row of a spreadsheet workbook (.xlsx)
+        use: excel.contains_row
+      - goal: a JSON Lines record with several fields
+        use: jsonl.line_matches
+    related:
+      - use: csv.row_count
+        why: counts the rows this function would accept (``0`` for absence)
+      - use: excel.contains_row
+        why: the same check for a sheet of an Excel workbook
+    outcomes:
+      passed: at least one row has as many columns as ``entry`` and every item matches its column
+      failed:
+        - the file was read and no row matches; the closest rows and their mismatching columns are reported
+        - the file is empty (no rows)
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or decoded in the encoding; an unknown encoding; a CSV parse error
+        - '``entry`` is missing (``None``) and the file has rows'
+        - an invalid regex, an unknown placeholder, more than one placeholder in one item
+    limits:
+      - Only the default ``csv`` dialect (comma, double quotes); there is no delimiter parameter, so a semicolon- or tab-separated line is one column.
+      - 'Items compare as exact, case-sensitive strings (``str(item)``); a ``!re`` item uses ``re.match`` (anchored at the start, add ``$`` for the end).'
+      - A row with another number of columns than ``entry`` never matches; there is no partial-row match.
+      - The whole file is parsed into memory.
+    use_cases:
+      - title: A record in a tool's export
+        text: A timeline, log or report export holds the row for the file or event the playbook created.
+      - title: Volatile columns
+        text: '``!re ''.*''`` for times or IDs that change from run to run, ``!timestamp`` to bind a time column to the action.'
+    examples:
+      - title: a creation record in a timeline export
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/timeline.csv
+          entry: [report.docx, '2026-01-01T10:00:00', Created]
+      - title: any time with a regex item
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/timeline.csv
+          entry: [report.docx, !re '2026-01-01T', Modified]
+      - title: a quoted field with a line break is one column
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/timeline.csv
+          entry: ["notes\nold.txt", '2026-01-01T10:06:00', Deleted]
+      - title: a UTF-16 export with BOM is detected
+        files:
+          /home/user/out/export.csv:
+            text: "name,size\nreport.docx,1024\n"
+            encoding: utf-16
+        parameter:
+          dst: /home/user/out/export.csv
+          entry: [report.docx, '1024']
+      - title: a legacy code page needs encoding
+        files:
+          C:\Users\user\Documents\owners.csv:
+            text: "name,owner\nreport.docx,Müller\n"
+            encoding: cp1252
+        parameter:
+          dst: C:\Users\user\Documents\owners.csv
+          entry: [report.docx, Müller]
+          encoding: cp1252
+      - title: the same file read as UTF-8 is an error
+        text: The file could not be decoded, so the test never saw the rows.
+        expect: error
+        files:
+          C:\Users\user\Documents\owners.csv:
+            text: "name,owner\nreport.docx,Müller\n"
+            encoding: cp1252
+        parameter:
+          dst: C:\Users\user\Documents\owners.csv
+          entry: [report.docx, Müller]
+      - title: a row inside an archive
+        files:
+          /home/user/backup.zip:
+            zip:
+              out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/backup.zip!/out/timeline.csv
+          entry: [report.docx, '2026-01-01T10:05:00', Modified]
+      - title: too few items fail
+        text: The rows have three columns; an entry with two items matches none of them.
+        expect: failed
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/timeline.csv
+          entry: [report.docx, Created]
+      - title: a semicolon-separated file is one column per line
+        text: Without a delimiter parameter, ``name;size`` is one field, so a two-item entry fails.
+        expect: failed
+        files:
+          /home/user/out/export.csv:
+            text: "name;size\nreport.docx;1024\n"
+        parameter:
+          dst: /home/user/out/export.csv
+          entry: [report.docx, '1024']
+      - title: an absent record fails
+        text: To assert absence use csv.row_count with ``expected_count`` 0, which passes.
+        expect: failed
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/timeline.csv
+          entry: [report.docx, '2026-01-01T10:05:00', Deleted]
+      - title: a glob with several matches is an error
+        expect: error
+        files:
+          /home/user/out/a.csv: *export
+          /home/user/out/b.csv: *export
+        parameter:
+          dst: /home/user/out/*.csv
+          entry: [report.docx, '1024']
+      - title: a missing file is an error, not a failure
+        expect: error
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/missing.csv
+          entry: [report.docx, '1024']
+
+  row_count:
+    asserts: [count, absent]
+    formats: [csv]
+    features: [archive_dst, glob_dst, count_comparison, regex_tag, timestamp_tag, placeholder, encoding, negative]
+    not_for:
+      - goal: physical lines of a text file (a quoted line break counts twice there)
+        use: text.line_count
+      - goal: JSON Lines records
+        use: jsonl.line_count
+      - goal: rows of a spreadsheet sheet
+        use: excel.row_count
+      - goal: the whole file
+        use: csv.compare_rows
+    related:
+      - use: csv.contains_line
+        why: one matching row, with the closest rows reported on failure
+    outcomes:
+      passed: the number of rows matching ``entry`` satisfies ``comparison_type`` against ``expected_count``
+      failed: the file was read and the count comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or decoded; an unknown encoding; a CSV parse error
+        - '``entry`` is not a list; a negative or non-integer ``expected_count``; an unknown ``comparison_type``'
+        - an invalid regex, an unknown placeholder, more than one placeholder in one item
+    limits:
+      - Rows match exactly as in csv.contains_line (column count, exact strings, ``!re`` / ``!timestamp`` items).
+      - Counts CSV records, not lines; the header row counts like any other row.
+      - Only the default ``csv`` dialect (comma, double quotes).
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: A record occurs once
+        text: Exactly one row for a deleted file in a timeline export, not zero and not a duplicate.
+      - title: A record is gone
+        text: '``expected_count: 0`` after a clean-up action; pair it with a control test.'
+    examples:
+      - title: two records for one file
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/timeline.csv
+          entry: [report.docx, !re '.*', !re '.*']
+          expected_count: 2
+      - title: one deletion recorded
+        text: The record with a quoted line break in its name counts as one row.
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/timeline.csv
+          entry: ["notes\nold.txt", '2026-01-01T10:06:00', Deleted]
+          expected_count: 1
+      - title: no record for a file that was never touched
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/timeline.csv
+          entry: [budget.xlsx, '2026-01-01T10:00:00', Created]
+          expected_count: 0
+      - title: at least one row with three columns
+        text: The header row matches a layout of plain strings too.
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/timeline.csv
+          entry: [name, time, action]
+          expected_count: 1
+          comparison_type: greater_equal
+      - title: a wrong count fails
+        expect: failed
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/timeline.csv
+          entry: [report.docx, '2026-01-01T10:00:00', Created]
+          expected_count: 2
+      - title: absence in a missing file is an error, not a pass
+        expect: error
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/other.csv
+          entry: [report.docx, '2026-01-01T10:00:00', Created]
+          expected_count: 0
+      - title: an entry that is no list is an error
+        expect: error
+        files:
+          /home/user/out/timeline.csv: *timeline
+        parameter:
+          dst: /home/user/out/timeline.csv
+          entry: report.docx
+          expected_count: 1
+
+  compare_rows:
+    asserts: [compare, value]
+    formats: [csv]
+    features: [archive_dst, glob_dst, regex_tag, timestamp_tag, placeholder, encoding]
+    not_for:
+      - goal: compare with a second CSV file
+        use: csv.compare_files
+      - goal: one record anywhere in the file
+        use: csv.contains_line
+      - goal: how many rows match a layout, or a row is absent
+        use: csv.row_count
+      - goal: the rows of a spreadsheet sheet
+        use: excel.compare_rows
+    outcomes:
+      passed: the rows (or the selected ``columns``) match ``reference_rows`` within the allowed differences
+      failed: the file was read and rows differ, are missing or extra; the report lists them by index
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or decoded; an unknown encoding; a CSV parse error
+        - '``reference_rows`` is not a list, is empty, or holds an item that is not a list'
+        - an invalid regex, an unknown placeholder, more than one placeholder in one cell
+    limits:
+      - Cells compare as strings; a number in ``reference_rows`` must be quoted (``'1024'``), or the row never matches (except in a row that also holds a ``!re`` / ``!timestamp`` cell).
+      - 'Ordered mode (default) compares row N with reference row N; ``allow_extra_rows`` / ``allow_missing_rows`` only excuse trailing rows there.'
+      - '``ignore_order: true`` matches rows as a multiset: duplicates must occur as often in the file as in ``reference_rows``.'
+      - Out-of-range indices in ``columns`` are dropped silently.
+      - The header row is a normal row; include it in ``reference_rows`` or leave it out with ``allow_extra_rows`` / ``columns`` as needed.
+    use_cases:
+      - title: A small export's full contents
+        text: Every row the application wrote, in order, header included.
+      - title: Selected columns
+        text: '``columns`` ignores volatile columns such as IDs or times.'
+    examples:
+      - title: whole export, header included
+        files:
+          /home/user/out/export.csv: *export
+        parameter:
+          dst: /home/user/out/export.csv
+          reference_rows:
+            - [name, size]
+            - [report.docx, '1024']
+            - [notes.txt, '512']
+      - title: names in any order, more rows allowed
+        files:
+          /home/user/out/export.csv: *export
+        parameter:
+          dst: /home/user/out/export.csv
+          columns: [0]
+          ignore_order: true
+          allow_extra_rows: true
+          reference_rows: [[notes.txt], [report.docx]]
+      - title: a regex cell for a volatile size
+        files:
+          /home/user/out/export.csv: *export
+        parameter:
+          dst: /home/user/out/export.csv
+          reference_rows:
+            - [name, size]
+            - [report.docx, !re '[0-9]+']
+            - [notes.txt, !re '[0-9]+']
+      - title: an unquoted number never matches
+        text: YAML reads ``1024`` as a number and the cell is the string ``'1024'``; quote numbers.
+        expect: failed
+        files:
+          /home/user/out/export.csv: *export
+        parameter:
+          dst: /home/user/out/export.csv
+          reference_rows:
+            - [name, size]
+            - [report.docx, 1024]
+            - [notes.txt, '512']
+      - title: rows in another order fail in ordered mode
+        expect: failed
+        files:
+          /home/user/out/export.csv: *export_reordered
+        parameter:
+          dst: /home/user/out/export.csv
+          reference_rows:
+            - [name, size]
+            - [report.docx, '1024']
+            - [notes.txt, '512']
+      - title: empty reference rows are an error
+        expect: error
+        files:
+          /home/user/out/export.csv: *export
+        parameter:
+          dst: /home/user/out/export.csv
+          reference_rows: []
+
+  compare_files:
+    asserts: [compare]
+    formats: [csv]
+    features: [archive_dst, glob_dst, placeholder, encoding]
+    not_for:
+      - goal: compare with rows written in the playbook
+        use: csv.compare_rows
+      - goal: two Excel workbooks
+        use: excel.compare_files
+      - goal: byte-identical files
+        use: standard.file_hash_matches
+    outcomes:
+      passed: the rows of ``actual`` (or the selected ``columns``) match those of ``reference`` within the allowed differences
+      failed: both files were read and rows differ, are missing or extra; the report lists them by index
+      error:
+        - '``actual`` or ``reference`` does not exist; a glob matches no file or more than one'
+        - a file cannot be read or decoded; an unknown encoding; a CSV parse error
+        - an invalid regex or unknown placeholder in a cell of ``reference``
+    limits:
+      - Needs the in-guest agent; agentless host mode only pulls a ``dst`` parameter, and this function has none.
+      - Globs and archive members (``a.zip!/x.csv``) work in ``actual`` and ``reference``; both are read with the same ``encoding``.
+      - 'Ordered mode (default) compares row N with row N; ``allow_extra_rows`` / ``allow_missing_rows`` only excuse trailing rows there.'
+      - 'A cell of ``reference`` holding ``{{ name }}`` is compared with that playbook variable (a regex or timestamp variable matches by type); an unknown name is an error. Other cells compare as exact strings.'
+    use_cases:
+      - title: Export against a known-good file
+        text: A reference CSV placed in the guest before the run.
+      - title: Two exports of one run
+        text: Two files the application wrote should hold the same rows.
+    examples:
+      - title: export like the reference, any order
+        files:
+          /home/user/out/export.csv: *export_reordered
+          /home/user/reference/export.csv: *export
+        parameter:
+          actual: /home/user/out/export.csv
+          reference: /home/user/reference/export.csv
+          ignore_order: true
+      - title: the reference inside an archive
+        files:
+          /home/user/out/export.csv: *export
+          /home/user/reference/refs.zip:
+            zip:
+              export.csv: *export
+        parameter:
+          actual: /home/user/out/export.csv
+          reference: /home/user/reference/refs.zip!/export.csv
+      - title: another row order fails in ordered mode
+        expect: failed
+        files:
+          /home/user/out/export.csv: *export_reordered
+          /home/user/reference/export.csv: *export
+        parameter:
+          actual: /home/user/out/export.csv
+          reference: /home/user/reference/export.csv
+      - title: a missing reference is an error
+        expect: error
+        files:
+          /home/user/out/export.csv: *export
+          /home/user/reference/other.csv: *export
+        parameter:
+          actual: /home/user/out/export.csv
+          reference: /home/user/reference/export.csv

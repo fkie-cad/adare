@@ -1,0 +1,245 @@
+# Contract of the linux collection: what each function can and cannot do, and examples.
+# Schema and rendering: adare/adare/backend/testfunction/contract.py. Only the examples of
+# log_entry_exists (a file test) run in the unit suite; the live-state checks need a guest and
+# are skipped, but their parameters are still checked. `adare test info linux.<name>` shows all.
+
+collection:
+  title: Linux
+  summary: >-
+    Live state of a Linux guest: the status of a systemd unit, running processes and local user
+    accounts, plus a search in the last lines of a plain-text log. The first three ask the running
+    system (in the guest agent through ``systemctl``, ``pgrep`` and the user database, in host test
+    mode through QGA commands) and so need a running Linux guest; ``log_entry_exists`` reads the log
+    file itself and also works on rotated, compressed logs and on a disk image.
+
+functions:
+  system_service_status:
+    asserts: [state, value]
+    formats: [system]
+    features: [placeholder]
+    unsupported:
+      regex_tag: '``expected_status`` is compared exactly; a ``!re`` value never matches.'
+    not_for:
+      - goal: whether a program is running, whatever started it
+        use: linux.process_running
+      - goal: a service left a line in its log file
+        use: linux.log_entry_exists
+    outcomes:
+      passed: '``systemctl is-active <service_name>`` prints exactly ``expected_status``'
+      failed:
+        - the unit is in another state (the output is reported)
+        - an unknown unit (``systemctl`` usually prints ``inactive`` for it, which passes when that was expected)
+      error:
+        - the guest is not Linux; ``systemctl`` is missing or does not answer within 10 s
+        - the hostside backend (a disk image has no running services; refused before boot)
+    limits:
+      - 'Linux guests with systemd only. Runs in the guest agent, or in host test mode as a QGA command; not in the hostside backend.'
+      - '``expected_status`` is the exact, case-sensitive output of ``is-active``: ``active``, ``inactive``, ``failed``, ``activating``, ``deactivating``, ``reloading`` ...'
+      - An unknown unit and a stopped unit both print ``inactive``; the test cannot tell them apart.
+      - In host test mode a failed ``systemctl`` call reads as ``unknown`` and fails instead of being an error.
+      - The state is read at the test's position; it says nothing about whether the unit is enabled at boot.
+    use_cases:
+      - title: An action started or stopped a service
+        text: '``active`` after enabling a feature in the GUI, ``inactive`` after turning it off.'
+      - title: A service did not crash
+        text: '``expect_to_fail`` on ``failed`` is weaker than asserting ``active``.'
+    examples:
+      - title: the SSH server is running
+        parameter:
+          service_name: ssh
+          expected_status: active
+      - title: a unit stopped by the action
+        parameter:
+          service_name: cups.service
+          expected_status: inactive
+      - title: a unit that crashed
+        text: Fails while the unit runs normally (``active``).
+        expect: failed
+        parameter:
+          service_name: ssh
+          expected_status: failed
+
+  process_running:
+    asserts: [state, count]
+    formats: [system]
+    features: [placeholder]
+    unsupported:
+      count_comparison: 'Only "at least ``min_instances``"; there is no exact count, no maximum and no ``expected_count: 0``.'
+      negative: 'No match always fails, even with ``min_instances: 0``; "not running" needs ``expect_to_fail``.'
+    not_for:
+      - goal: the state of a systemd unit
+        use: linux.system_service_status
+      - goal: a program is shown on screen
+        use: visual.exists
+    outcomes:
+      passed: '``pgrep -f process_name`` finds at least ``min_instances`` processes'
+      failed:
+        - no process matches (also with ``min_instances`` 0)
+        - fewer than ``min_instances`` processes match
+      error:
+        - the guest is not Linux; ``pgrep`` is missing or does not answer within 10 s
+        - the hostside backend (a disk image has no processes; refused before boot)
+    limits:
+      - 'Linux guests only. Runs in the guest agent, or in host test mode as a QGA command; not in the hostside backend.'
+      - '``process_name`` is an extended regex matched against the FULL command line (``pgrep -f``): ``someapp`` also matches ``/usr/lib/someapp/someapp --worker`` and an editor that has ``someapp.conf`` open. Anchor it (``^/usr/bin/someapp``) to be strict.'
+      - A pattern such as ``python`` can match the guest agent itself.
+      - 'Host test mode behaves differently: it runs ``pgrep -x``, an exact process name (not the command line), and ignores ``min_instances`` (one process passes).'
+      - It does not check the user, the arguments or how long the process has run.
+    use_cases:
+      - title: An application is still running
+        text: After an action that should not close it (save, export).
+      - title: Worker processes
+        text: '``min_instances: 3`` for a program that starts several workers.'
+      - title: An application was closed
+        text: '``expect_to_fail: true``; a missing process is a failure, so the inverted test passes.'
+    examples:
+      - title: the application runs
+        parameter:
+          process_name: someapp
+      - title: at least three workers
+        parameter:
+          process_name: '^/usr/lib/someapp/someapp --type=worker'
+          min_instances: 3
+      - title: a process that does not run
+        expect: failed
+        parameter:
+          process_name: no-such-daemon
+
+  user_exists:
+    asserts: [state, exists]
+    formats: [system]
+    features: [placeholder]
+    not_for:
+      - goal: a user's home folder or a file in it exists
+        use: standard.file_exists
+      - goal: who owns a file
+        use: standard.file_permissions
+    outcomes:
+      passed: the local account ``username`` exists and ``uid`` / ``home_dir`` (when given) match
+      failed:
+        - no account ``username``
+        - the account has another UID or home directory
+      error:
+        - the guest is not Linux, or the Python ``pwd`` module is missing
+    limits:
+      - 'Linux guests only. In the guest agent it asks the user database (``pwd.getpwnam``, so NSS sources such as LDAP count); in host test mode it runs ``id``; in the hostside backend it reads ``/etc/passwd`` of the disk image.'
+      - 'In host test mode and in the hostside backend only the name is checked: ``uid`` and ``home_dir`` are ignored.'
+      - '``username`` is exact and case-sensitive; ``home_dir`` is compared as a string (a trailing ``/`` matters).'
+      - It does not check groups, the shell, the password or whether the account is locked.
+    use_cases:
+      - title: An installer or admin action created an account
+        text: A service user created by a package, or a user added in the settings GUI.
+      - title: An account was removed
+        text: '``expect_to_fail: true`` after deleting the user.'
+    examples:
+      - title: account with its home directory
+        parameter:
+          username: alice
+          home_dir: /home/alice
+      - title: first regular user
+        parameter:
+          username: alice
+          uid: 1000
+      - title: a trailing slash is a different home directory
+        text: '``home_dir`` is compared as text, so ``/home/alice/`` does not match ``/home/alice``.'
+        expect: failed
+        parameter:
+          username: alice
+          home_dir: /home/alice/
+
+  log_entry_exists:
+    asserts: [content, exists]
+    formats: [text, system]
+    features: [archive_dst, glob_dst]
+    unsupported:
+      regex_tag: 'A ``!re`` or ``!timestamp`` value (or a placeholder left at run time) in ``content`` is an error; write the regex as a plain string with ``regex_match: true``.'
+      encoding: There is no ``encoding`` parameter; the encoding is detected (BOM, UTF-16, else UTF-8) and undecodable bytes are replaced.
+      count_comparison: It asserts one matching line; to count lines use text.line_count.
+    not_for:
+      - goal: how many lines match, or a match anywhere in the whole file
+        use: text.line_count
+      - goal: a string in a binary or UTF-16 file, counted or absent
+        use: text.occurrence_count
+      - goal: the binary systemd journal
+        use: text.occurrence_count
+      - goal: a regex anywhere in a text file, not line by line
+        use: standard.file_content_matches_regex
+    related:
+      - use: text.line_count
+        why: '``expected_count: 0`` asserts that no line of the whole file matches, which this function cannot.'
+    outcomes:
+      passed: at least one of the last ``max_lines`` lines matches ``content``
+      failed: the log was read and none of the searched lines matches
+      error:
+        - the log does not exist or is a directory; a glob matches no file or more than one
+        - an invalid regex, a POSIX class (``[[:space:]]``) or a ``!re`` / ``!timestamp`` value in ``content``
+        - '``max_lines`` is not a positive integer; the file cannot be read'
+    limits:
+      - 'Only the last ``max_lines`` lines (default 1000) are searched; an older entry fails. Raise ``max_lines`` or use text.line_count for the whole file.'
+      - '``content`` is a Python regex by default (``re.search`` in each line, case-sensitive; ``(?i)`` for case-insensitive), no ``grep`` pattern. ``.``, ``(`` and ``[`` are regex syntax; use ``regex_match: false`` for a literal substring.'
+      - A match never spans lines.
+      - The binary systemd journal is not a text log; export it with ``journalctl`` in a ``run`` action first.
+      - It reads the file itself, so it also works in host test mode and in the hostside backend, and on any OS (the collection name notwithstanding).
+    use_cases:
+      - title: A system event was logged
+        text: Logins, ``sudo``, package installs in ``auth.log`` or ``syslog``.
+      - title: An application logged an action
+        text: An opened file, an error or a sync in an application log.
+      - title: Rotated logs
+        text: '``/var/log/syslog.2.gz!`` reads a compressed, rotated log.'
+      - title: Nothing was logged
+        text: '``expect_to_fail: true`` asserts that no recent line matches; a missing log is still an error.'
+    examples:
+      - title: the login was logged
+        files:
+          /var/log/auth.log:
+            text: "Nov  2 10:14:01 host systemd[1]: Started session.\nNov  2 10:14:03 host sshd[811]: pam_unix(sshd:session): session opened for user alice by (uid=0)\n"
+        parameter:
+          dst: /var/log/auth.log
+          content: 'session opened for user alice'
+      - title: a regex in a rotated, compressed log
+        files:
+          /var/log/auth.log.2.gz:
+            gzip:
+              text: "Oct 30 08:00:12 host sshd[402]: Accepted password for alice from 192.0.2.10 port 50122 ssh2\n"
+        parameter:
+          dst: /var/log/auth.log.2.gz!
+          content: 'sshd\[\d+\]: Accepted password for \w+'
+          max_lines: 5000
+      - title: a literal substring with regex characters
+        text: '``(`` and ``.`` would be regex syntax; ``regex_match: false`` searches them literally.'
+        files:
+          /home/user/.local/share/app/app.log:
+            text: "12:00:01 opened report (final).odt\n"
+        parameter:
+          dst: /home/user/.local/share/app/app.log
+          content: 'opened report (final).odt'
+          regex_match: false
+          max_lines: 500
+      - title: one log among rotated files, by glob
+        text: The glob must match exactly one file.
+        files:
+          /var/log/app/app-2026-11-02.log:
+            text: "ERROR sync failed\n"
+        parameter:
+          dst: /var/log/app/app-*.log
+          content: '(?i)sync failed'
+      - title: an entry older than max_lines fails
+        text: Only the tail of the log is searched.
+        expect: failed
+        files:
+          /var/log/app/app.log:
+            text: "Segmentation fault\nstarted\nidle\nidle\n"
+        parameter:
+          dst: /var/log/app/app.log
+          content: Segmentation fault
+          max_lines: 3
+      - title: a POSIX character class is an error
+        text: Python regexes read ``[[:space:]]`` as a character set that never matches, so it is refused; write ``\s``.
+        expect: error
+        files:
+          /var/log/auth.log:
+            text: "session opened for user alice\n"
+        parameter:
+          dst: /var/log/auth.log
+          content: 'user[[:space:]]alice'

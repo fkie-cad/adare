@@ -47,6 +47,8 @@ def test_docstrings_name_no_application():
 
 def test_reference_pages_name_no_application():
     pages = [p for root in DOC_PAGES for p in sorted(root.rglob('*')) if p.suffix in ('.rst', '.md')]
+    # the contracts are the source of the reference pages and of `adare test search/info`
+    pages += sorted(COLLECTIONS.glob('*/contract.yaml')) + sorted(COLLECTIONS.glob('*.yaml'))
     assert pages, f'no reference pages under {DOC_PAGES}'
     hits = [
         f'{page.relative_to(REPO)}:{number}: {line.strip()}'

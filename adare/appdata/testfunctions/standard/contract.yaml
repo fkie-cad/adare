@@ -1,0 +1,870 @@
+# Contract of the standard collection: what each function can and cannot do, and runnable
+# examples. Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run
+# in the unit suite (test_contract_examples.py); `adare test info standard.<name>` shows all of it.
+
+collection:
+  title: Standard
+  summary: >-
+    Files and folders on the guest: whether a file or folder exists or is gone, how many paths
+    match a glob, which entries a folder holds, the size, hash and text content of a file, and its
+    timestamps and permissions. The functions read the file system only; they do not parse any
+    file format (for settings, databases or documents use the format collections).
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  # a backup archive with two logs and a note
+  backup: &backup
+    zip:
+      logs/app.log: {text: "started\nstopped\n"}
+      logs/sync.log: {text: "sync ok\n"}
+      notes/todo.txt: {text: "call back\n"}
+
+functions:
+  file_exists:
+    asserts: [exists]
+    formats: [file]
+    features: [archive_dst, glob_dst]
+    not_for:
+      - goal: a file was deleted or never written
+        use: standard.file_does_not_exist
+      - goal: how many files match a glob (exactly 3, at least one, none left)
+        use: standard.file_count
+      - goal: a file is empty or non-empty
+        use: standard.file_size
+      - goal: a folder exists
+        use: standard.dir_exists
+    outcomes:
+      passed: '``dst`` is a regular file; for a glob, at least one match is a regular file'
+      failed:
+        - nothing exists at ``dst`` or no glob match is a file
+        - '``dst`` (or every match) is a directory'
+        - '``match_mode: single``: the one match is not a file'
+      error:
+        - '``match_mode: single`` with a glob that matches no path or more than one'
+        - an archive that is missing or cannot be read; a member that is a directory or a link
+        - the path cannot be examined (permission denied, I/O error)
+    limits:
+      - 'Globs use Python ``glob``: not recursive (``**`` acts like ``*``), ``*`` skips dotfiles; case sensitivity follows the guest file system.'
+      - 'Any ``match_mode`` other than ``single`` behaves like ``any``.'
+      - 'An empty file passes; for "non-empty" use standard.file_size.'
+    choices:
+      match_mode: [any, single]
+    use_cases:
+      - title: A file was created or saved
+        text: A document saved, a log or cache file created, a download finished after a GUI action.
+      - title: A file whose name changes
+        text: 'A glob (``export-*.csv``, ``C:/Users/*/Desktop/*.txt``) for names with a date or a random part.'
+      - title: A file inside a backup or export archive
+        text: '``backup.zip!/notes/todo.txt`` checks a member without extracting it in a ``run`` action.'
+    related:
+      - use: standard.file_count
+        why: when the number of matching files matters
+    examples:
+      - title: a saved document exists
+        files:
+          /home/user/Documents/report.txt: {text: "quarterly report\n"}
+        parameter:
+          dst: /home/user/Documents/report.txt
+      - title: a glob with several matches passes
+        text: In the default ``match_mode`` (``any``) one matching file is enough.
+        files:
+          /home/user/Documents/export-1.csv: {text: "a,b\n"}
+          /home/user/Documents/export-2.csv: {text: "a,b\n"}
+        parameter:
+          dst: /home/user/Documents/export-*.csv
+      - title: a member of an archive
+        files:
+          /home/user/backup.zip: *backup
+        parameter:
+          dst: /home/user/backup.zip!/notes/todo.txt
+      - title: a missing file fails
+        expect: failed
+        files:
+          /home/user/Documents/report.txt: {text: "quarterly report\n"}
+        parameter:
+          dst: /home/user/Documents/draft.txt
+      - title: a directory is not a file
+        expect: failed
+        files:
+          /home/user/Documents/export: {dir: true}
+        parameter:
+          dst: /home/user/Documents/export
+      - title: match_mode single with several matches is an error
+        text: The test cannot tell which file is meant, so it does not fail but errors.
+        expect: error
+        files:
+          /home/user/Documents/export-1.csv: {text: "a,b\n"}
+          /home/user/Documents/export-2.csv: {text: "a,b\n"}
+        parameter:
+          dst: /home/user/Documents/export-*.csv
+          match_mode: single
+
+  file_does_not_exist:
+    asserts: [absent]
+    formats: [file]
+    features: [archive_dst, glob_dst, negative]
+    not_for:
+      - goal: a whole group of files is gone, or fewer than n are left
+        use: standard.file_count
+      - goal: a value was wiped from a file that still exists
+        use: text.occurrence_count
+      - goal: a folder was removed
+        use: standard.dir_does_not_exist
+    outcomes:
+      passed:
+        - nothing exists at ``dst``, or ``dst`` is a directory (a directory is not a file)
+        - for a glob, no match is a regular file (also when nothing matches)
+        - for an archive path, the archive has no such member
+      failed: '``dst`` (or a glob match) is a regular file'
+      error:
+        - '``match_mode: single`` with a glob that matches no path or more than one'
+        - an archive that is missing or cannot be read
+        - the path cannot be examined (permission denied, I/O error)
+    limits:
+      - 'A pass asserts absence: it is SUCCESS only when the run shows that the actions before it took effect, otherwise INCONCLUSIVE. Add a control test that proves the act.'
+      - 'Keep ``match_mode: any`` for globs; ``single`` turns "no match" into an error.'
+      - 'Globs use Python ``glob``: not recursive, ``*`` skips dotfiles.'
+    choices:
+      match_mode: [any, single]
+    use_cases:
+      - title: A file was deleted
+        text: A document deleted in a file manager, a temporary file cleaned up, a file moved away from its old place.
+      - title: A file was never written
+        text: A private mode or a setting that should keep an application from writing a cache or history file.
+    related:
+      - use: standard.file_exists
+        why: the opposite assertion, often the control test that proves the file existed before
+    examples:
+      - title: a deleted file is absent
+        files:
+          /home/user/Documents/keep.txt: {text: "kept\n"}
+        parameter:
+          dst: /home/user/Documents/secret.txt
+      - title: a glob without matches passes
+        files:
+          /home/user/.cache/app/index.dat: {text: "index\n"}
+        parameter:
+          dst: /home/user/.cache/app/*.tmp
+      - title: a member removed from an archive
+        files:
+          /home/user/backup.zip: *backup
+        parameter:
+          dst: /home/user/backup.zip!/notes/secret.txt
+      - title: a directory at dst passes
+        text: Only regular files count; to assert that a folder is gone use standard.dir_does_not_exist.
+        files:
+          /home/user/Documents/secret: {dir: true}
+        parameter:
+          dst: /home/user/Documents/secret
+      - title: an existing file fails
+        expect: failed
+        files:
+          /home/user/Documents/secret.txt: {text: "still here\n"}
+        parameter:
+          dst: /home/user/Documents/secret.txt
+      - title: match_mode single with a glob without matches is an error
+        expect: error
+        files:
+          /home/user/.cache/app/index.dat: {text: "index\n"}
+        parameter:
+          dst: /home/user/.cache/app/*.tmp
+          match_mode: single
+
+  dir_exists:
+    asserts: [exists]
+    formats: [directory]
+    features: [glob_dst]
+    unsupported:
+      archive_dst: Only file members of an archive can be read; a folder inside an archive is not found or is an error. Test a file inside it with standard.file_exists.
+    not_for:
+      - goal: a folder holds given files
+        use: standard.dir_content
+      - goal: how many folders match a glob
+        use: standard.file_count
+      - goal: a file exists
+        use: standard.file_exists
+    outcomes:
+      passed: '``dst`` is a directory; for a glob, at least one match is a directory'
+      failed:
+        - nothing exists at ``dst`` or no glob match is a directory
+        - '``dst`` (or every match) is a file'
+      error:
+        - '``match_mode: single`` with a glob that matches no path or more than one'
+        - the path cannot be examined (permission denied, I/O error)
+    limits:
+      - 'Globs use Python ``glob``: not recursive, ``*`` skips dotfiles.'
+    choices:
+      match_mode: [any, single]
+    use_cases:
+      - title: A folder was created
+        text: An install or extract step, a new profile folder, a folder made in a file manager.
+    related:
+      - use: standard.dir_does_not_exist
+        why: the opposite assertion
+    examples:
+      - title: a profile folder exists
+        files:
+          /home/user/.config/app/profile: {dir: true}
+        parameter:
+          dst: /home/user/.config/app/profile
+      - title: a profile folder with a random name
+        files:
+          /home/user/.config/app/x7k2.default: {dir: true}
+        parameter:
+          dst: /home/user/.config/app/*.default
+      - title: a file is not a directory
+        expect: failed
+        files:
+          /home/user/.config/app/profile: {text: "not a folder\n"}
+        parameter:
+          dst: /home/user/.config/app/profile
+
+  dir_does_not_exist:
+    asserts: [absent]
+    formats: [directory]
+    features: [glob_dst, negative]
+    unsupported:
+      archive_dst: 'Only file members of an archive can be read. Assert that a folder in an archive is empty with standard.file_count (``archive.zip!/folder/*``, ``expected_count: 0``).'
+    not_for:
+      - goal: a file was deleted
+        use: standard.file_does_not_exist
+      - goal: the files inside a folder are gone but the folder stays
+        use: standard.file_count
+    outcomes:
+      passed:
+        - nothing exists at ``dst``, or ``dst`` is a file (a file is not a directory)
+        - for a glob, no match is a directory (also when nothing matches)
+      failed: '``dst`` (or a glob match) is a directory'
+      error:
+        - '``match_mode: single`` with a glob that matches no path or more than one'
+        - the path cannot be examined (permission denied, I/O error)
+    limits:
+      - 'A pass asserts absence: it is SUCCESS only when the run shows that the actions before it took effect, otherwise INCONCLUSIVE. Add a control test that proves the act.'
+      - 'Keep ``match_mode: any`` for globs; ``single`` turns "no match" into an error.'
+    choices:
+      match_mode: [any, single]
+    use_cases:
+      - title: A folder was removed
+        text: An uninstall, a deleted project folder, a cleared cache folder.
+    related:
+      - use: standard.dir_exists
+        why: the opposite assertion, often the control test that proves the folder existed
+    examples:
+      - title: a removed folder is absent
+        files:
+          /home/user/Projects/keep: {dir: true}
+        parameter:
+          dst: /home/user/Projects/old_project
+      - title: a file at dst passes
+        files:
+          /home/user/Projects/old_project: {text: "a file, not a folder\n"}
+        parameter:
+          dst: /home/user/Projects/old_project
+      - title: an existing folder fails
+        expect: failed
+        files:
+          /home/user/Projects/old_project: {dir: true}
+        parameter:
+          dst: /home/user/Projects/old_project
+
+  dir_content:
+    asserts: [exists]
+    formats: [directory]
+    features: [glob_dst]
+    unsupported:
+      archive_dst: Only file members of an archive can be read, not its folders. Count the members with standard.file_count (``archive.zip!/folder/*``).
+    not_for:
+      - goal: a folder holds exactly these entries and nothing else
+        use: standard.file_count
+      - goal: how many files a folder holds
+        use: standard.file_count
+      - goal: files deeper in the tree (recursive)
+        use: standard.file_exists
+    outcomes:
+      passed: every name in ``files`` is a direct entry of ``dst`` (extra entries are allowed); an empty ``files`` always passes
+      failed: at least one name in ``files`` is not an entry of ``dst`` (the details also list the extra entries)
+      error:
+        - '``dst`` does not exist or is a file; a glob matches no path or more than one'
+        - the directory cannot be read (permission denied, I/O error)
+    limits:
+      - Names, not paths; compared exactly and case-sensitively; the listing is not recursive.
+      - 'Extra entries never fail the test. For "nothing else" add standard.file_count with ``kind: any`` and the number of entries.'
+      - Files and folders are not told apart; a listed name passes for either.
+    use_cases:
+      - title: An export or extract wrote all its parts
+        text: A folder holds the report, the data file and the images folder after an export.
+      - title: A project or profile was created
+        text: The expected files and subfolders of a new project or profile folder.
+    related:
+      - use: standard.file_count
+        why: the number of entries, or that no entry matches a glob
+    examples:
+      - title: an export folder holds its parts
+        text: The extra ``debug.log`` does not fail the test.
+        files:
+          /home/user/Documents/export: {dir: true}
+          /home/user/Documents/export/report.csv: {text: "a,b\n"}
+          /home/user/Documents/export/images: {dir: true}
+          /home/user/Documents/export/debug.log: {text: "x\n"}
+        parameter:
+          dst: /home/user/Documents/export
+          files: [report.csv, images]
+      - title: a missing entry fails
+        expect: failed
+        files:
+          /home/user/Documents/export: {dir: true}
+          /home/user/Documents/export/report.csv: {text: "a,b\n"}
+        parameter:
+          dst: /home/user/Documents/export
+          files: [report.csv, summary.txt]
+      - title: a missing folder is an error, not a failure
+        expect: error
+        files:
+          /home/user/Documents/keep.txt: {text: "kept\n"}
+        parameter:
+          dst: /home/user/Documents/export
+          files: [report.csv]
+
+  file_content_matches_regex:
+    asserts: [content]
+    formats: [text]
+    features: [archive_dst, glob_dst, encoding]
+    not_for:
+      - goal: a plain substring
+        use: standard.file_content_contains
+      - goal: exactly this content
+        use: standard.file_content_equals
+      - goal: how many lines match a regex
+        use: text.line_count
+      - goal: a value in a settings or structured file
+        use: json.value_matches
+    outcomes:
+      passed: '``re.search`` finds ``regex`` in the decoded text; an empty ``regex`` always passes'
+      failed: the file was read and the regex does not match
+      error:
+        - the file does not exist; a glob matches no file or more than one
+        - an invalid regex
+        - 'bytes not valid in ``encoding``; ``encoding: BOM`` and the file has no byte-order mark'
+        - the file cannot be read (permission denied, I/O error)
+    limits:
+      - 'The whole file is one string: ``^`` / ``$`` match only at its start and end and ``.`` does not match a line break. Use inline flags: ``(?m)`` for lines, ``(?s)`` to cross lines, ``(?i)`` to ignore case.'
+      - Decoding is strict; a file in another encoding is an error, not a failure.
+    choices:
+    use_cases:
+      - title: A line has a given shape
+        text: A log line with a user name and a number, a version string, a setting with any value.
+      - title: A value whose exact text is not known
+        text: Dates, counters, generated IDs inside a text file.
+    examples:
+      - title: a total line in a report
+        files:
+          /home/user/notes.txt: {text: "Header\nTotal: 42\nFooter\n"}
+        parameter:
+          dst: /home/user/notes.txt
+          regex: '(?m)^Total: [0-9]+$'
+      - title: without (?m) ^ matches only at the start of the file
+        expect: failed
+        files:
+          /home/user/notes.txt: {text: "Header\nTotal: 42\nFooter\n"}
+        parameter:
+          dst: /home/user/notes.txt
+          regex: '^Total: [0-9]+$'
+      - title: a UTF-16 file found by its byte-order mark
+        files:
+          C:\Users\user\Documents\log.txt: {text: "Service started, version 2.4.1", encoding: utf-16}
+        parameter:
+          dst: C:\Users\user\Documents\log.txt
+          regex: 'version [0-9]+\.[0-9]+\.[0-9]+'
+          encoding: BOM
+      - title: a file in another encoding is an error
+        text: UTF-16 bytes are not valid UTF-8, so the default ``encoding`` cannot read the file.
+        expect: error
+        files:
+          C:\Users\user\Documents\log.txt: {text: "Service started, version 2.4.1", encoding: utf-16}
+        parameter:
+          dst: C:\Users\user\Documents\log.txt
+          regex: version
+      - title: an invalid regex is an error
+        expect: error
+        files:
+          /home/user/notes.txt: {text: "Total: 42\n"}
+        parameter:
+          dst: /home/user/notes.txt
+          regex: 'Total: [0-9'
+
+  file_content_equals:
+    asserts: [content, value]
+    formats: [text]
+    features: [archive_dst, glob_dst, encoding, placeholder, regex_tag, timestamp_tag]
+    not_for:
+      - goal: a file is empty
+        use: standard.file_size
+      - goal: a file is byte-identical to a known one (binary files)
+        use: standard.file_hash_matches
+      - goal: a value or marker somewhere in the file
+        use: standard.file_content_contains
+    outcomes:
+      passed: the decoded text equals ``content`` after both are stripped of leading and trailing whitespace
+      failed: the file was read and the text differs (the details hold a unified diff)
+      error:
+        - the file does not exist; a glob matches no file or more than one
+        - 'bytes not valid in ``encoding``; ``encoding: BOM`` and the file has no byte-order mark'
+        - the file cannot be read (permission denied, I/O error)
+    limits:
+      - Inner whitespace must match; line endings are read as ``\n``.
+      - A leading byte-order mark is part of the text unless ``strip_bom`` is set or ``encoding`` removes it (``utf-8-sig``, ``BOM``).
+      - Decoding is strict; a file in another encoding is an error, not a failure.
+      - 'A variable defined with ``!re`` or ``!timestamp`` and used as ``{{ name }}`` in ``content`` matches by type; the text around it must match exactly.'
+    choices:
+    use_cases:
+      - title: The exact output of a command or export
+        text: An exit code, a status word or a small generated text file.
+      - title: Output with a variable part
+        text: 'A line with a user name or time stamp, as ``{{ name }}`` in ``content``.'
+    examples:
+      - title: an exit code file
+        text: The trailing line break is stripped from both sides.
+        files:
+          /home/user/out/exit_code.txt: {text: "0\n"}
+        parameter:
+          dst: /home/user/out/exit_code.txt
+          content: '0'
+      - title: Windows line endings compare as \n
+        files:
+          C:\Users\user\out\status.txt: {text: "done\r\nexported 3 files\r\n"}
+        parameter:
+          dst: C:\Users\user\out\status.txt
+          content: "done\nexported 3 files"
+      - title: a UTF-8 file with a byte-order mark
+        files:
+          C:\Users\user\out\status.txt: {text: "\uFEFFdone"}
+        parameter:
+          dst: C:\Users\user\out\status.txt
+          content: done
+          strip_bom: true
+      - title: a variable part from a playbook variable
+        text: '``{{ username }}`` is replaced before the test runs; a variable defined with ``!re`` matches by pattern.'
+        files:
+          /home/user/out/owner.txt: {text: "exported by user\n"}
+        parameter:
+          dst: /home/user/out/owner.txt
+          content: 'exported by {{ username }}'
+      - title: different inner whitespace fails
+        expect: failed
+        files:
+          /home/user/out/status.txt: {text: "exported  3 files\n"}
+        parameter:
+          dst: /home/user/out/status.txt
+          content: exported 3 files
+      - title: a missing file is an error, not a failure
+        expect: error
+        files:
+          /home/user/out/exit_code.txt: {text: "0\n"}
+        parameter:
+          dst: /home/user/out/result.txt
+          content: '0'
+
+  file_content_contains:
+    asserts: [content]
+    formats: [text, file]
+    features: [archive_dst, glob_dst, encoding]
+    unsupported:
+      regex_tag: 'A ``!re`` or ``!timestamp`` placeholder in ``content`` is an error; use standard.file_content_matches_regex.'
+      timestamp_tag: 'A ``!timestamp`` placeholder in ``content`` is an error; ``content`` is plain text.'
+    not_for:
+      - goal: a value occurs n times, or was wiped (expected_count 0)
+        use: text.occurrence_count
+      - goal: a string in a binary file or in several encodings at once
+        use: text.occurrence_count
+      - goal: a pattern (regex)
+        use: standard.file_content_matches_regex
+      - goal: how many lines contain a string
+        use: text.line_count
+      - goal: a trace in the last lines of a log
+        use: linux.log_entry_exists
+    outcomes:
+      passed: '``content`` occurs in the decoded text (``string``) or in the raw bytes (``bytes``); an empty ``content`` always passes'
+      failed: the file was read and ``content`` does not occur
+      error:
+        - the file does not exist; a glob matches no file or more than one
+        - an unknown ``content_type``; a ``!re`` / ``!timestamp`` placeholder in ``content``
+        - '``bytes`` mode with a non-ASCII character or an unknown escape in ``content``'
+        - '``encoding: BOM`` and the file has no byte-order mark'
+        - the file cannot be read (permission denied, I/O error)
+    limits:
+      - Case-sensitive, one encoding per test. In ``string`` mode bytes not valid in ``encoding`` are dropped silently, so text in another encoding is not found (a failure, not an error).
+      - 'In ``bytes`` mode ``content`` holds ASCII characters and Python escapes (``\x00``, ``\n``, ``\\``); write ``\xNN`` for every other byte.'
+      - 'A failure does not prove absence in other encodings; for "the value is gone" use text.occurrence_count with ``expected_count: 0``.'
+    choices:
+      content_type: [string, bytes]
+    use_cases:
+      - title: A value was written into a text file
+        text: A history line, a log message, a setting or a marker in a configuration file.
+      - title: A byte signature
+        text: '``content_type: bytes`` with escapes, e.g. a NUL-terminated name ``admin\x00``.'
+    related:
+      - use: text.occurrence_count
+        why: counts, searches several encodings at once and asserts absence
+    examples:
+      - title: a command in the shell history
+        files:
+          /home/user/.bash_history: {text: "ls\nrm -rf ~/evidence\nexit\n"}
+        parameter:
+          dst: /home/user/.bash_history
+          content: rm -rf ~/evidence
+      - title: a NUL-terminated name in a binary file
+        files:
+          /home/user/app/state.bin: {hex: "00 01 61 64 6d 69 6e 00 ff"}
+        parameter:
+          dst: /home/user/app/state.bin
+          content: 'admin\x00'
+          content_type: bytes
+      - title: UTF-16 text with the matching encoding
+        files:
+          C:\Users\user\app\log.txt: {text: "Service started", encoding: utf-16-le}
+        parameter:
+          dst: C:\Users\user\app\log.txt
+          content: Service started
+          encoding: utf-16-le
+      - title: UTF-16 text is not found in the default utf-8
+        text: The NUL bytes of UTF-16 stay in the decoded text, so the string does not occur. text.occurrence_count searches several encodings at once.
+        expect: failed
+        files:
+          C:\Users\user\app\log.txt: {text: "Service started", encoding: utf-16-le}
+        parameter:
+          dst: C:\Users\user\app\log.txt
+          content: Service started
+      - title: an unknown escape in bytes mode is an error
+        expect: error
+        files:
+          /home/user/app/state.bin: {hex: "00 01 61 64 6d 69 6e 00 ff"}
+        parameter:
+          dst: /home/user/app/state.bin
+          content: 'admin\q'
+          content_type: bytes
+      - title: a regex placeholder is an error
+        expect: error
+        files:
+          /home/user/.bash_history: {text: "ls\n"}
+        parameter:
+          dst: /home/user/.bash_history
+          content: !re 'rm -rf .*'
+
+  file_hash_matches:
+    asserts: [content]
+    formats: [file]
+    features: [archive_dst, glob_dst]
+    not_for:
+      - goal: the text of a file, ignoring surrounding whitespace
+        use: standard.file_content_equals
+      - goal: a file is empty
+        use: standard.file_size
+    outcomes:
+      passed: the ``hash_type`` digest of the file equals ``expected_hash`` (case-insensitive)
+      failed: the file was hashed and the digest differs (also for a prefix such as ``sha256:`` or surrounding spaces)
+      error:
+        - the file does not exist; a glob matches no file or more than one
+        - an unknown ``hash_type``
+        - the file cannot be read (permission denied, I/O error)
+    limits:
+      - '``expected_hash`` is the bare hex digest: no prefix, no whitespace.'
+      - An archive member (``a.zip!/x``, ``x.gz!``) is hashed as extracted or decompressed content.
+    choices:
+      hash_type: [md5, sha1, sha256, sha512]
+    use_cases:
+      - title: A file is byte-identical to a known one
+        text: A download, a restored backup or a copied file matches its published or original checksum.
+      - title: A file was not modified
+        text: The digest taken before an action still matches after it.
+    examples:
+      - title: a downloaded installer matches its SHA-256
+        files:
+          C:\Users\user\Downloads\setup.bin: {text: "installer v1\n"}
+        parameter:
+          dst: C:\Users\user\Downloads\setup.bin
+          expected_hash: 910B575269DAF86A6BD5661C3BC185EBE5A736891155CE307EBC516E091BFE19
+      - title: an MD5 of a compressed file's content
+        text: '``x.gz!`` is the decompressed content.'
+        files:
+          /home/user/backup/setup.bin.gz: {gzip: {text: "installer v1\n"}}
+        parameter:
+          dst: /home/user/backup/setup.bin.gz!
+          expected_hash: d982352c042e4e61711114024f3df98a
+          hash_type: md5
+      - title: a prefixed digest fails
+        expect: failed
+        files:
+          C:\Users\user\Downloads\setup.bin: {text: "installer v1\n"}
+        parameter:
+          dst: C:\Users\user\Downloads\setup.bin
+          expected_hash: sha256:910b575269daf86a6bd5661c3bc185ebe5a736891155ce307ebc516e091bfe19
+      - title: a missing file is an error, not a failure
+        expect: error
+        files:
+          C:\Users\user\Downloads\setup.bin: {text: "installer v1\n"}
+        parameter:
+          dst: C:\Users\user\Downloads\setup2.bin
+          expected_hash: 910b575269daf86a6bd5661c3bc185ebe5a736891155ce307ebc516e091bfe19
+
+  file_timestamps:
+    asserts: [metadata, order]
+    formats: [file]
+    unsupported:
+      glob_dst: 'Globs resolve only when the test runs in the guest agent; host test mode reads ``dst`` as a literal path. Name the file.'
+      archive_dst: An archive member would be a temporary extracted copy with its own times; host test mode does not read archives.
+      timestamp_tag: '``expected_time``, ``start_time`` and ``end_time`` are epoch seconds or date strings, not ``!timestamp`` tags.'
+      ordered_comparison: '``comparison_type`` here is ``equals``, ``before``, ``after``, ``between`` or ``within_last`` (see choices), with ``tolerance_seconds``.'
+    not_for:
+      - goal: a time stored inside a file (a database column, a JSON field)
+        use: json.value_matches
+      - goal: a time stored at an offset of a binary file
+        use: binary.struct_value_matches
+    outcomes:
+      passed: the chosen timestamp satisfies ``comparison_type``
+      failed: the timestamp was read and the comparison does not hold
+      error:
+        - the file does not exist; a glob matches no file or more than one (guest agent)
+        - a missing or unparseable ``expected_time`` / ``start_time`` / ``end_time`` / ``within_duration``
+        - an unknown ``timestamp_type`` or ``comparison_type``
+    limits:
+      - '``created`` is the creation time on Windows; on Linux guests it is the inode change time (ctime), not a birth time.'
+      - 'Date strings without a zone are read in local time, a trailing ``Z`` too; epoch seconds avoid the ambiguity.'
+      - '``equals`` without ``tolerance_seconds`` means 0 s, which rarely matches sub-second file system times.'
+      - '``before`` / ``after`` are strict, ``between`` includes both bounds.'
+      - 'In host test mode the times come from a guest command: a missing file fails instead of erroring, and date strings and ``within_last`` use the host clock and time zone.'
+      - Access times are often not updated (``relatime``, ``noatime``, Windows defaults).
+    choices:
+      timestamp_type: [modified, accessed, created]
+      comparison_type: [equals, before, after, between, within_last]
+    use_cases:
+      - title: A file was modified by the action
+        text: '``within_last`` right after the action, or ``between`` the times saved around it.'
+      - title: A file was not touched
+        text: '``before`` the start of the action.'
+    examples:
+      - title: modified in the last ten minutes
+        parameter:
+          dst: /home/user/Documents/report.odt
+          comparison_type: within_last
+          within_duration: 10m
+      - title: created at a known time, within 30 seconds
+        parameter:
+          dst: /home/user/Documents/report.odt
+          timestamp_type: created
+          expected_time: 1767265200
+          tolerance_seconds: 30
+      - title: accessed during a time window
+        parameter:
+          dst: /home/user/Documents/report.odt
+          timestamp_type: accessed
+          comparison_type: between
+          start_time: '2026-01-15 09:00:00'
+          end_time: '2026-01-15 17:00:00'
+      - title: a custom date format
+        parameter:
+          dst: /home/user/Documents/report.odt
+          comparison_type: after
+          expected_time: 15/01/2026 2:30 PM
+          time_format: '%d/%m/%Y %I:%M %p'
+
+  file_permissions:
+    asserts: [metadata]
+    formats: [file, directory]
+    unsupported:
+      glob_dst: 'Globs resolve only when the test runs in the guest agent; host test mode reads ``dst`` as a literal path. Name the file.'
+      archive_dst: An archive member would be a temporary extracted copy with its own mode and owner; host test mode does not read archives.
+    not_for:
+      - goal: a file exists
+        use: standard.file_exists
+    outcomes:
+      passed: '``st_mode & 0o777`` equals ``expected_permissions`` and the given owner and group match'
+      failed: the path was examined and the mode, owner or group differs (each is listed)
+      error:
+        - the path does not exist; a glob matches no path or more than one (guest agent)
+        - an empty or invalid ``expected_permissions``
+        - the path cannot be examined (permission denied, I/O error)
+    limits:
+      - Linux guests only. Windows reports synthetic mode bits and no owner or group, so such checks fail.
+      - Only the nine permission bits; setuid, setgid and sticky are ignored.
+      - 'Quote ``expected_permissions`` in YAML: unquoted ``0644`` is read as the decimal number 420.'
+      - Owner and group are names, not numeric ids.
+      - In host test mode a missing path fails instead of erroring.
+    use_cases:
+      - title: A private file stays private
+        text: A key or credential file has mode ``600`` and belongs to the user.
+      - title: A script was made executable
+        text: Mode ``755`` after a ``chmod`` or a save with the executable flag.
+    examples:
+      - title: a private key readable only by its owner
+        parameter:
+          dst: /home/user/.ssh/id_ed25519
+          expected_permissions: '600'
+          check_owner: user
+      - title: symbolic notation with a group
+        parameter:
+          dst: /var/log/app.log
+          expected_permissions: rw-r-----
+          check_group: adm
+
+  file_size:
+    asserts: [content]
+    formats: [file]
+    features: [archive_dst, glob_dst]
+    not_for:
+      - goal: a file exists, whatever its size
+        use: standard.file_exists
+      - goal: how many files match a glob
+        use: standard.file_count
+      - goal: a value is still inside the file
+        use: text.occurrence_count
+    outcomes:
+      passed: the size in bytes satisfies ``comparison_type`` against ``expected_size``
+      failed: the file was examined and the size comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - a negative or non-integer ``expected_size``; an unknown ``comparison_type``
+        - the file cannot be examined (permission denied, I/O error)
+    limits:
+      - An archive member has its extracted size, a compressed file (``x.gz!``) its decompressed size.
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: An empty file
+        text: '``expected_size: 0`` shows that a file was truncated or created empty but still exists (a missing file is an error).'
+      - title: A file grew or shrank
+        text: '``comparison_type: greater`` after an action that appends to a log or database.'
+    related:
+      - use: standard.file_count
+        why: how many files match a glob
+    examples:
+      - title: a cache file was emptied
+        files:
+          /home/user/data/cache.bin: {text: ''}
+        parameter:
+          dst: /home/user/data/cache.bin
+          expected_size: 0
+      - title: a log was written
+        files:
+          /home/user/data/app.log: {text: "started\n"}
+        parameter:
+          dst: /home/user/data/app.log
+          expected_size: 0
+          comparison_type: greater
+      - title: the extracted size of an archive member
+        files:
+          /home/user/backup.zip: *backup
+        parameter:
+          dst: /home/user/backup.zip!/notes/todo.txt
+          expected_size: 10
+      - title: a non-empty file is not empty
+        expect: failed
+        files:
+          /home/user/data/cache.bin: {hex: "00 00 00 00"}
+        parameter:
+          dst: /home/user/data/cache.bin
+          expected_size: 0
+      - title: a missing file is an error, never an empty one
+        expect: error
+        files:
+          /home/user/data/app.log: {text: "started\n"}
+        parameter:
+          dst: /home/user/data/cache.bin
+          expected_size: 0
+
+  file_count:
+    asserts: [count, exists, absent]
+    formats: [file, directory]
+    features: [archive_dst, glob_dst, count_comparison, negative]
+    not_for:
+      - goal: one file exists
+        use: standard.file_exists
+      - goal: a folder holds files with given names
+        use: standard.dir_content
+      - goal: how often a value occurs inside a file
+        use: text.occurrence_count
+    outcomes:
+      passed: the number of paths matching ``dst`` that are of ``kind`` satisfies ``comparison_type``; no match counts 0
+      failed: the paths were examined and the count comparison does not hold (also when nothing matches and ``expected_count`` is above 0)
+      error:
+        - an empty ``dst`` or one with an unresolved ``{{ placeholder }}``
+        - a negative or non-integer ``expected_count``; an unknown ``comparison_type`` or ``kind``
+        - '``kind: dir`` with an archive path'
+        - an archive that is missing or cannot be read (also an archive glob that matches a link member)
+        - in host test mode, a failed guest listing
+    limits:
+      - 'Globs use Python ``glob``: not recursive (``**`` acts like ``*``), ``*`` skips dotfiles (write ``.*`` to count them).'
+      - '``kind: file`` counts regular files, also through a symlink; ``any`` counts every existing path, broken symlinks included.'
+      - In host test mode the guest lists the matching paths and their kinds; no file is pulled, so a copy pulled by an earlier test is never counted.
+      - Inside an archive only file members are counted, never folders.
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+      kind: [file, dir, any]
+    use_cases:
+      - title: How many files were written
+        text: Exactly three exports, at least one rotated log, one file inside an archive.
+      - title: A group of files is gone
+        text: '``expected_count: 0`` on a glob: cleared cache or temporary files, the content of a deleted folder.'
+    related:
+      - use: standard.file_size
+        why: the size of one file
+    examples:
+      - title: three exports written
+        files:
+          /home/user/Documents/export-1.csv: {text: "a\n"}
+          /home/user/Documents/export-2.csv: {text: "b\n"}
+          /home/user/Documents/export-3.csv: {text: "c\n"}
+        parameter:
+          dst: /home/user/Documents/export-*.csv
+          expected_count: 3
+      - title: no temporary files left
+        files:
+          /home/user/.cache/app/index.dat: {text: "index\n"}
+        parameter:
+          dst: /home/user/.cache/app/*.tmp
+          expected_count: 0
+      - title: '* skips dotfiles'
+        text: The hidden ``.lock.tmp`` is not matched by ``*.tmp``; write ``.*.tmp`` to count it.
+        files:
+          /home/user/.cache/app/.lock.tmp: {text: "1\n"}
+        parameter:
+          dst: /home/user/.cache/app/*.tmp
+          expected_count: 0
+      - title: profile folders
+        files:
+          /home/user/.config/app/a1.default: {dir: true}
+          /home/user/.config/app/b2.default: {dir: true}
+          /home/user/.config/app/c3.default.bak: {text: "x\n"}
+        parameter:
+          dst: /home/user/.config/app/*.default*
+          expected_count: 2
+          kind: dir
+      - title: logs inside a backup archive
+        files:
+          /home/user/backup.zip: *backup
+        parameter:
+          dst: /home/user/backup.zip!/logs/*.log
+          expected_count: 1
+          comparison_type: greater_equal
+      - title: a different count fails
+        expect: failed
+        files:
+          /home/user/Documents/export-1.csv: {text: "a\n"}
+          /home/user/Documents/export-2.csv: {text: "b\n"}
+        parameter:
+          dst: /home/user/Documents/export-*.csv
+          expected_count: 3
+      - title: a missing archive is an error, not zero members
+        expect: error
+        files:
+          /home/user/notes.txt: {text: "x\n"}
+        parameter:
+          dst: /home/user/backup.zip!/logs/*.log
+          expected_count: 0
+      - title: folders inside an archive are an error
+        expect: error
+        files:
+          /home/user/backup.zip: *backup
+        parameter:
+          dst: /home/user/backup.zip!/*
+          expected_count: 0
+          kind: dir

@@ -33,8 +33,11 @@ def test_list_is_compact(tools):
 
 def test_search_ranks_goal_and_includes_example(tools):
     result = call_tool(tools['testfunction_search'], {'query': 'the file was deleted', 'limit': 1})
-    assert [e['dotnotation'] for e in result['data']] == ['demo.file_does_not_exist']
-    assert result['data'][0]['example']['parameter'] == {'dst': '<str>'}
+    cards = result['data']['results']
+    assert [c['testfunction'] for c in cards] == ['demo.file_does_not_exist']
+    assert cards[0]['example']['parameter'] == {'dst': '<str>'}
+    assert cards[0]['required'] == ['dst']
+    assert result['data']['match'] == 'good'
 
 
 def test_info_unknown_returns_error_envelope_with_suggestions(tools):

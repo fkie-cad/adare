@@ -75,6 +75,20 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   compared against an empty string.
 
 ### Added
+- Testfunction contracts: each collection has a `contract.yaml` saying per function what it
+  asserts and reads, which shared features it supports or refuses, goals it is not for (with
+  the function to use instead), when it passes / fails / errors, its limits, allowed parameter
+  values, use cases and examples; `appdata/testfunctions/library.yaml` holds the shared
+  vocabulary, features and known gaps. One source renders `adare test info`, the agent skill's
+  references and the reference pages of the docs (Sphinx directive `adare-testfunction`).
+  The examples run in the unit suite (`scripts/check_contract.py`).
+- `adare test search` returns short cards (why it matched, supports / does not support, not
+  for, required parameters), filters `--asserts`, `--reads`, `--feature`, follows "not for -> use
+  X" redirects and answers `match: weak` with the matching known gaps when nothing fits.
+- `adare test feature [<id>]`, the chat tool `testfunction_feature`, and `adare test catalog
+  --markdown-dir` for the split skill references (`catalog/index.md`, `catalog/<collection>.md`,
+  `features.md`); `make testfunction-tables` regenerates them with the docs tables.
+- `adare exp playbook validate` warns about parameter values outside a function's allowed list.
 - CI: release tags `<package>-v<version>` get checked (version, CHANGELOG section, commit
   on `main`), tested and turned into a GitHub Release with the package's sdist + wheel
   (`release.yml`, `make release-check`, `make build`; no PyPI).
@@ -186,6 +200,8 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   A missing `-wal` next to an existing database is 0 frames; a corrupt header is ERROR.
 
 ### Changed
+- The `testfunction_search` chat tool returns `{match, results: [cards], known_gaps}` instead
+  of a list of full entries; `adare test search` defaults to 5 results.
 - `adare experiment run` exit codes (adare): `0` only when every run passed, `1` when any
   run did not pass (FAILED, ERROR, INCONCLUSIVE), `130` when a run was interrupted or Ctrl-C
   ended the command. Before, a single-environment run (`-e env`) exited `0` even when it
@@ -249,6 +265,8 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   paths (browser profiles, office suites, registry keys); a unit test keeps it that way.
 
 ### Fixed
+- Playbook test checks also run for playbooks with `!re` / `!timestamp` values (they were
+  skipped because the YAML was read without the playbook's tags).
 - Host mode no longer probes `<dst>-wal-wal` / `<dst>-wal-journal` (and deletes stale local
   copies of them) when `dst` is itself a sidecar such as `data.db-wal`.
 - Host mode read stale files: one file cache served the whole run, so a test after an

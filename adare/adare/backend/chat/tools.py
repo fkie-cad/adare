@@ -190,10 +190,58 @@ def _testfunction_list(collection=None, os=None):
     return [e.to_dict(compact=True) for e in search(load_catalog(), collection=collection, os=os)]
 
 
-def _testfunction_search(query, collection=None, os=None, limit=5):
-    from adare.backend.testfunction.catalog import load_catalog, search
+def _testfunction_search(query, collection=None, os=None, asserts=None, reads=None, feature=None, limit=5):
+    from adare.backend.testfunction.catalog import load_catalog
+    from adare.backend.testfunction.search_cards import result_dict, search_goal
 
-    return [e.to_dict() for e in search(load_catalog(), query, collection=collection, os=os, limit=limit)]
+    result = search_goal(
+        load_catalog(),
+        query,
+        collection=collection,
+        os=os,
+        asserts=asserts,
+        fmt=reads,
+        feature=feature,
+        limit=limit,
+    )
+    return result_dict(result, query)
+
+
+def _testfunction_feature(feature=None):
+    """Shared features with the functions that support them (or one feature in full), and known gaps."""
+    from adare.backend.testfunction.catalog import load_catalog
+    from adare.backend.testfunction.contract import load_library
+
+    library, entries = load_library(), load_catalog()
+
+    def supported(fid):
+        return [e.dotnotation for e in entries if e.contract and fid in e.contract.features]
+
+    if feature is None:
+        return {
+            'features': [{'id': f.id, 'title': f.title, 'summary': f.summary} for f in library.features.values()],
+            'known_gaps': [{'gap': g.summary, 'instead': g.instead} for g in library.gaps],
+        }
+    if feature not in library.features:
+        from adare.exceptions import TestFunctionNotFoundError
+
+        raise TestFunctionNotFoundError(
+            log, f'Feature "{feature}" not found', possible_solutions=[f'one of: {", ".join(library.features)}']
+        )
+    f = library.features[feature]
+    return {
+        'id': f.id,
+        'title': f.title,
+        'summary': f.summary,
+        'syntax': f.syntax,
+        'example': f.example,
+        'supported_by': supported(f.id),
+        'not_supported_by': {
+            e.dotnotation: e.contract.unsupported[f.id]
+            for e in entries
+            if e.contract and f.id in e.contract.unsupported
+        },
+    }
 
 
 def _testfunction_info(dotnotation):
@@ -452,16 +500,31 @@ def build_tools(api: Any | None = None) -> list[ChatTool]:
     add(
         'testfunction_search',
         'Find the test function (assertion) for a goal, e.g. "verify the deleted file is gone" or '
-        '"registry value was set". Returns the best matches with parameter docs, defaults and a '
-        'ready-to-paste `tests:` example. Use this before writing a playbook `tests:` block.',
+        '"registry value was set". Returns short cards: why each matched, what it asserts and reads, '
+        'shared features it supports or not, goals it is NOT for (and what to use instead), required '
+        'parameters and an example. `match: weak` plus `known_gaps` means no function covers the goal '
+        'well: do not force a near miss. Then call testfunction_info for parameters, outcomes and limits.',
         _testfunction_search,
         properties={
             'query': _str('The goal in plain words'),
             'collection': _str('Only this collection (e.g. standard, windows)'),
             'os': _os,
+            'asserts': _str('Only this kind of assertion: exists, absent, value, count, order, compare, content, ...'),
+            'reads': _str('Only functions reading this format: json, sqlite, binary, registry, screen, ...'),
+            'feature': _str('Only functions supporting this shared feature: archive_dst, regex_tag, ...'),
             'limit': _int('Maximum results (default 5)'),
         },
         required=['query'],
+        group='testfunction',
+    )
+
+    add(
+        'testfunction_feature',
+        'Shared testfunction features (files inside archives via `!` in dst, globs, !re, !timestamp, '
+        'ordered comparison, key paths, ...) and the known gaps no function covers. With `feature`: its '
+        'syntax and which functions support it or explicitly do not.',
+        _testfunction_feature,
+        properties={'feature': _str('Feature id, e.g. archive_dst (omit to list all)')},
         group='testfunction',
     )
 
@@ -475,7 +538,8 @@ def build_tools(api: Any | None = None) -> list[ChatTool]:
 
     add(
         'testfunction_info',
-        'Full details of one test function: parameter types, defaults, docs and an example.',
+        'Full contract of one test function: parameters (types, defaults, allowed values), what it '
+        'supports and does not, goals it is not for, when it passes / fails / errors, limits, examples.',
         _testfunction_info,
         properties={'dotnotation': _str('Test function dotnotation, e.g. standard.file_exists')},
         required=['dotnotation'],

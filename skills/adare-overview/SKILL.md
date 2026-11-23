@@ -50,7 +50,8 @@ the assertions) → `adare-experiment` (run on every environment, compare).
   exits 1 when any run did not pass (FAILED, ERROR, INCONCLUSIVE). In JSON mode errors are
   `{"error": {"code", "message", "hint", "solutions"}}`.
 - **Discover, don't guess.** Use `adare <group> --help`, then `--help` on the
-  subcommand. For assertions: `adare test search "<goal>"` → `adare test info <dotnotation> --example`.
+  subcommand. For assertions: `adare test search "<goal>"` (cards: supports / does not support / not for;
+  `match: weak` + known gaps when nothing fits) → `adare test info <dotnotation>` (full contract).
   Never invent a test-function name or parameter; the catalog has the exact signature.
 - **Project scope.** Experiment and run commands resolve the project from the
   current directory. `cd` into the project first. Test-function commands work anywhere.
@@ -73,5 +74,5 @@ the assertions) → `adare-experiment` (run on every environment, compare).
 Claude Code and OpenCode should use the CLI plus these skills. `adare mcp serve`
 exposes the same lifecycle as tools for hosts without a shell. `adare dev mcp -s <id>`
 gives step-by-step VM control (screenshot/click/type, record → replay). Both have
-`testfunction_search` / `list_testfunctions(query=…)` for picking assertions. Setup:
+`testfunction_search` / `testfunction_feature` / `list_testfunctions(query=…)` for picking assertions. Setup:
 `adare skills install --help`.

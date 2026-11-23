@@ -20,9 +20,12 @@ import math
 import re
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from adare.backend.testfunction.contract import CollectionInfo, Contract
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +99,7 @@ _STOPWORDS = frozenset(
         'that',
         'any',
         'all',
+        'than',
         'how',
         'what',
         'which',
@@ -117,6 +121,8 @@ _FIELD_WEIGHTS = (
     ('collection', 2.0),
     ('summary', 2.0),
     ('use_for', 2.0),
+    ('use_cases', 1.5),
+    ('facets', 1.0),
     ('params', 0.75),
     ('doc', 0.5),
 )
@@ -145,6 +151,9 @@ class CatalogEntry:
     doc: str = ''
     params: tuple[ParamSpec, ...] = field(default_factory=tuple)
     code_sha: str = field(default='', compare=False, repr=False)  # docstring-free code hash
+    # what it can / cannot do, from the collection's contract.yaml (None without one)
+    contract: 'Contract | None' = field(default=None, compare=False, repr=False)
+    collection_info: 'CollectionInfo | None' = field(default=None, compare=False, repr=False)
 
     @classmethod
     def from_dict(cls, data: dict) -> 'CatalogEntry':
@@ -174,7 +183,17 @@ class CatalogEntry:
             params=params,
         )
 
-    def example(self) -> dict:
+    def _contract_example(self) -> dict | None:
+        """The first documented example that passes, as a ``tests:`` item (JSON-safe)."""
+        from adare.backend.testfunction.contract import example_item
+
+        for example in self.contract.examples if self.contract else ():
+            if example.expect == 'passed':
+                item = example_item(self.dotnotation, example)
+                return {**item, 'parameter': example.parameter_display or example.parameter}
+        return None
+
+    def _placeholder_example(self) -> dict:
         """A ready-to-paste ``tests:`` list item: placeholders for what must be filled in.
 
         Optional parameters are left out (their defaults apply); an empty-string
@@ -187,7 +206,12 @@ class CatalogEntry:
         return item
 
     def example_yaml(self) -> str:
-        return yaml.safe_dump({'tests': [self.example()]}, sort_keys=False, default_flow_style=False)
+        from adare.backend.testfunction.contract import example_yaml
+
+        for example in self.contract.examples if self.contract else ():
+            if example.expect == 'passed':
+                return example_yaml(self.dotnotation, example)
+        return yaml.safe_dump({'tests': [self._placeholder_example()]}, sort_keys=False, default_flow_style=False)
 
     def signature(self) -> str:
         parts = []
@@ -198,20 +222,33 @@ class CatalogEntry:
             parts.append(text)
         return f'{self.dotnotation}({", ".join(parts)})'
 
+    def example(self) -> dict:
+        """A `tests:` item: the first documented passing example, else placeholders to fill in."""
+        return self._contract_example() or self._placeholder_example()
+
     def to_dict(self, compact: bool = False) -> dict:
         """``compact`` is the token-cheap form for listings: what to call and why."""
         if compact:
-            return {
+            data = {
                 'dotnotation': self.dotnotation,
                 'summary': self.summary,
                 'signature': self.signature(),
                 'os': self.os,
                 'installed': self.installed,
             }
+            if self.contract:
+                data['asserts'] = list(self.contract.asserts)
+                data['formats'] = list(self.contract.formats)
+            return data
         data = asdict(self)
-        data.pop('code_sha')
+        for key in ('code_sha', 'contract', 'collection_info'):
+            data.pop(key)
         data['signature'] = self.signature()
         data['example'] = self.example()
+        data['use_for'] = use_for(self.doc)
+        data['runs'] = runs_where(self.category, self.name)
+        if self.contract:
+            data['contract'] = self.contract.to_dict()
         return data
 
 
@@ -332,7 +369,10 @@ def parse_collection(path: Path, installed: bool) -> list[CatalogEntry]:
     except (OSError, SyntaxError, UnicodeDecodeError) as e:
         log.warning(f'Skipping testfunction collection {path}: {e}')
         return []
+    from adare.backend.testfunction.contract import load_contracts
+
     collection = path.stem
+    info, contracts = load_contracts(path)
     entries = []
     for node in module.body:
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -358,6 +398,8 @@ def parse_collection(path: Path, installed: bool) -> list[CatalogEntry]:
                 doc=doc,
                 params=_params(node, parse_args_section(doc)),
                 code_sha=hashlib.sha256(testfunction_code_without_docstring(node).encode()).hexdigest(),
+                contract=contracts.get(testname.split('.')[-1]),
+                collection_info=info,
             )
         )
     return entries
@@ -475,11 +517,36 @@ def _borrow_docs(installed: CatalogEntry, bundled: CatalogEntry) -> CatalogEntry
     Docstrings don't change a function's version, so ``test sync`` is not needed
     to see newly written docs; differing code keeps the installed entry as is.
     """
-    if installed.doc or not bundled.doc or installed.code_sha != bundled.code_sha:
+    if installed.code_sha != bundled.code_sha:
+        return installed
+    if installed.contract is None and bundled.contract is not None:
+        installed = replace(installed, contract=bundled.contract, collection_info=bundled.collection_info)
+    if installed.doc or not bundled.doc:
         return installed
     docs = {p.name: p.doc for p in bundled.params}
     params = tuple(replace(p, doc=p.doc or docs.get(p.name, '')) for p in installed.params)
     return replace(installed, doc=bundled.doc, params=params)
+
+
+# QGA_PROBE functions the hostside backend can answer from an offline disk image (the
+# others need a live guest: processes, services, registry); used by backend/hostside/testing.py.
+OFFLINE_PROBES = frozenset({'file_permissions', 'file_timestamps', 'user_exists'})
+
+
+def runs_where(category: str, name: str = '') -> str:
+    """Where a function can run, from its host-mode category (for agents choosing a backend).
+
+    Modes: the in-guest agent; host test mode (files pulled / commands run through the guest
+    agent of QEMU while the VM is live); hostside (an offline disk image, after shutdown).
+    """
+    if category in ('FILE_BASED', 'FILE_CONTENT'):
+        return 'guest agent, host test mode or hostside; dry-run on a local file'
+    if category == 'QGA_PROBE':
+        hostside = 'hostside' if name.split('.')[-1] in OFFLINE_PROBES else 'not hostside (needs a live guest)'
+        return f'guest agent or host test mode; {hostside}; no dry-run'
+    if category == 'HOST_NATIVE':
+        return 'host, against the live VM screen; not hostside; no dry-run'
+    return 'guest agent only; not host test mode or hostside; no dry-run'
 
 
 def close_matches(entries: list[CatalogEntry], dotnotation: str, n: int = 3) -> list[CatalogEntry]:
@@ -547,11 +614,16 @@ def _same_stem(a: str, b: str) -> bool:
 
 
 def _fields(entry: CatalogEntry) -> dict[str, set[str]]:
+    contract = entry.contract
+    facets = ' '.join((*contract.asserts, *contract.formats)) if contract else ''
+    cases = ' '.join(f'{u.title} {u.text}' for u in contract.use_cases) if contract else ''
     return {
         'name': set(_tokens(entry.name)),
         'collection': set(_tokens(entry.collection)),
         'summary': set(_tokens(entry.summary)),
         'use_for': set(_tokens(use_for(entry.doc))),
+        'use_cases': set(_tokens(cases)),
+        'facets': set(_tokens(facets)),
         'params': {t for p in entry.params for t in _tokens(f'{p.name} {p.doc}')},
         'doc': set(_tokens(entry.doc)),
     }
@@ -586,27 +658,72 @@ def search(
     limit: int | None = None,
 ) -> list[CatalogEntry]:
     """Rank entries for a natural-language ``query``; filters are exact (case-insensitive)."""
-    pool = [
+    return [
+        hit.entry for hit in scored_search(entries, query, collection=collection, category=category, os=os, limit=limit)
+    ]
+
+
+@dataclass(frozen=True)
+class Hit:
+    """A ranked entry with what made it match (for result cards and \"why\" lines)."""
+
+    entry: CatalogEntry
+    score: float
+    matched: dict[str, str]  # query token -> best field it hit
+    missed: tuple[str, ...]  # query tokens that hit nothing
+
+
+def filter_pool(
+    entries: list[CatalogEntry],
+    *,
+    collection: str | None = None,
+    category: str | None = None,
+    os: str | None = None,
+) -> list[CatalogEntry]:
+    return [
         e
         for e in entries
         if (not collection or e.collection.lower() == collection.lower())
         and (not category or e.category.lower() == category.lower())
         and (not os or e.os in (os.lower(), 'any'))
     ]
+
+
+def _best_field(query_token: str, fields: dict[str, set[str]]) -> str:
+    synonyms = _expand(query_token) - {query_token}
+    for field_name, _ in _FIELD_WEIGHTS:
+        if _matches(query_token, fields[field_name]) or any(t in fields[field_name] for t in synonyms):
+            return field_name
+    return ''
+
+
+def scored_search(
+    entries: list[CatalogEntry],
+    query: str = '',
+    *,
+    collection: str | None = None,
+    category: str | None = None,
+    os: str | None = None,
+    limit: int | None = None,
+) -> list[Hit]:
+    """Like :func:`search`, keeping the score and the matched / missed query tokens."""
+    pool = filter_pool(entries, collection=collection, category=category, os=os)
     query_tokens = _tokens(query)
     if not query_tokens:
-        return pool[:limit] if limit else pool
+        hits = [Hit(e, 0.0, {}, ()) for e in pool]
+        return hits[:limit] if limit else hits
 
     wants_negative = any(t in _NEGATIVE_WORDS for t in query_tokens)
     wants_count = any(t in _COUNT_WORDS for t in query_tokens)
-    token_scores = [[_token_score(qt, fields) for qt in query_tokens] for fields in map(_fields, pool)]
+    all_fields = [_fields(e) for e in pool]
+    token_scores = [[_token_score(qt, fields) for qt in query_tokens] for fields in all_fields]
     # Rare words decide more: "wiped" (2 functions) outweighs "value" (most of them).
     idf = [
         1.0 + _IDF_STRENGTH * math.log(len(pool) / max(1, sum(1 for scores in token_scores if scores[i] > 0)))
         for i in range(len(query_tokens))
     ]
     scored = []
-    for entry, scores in zip(pool, token_scores, strict=True):
+    for entry, fields, scores in zip(pool, all_fields, token_scores, strict=True):
         score = sum(s * w for s, w in zip(scores, idf, strict=True))
         if score <= 0:
             continue
@@ -618,9 +735,11 @@ def search(
             score -= 1.0
         if is_count:
             score += 1.0 if wants_count else -0.5
-        scored.append((score, entry))
-    scored.sort(key=lambda pair: (-pair[0], pair[1].dotnotation))
+        matched = {qt: _best_field(qt, fields) for qt, s in zip(query_tokens, scores, strict=True) if s > 0}
+        missed = tuple(qt for qt, s in zip(query_tokens, scores, strict=True) if s <= 0)
+        scored.append(Hit(entry, score, matched, missed))
+    scored.sort(key=lambda hit: (-hit.score, hit.entry.dotnotation))
     # Drop the long tail of incidental matches ("file" alone matches half the catalog).
-    cutoff = scored[0][0] * _RELATIVE_CUTOFF if scored else 0
-    ranked = [entry for score, entry in scored if score >= cutoff]
+    cutoff = scored[0].score * _RELATIVE_CUTOFF if scored else 0
+    ranked = [hit for hit in scored if hit.score >= cutoff]
     return ranked[:limit] if limit else ranked

@@ -1,0 +1,369 @@
+# Contract of the sqlite collection: what each function can and cannot do, and runnable
+# examples. Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run
+# in the unit suite (test_contract_examples.py); `adare test info sqlite.<name>` shows all of it.
+
+collection:
+  title: SQLite
+  summary: >-
+    SQL queries on SQLite databases and the write-ahead log (``-wal``) next to them: the rows a
+    query returns, how many there are, which rows live only in the WAL, and how many frames and
+    transactions the WAL holds. The original files are never opened by SQLite: the database and
+    its ``-wal`` / ``-journal`` are copied once and the copy is queried, so uncheckpointed changes
+    are seen, the evidence is not modified and every result names the SHA-256 of the bytes read.
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  # a plain (rollback-journal) database: items 1 example, 2 other
+  items: &items
+    sqlite:
+      - CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)
+      - INSERT INTO items VALUES (1, 'example'), (2, 'other')
+  # visits with a Unix time in seconds (2026-01-01T11:00:00Z)
+  visits: &visits
+    sqlite:
+      - CREATE TABLE visits (url TEXT, visited INTEGER)
+      - INSERT INTO visits VALUES ('https://example.org/', 1767265200)
+  # A WAL-mode database copied while the writer was open (page size 512). The main file holds
+  # items (1, 'kept') and (2, 'removed-entry'); the -wal commits two transactions after a reset:
+  # insert (3, 'example'), delete id 2. 11 frames: 2 valid (both commits), 9 stale from before
+  # the reset. Made with Python's sqlite3: PRAGMA page_size=512, journal_mode=WAL,
+  # wal_autocheckpoint=0; create + insert 1, 2; four insert/delete transactions; PRAGMA
+  # wal_checkpoint(PASSIVE); insert 3; delete 2; both files copied before closing.
+  wal_db: &wal_db
+    fixture: sqlite_wal/app.db
+  wal_log: &wal_log
+    fixture: sqlite_wal/app.db-wal
+
+functions:
+  query_result:
+    asserts: [exists, absent, value, count]
+    formats: [sqlite]
+    features: [archive_dst, glob_dst, sqlite_view, count_comparison, negative, placeholder, regex_tag, timestamp_tag]
+    not_for:
+      - goal: only how many rows a query returns
+        use: sqlite.row_count
+      - goal: how many frames or transactions the write-ahead log holds
+        use: sqlite.wal_frame_count
+      - goal: a value in deleted records, free pages or stale WAL frames that no query returns
+        use: text.occurrence_count
+    related:
+      - use: sqlite.row_count
+        why: the same query and views, but asserts the number of rows only
+      - use: sqlite.wal_frame_count
+        why: counts the frames and transactions of the WAL the views compare
+    outcomes:
+      passed: the query ran and its rows match ``expected_count`` and ``expected_result`` (with neither set, whenever the query runs)
+      failed: the query ran and the number of rows or the rows themselves do not match
+      error:
+        - the database does not exist; a glob matches no file or more than one
+        - an SQL error (syntax, unknown table or column, a corrupt or unreadable database), also on one side of a ``wal_added`` / ``wal_removed`` difference
+        - the database files cannot be copied
+        - a negative or non-integer ``expected_count``; an unknown ``comparison_type`` or ``view``
+        - an invalid regex or an unknown placeholder in ``expected_result``
+    limits:
+      - '``expected_result`` is compared as a whole: every row, in query order, with every selected column. Add ``ORDER BY`` for a stable order.'
+      - '``!re``, ``!timestamp`` and placeholders in ``expected_result`` compare the result as text (``[{''col'': ''value''}]``): a placeholder stands for a quoted text value, so an INTEGER column fails against it. Select the column as text: ``CAST(visited AS TEXT) AS visited``.'
+      - Differences (``wal_added`` / ``wal_removed``) compare whole rows; select identifying columns, a changed row appears in both.
+      - '``dst`` inside an archive (``backup.zip!/app/data.db``) also extracts the ``-wal`` / ``-journal`` members next to it, so the views work there too.'
+      - The rows read are reported in the details, cut after 2000 characters.
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+      view: [current, main_file, wal_added, wal_removed]
+    use_cases:
+      - title: A record was written
+        text: A history entry, bookmark or setting row with the expected values after an action.
+      - title: A record is gone
+        text: '``expected_count: 0`` on a query for the deleted row.'
+      - title: A change is still only in the write-ahead log
+        text: '``view: wal_added`` shows rows committed to the ``-wal`` but not yet checkpointed into the main file; ``view: wal_removed`` rows deleted there that the main file still holds.'
+      - title: A time stored as a number
+        text: '``!timestamp`` with ``epoch`` / ``unit`` and the times saved around the action, on a column selected as text.'
+    examples:
+      - title: a row with the expected values
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id, name FROM items WHERE name = 'example'
+          expected_result: [{id: 1, name: example}]
+      - title: no such row
+        text: Absence of a row; a missing database would be an error, never this pass.
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id FROM items WHERE name = 'secret-project'
+          expected_count: 0
+      - title: other values fail
+        expect: failed
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT name FROM items WHERE id = 2
+          expected_result: [{name: example}]
+      - title: an unknown table is an error, not a failure
+        text: The query never ran, so nothing was learnt about the rows; ``expect_to_fail`` cannot turn it into a pass.
+        expect: error
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id FROM bookmarks
+          expected_count: 0
+      - title: a missing database is an error
+        expect: error
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/other.db
+          query: SELECT id FROM items
+          expected_count: 0
+      - title: a row only in the write-ahead log
+        text: Committed to the ``-wal``, not yet checkpointed into the main file.
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id, name FROM items ORDER BY id
+          expected_result: [{id: 3, name: example}]
+          view: wal_added
+      - title: a row deleted in the WAL but still in the main file
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id, name FROM items ORDER BY id
+          expected_result: [{id: 2, name: removed-entry}]
+          view: wal_removed
+      - title: the current state includes the WAL
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id, name FROM items ORDER BY id
+          expected_result: [{id: 1, name: kept}, {id: 3, name: example}]
+      - title: visit time between two saved timestamps
+        text: The INTEGER column is selected as text, so the placeholder matches it.
+        files:
+          /home/user/app/data.db: *visits
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT CAST(visited AS TEXT) AS visited FROM visits WHERE url = 'https://example.org/'
+          expected_result:
+            - visited: !timestamp {after: '{{before_visit}}', before: '{{after_visit}}', epoch: 1970, unit: s}
+      - title: a URL by pattern
+        files:
+          /home/user/app/data.db: *visits
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT url FROM visits
+          expected_result: [{url: !re 'https://example\.org/.*'}]
+
+  row_count:
+    asserts: [count, exists, absent]
+    formats: [sqlite]
+    features: [archive_dst, glob_dst, sqlite_view, count_comparison, negative]
+    not_for:
+      - goal: the values of the rows
+        use: sqlite.query_result
+      - goal: how many frames or transactions the write-ahead log holds
+        use: sqlite.wal_frame_count
+      - goal: a value anywhere in the raw database bytes, including freed pages
+        use: text.occurrence_count
+    related:
+      - use: sqlite.query_result
+        why: the same query and views, and checks the returned rows themselves
+    outcomes:
+      passed: the number of rows the query returns satisfies ``comparison_type``
+      failed: the query ran and the count comparison does not hold
+      error:
+        - the database does not exist; a glob matches no file or more than one
+        - an SQL error (syntax, unknown table or column, a corrupt or unreadable database), also on one side of a difference; an empty ``query``
+        - the database files cannot be copied
+        - a negative or non-integer ``expected_count``; an unknown ``comparison_type`` or ``view``
+    limits:
+      - Every returned row counts, so ``SELECT COUNT(*)`` returns one row; select the rows themselves.
+      - Differences (``wal_added`` / ``wal_removed``) compare whole rows; select identifying columns, a changed row appears in both.
+      - '``dst`` inside an archive also extracts the ``-wal`` / ``-journal`` members next to it.'
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+      view: [current, main_file, wal_added, wal_removed]
+    use_cases:
+      - title: Record created exactly once
+        text: An action must add one row (one history entry, one bookmark), not zero and not two.
+      - title: Record removed
+        text: '``expected_count: 0`` after a delete or "clear history" action.'
+      - title: Row not yet checkpointed
+        text: '``view: wal_added`` counts the rows that live only in the write-ahead log; ``view: wal_removed`` the rows deleted there that the main file still holds.'
+      - title: Growth of a table
+        text: '``comparison_type: greater_equal`` when an action may add a varying number of rows.'
+    examples:
+      - title: exactly one matching entry
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id FROM items WHERE name LIKE '%example%'
+          expected_count: 1
+      - title: entry deleted
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id FROM items WHERE name = 'secret-project'
+          expected_count: 0
+      - title: COUNT(*) is one row
+        text: The query returns one row holding 2; count the rows themselves (``SELECT id ...``).
+        expect: failed
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT COUNT(*) FROM items
+          expected_count: 2
+      - title: the one database in a folder, whatever its name
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/*.db
+          query: SELECT id FROM items
+          expected_count: 1
+          comparison_type: greater_equal
+      - title: a glob matching two databases is an error
+        expect: error
+        files:
+          /home/user/app/a.db: *items
+          /home/user/app/b.db: *items
+        parameter:
+          dst: /home/user/app/*.db
+          query: SELECT id FROM items
+          expected_count: 2
+      - title: entry not yet checkpointed
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id FROM items WHERE name = 'example'
+          expected_count: 1
+          view: wal_added
+      - title: deleted entry still in the main file
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id FROM items WHERE name = 'removed-entry'
+          expected_count: 1
+          view: main_file
+      - title: but gone in the current state
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT id FROM items WHERE name = 'removed-entry'
+          expected_count: 0
+      - title: a database inside an archive, with its WAL
+        text: The ``-wal`` member next to the database member is extracted with it.
+        files:
+          /home/user/backup/app.zip:
+            zip:
+              data.db: *wal_db
+              data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/backup/app.zip!/data.db
+          query: SELECT id FROM items WHERE name = 'example'
+          expected_count: 1
+          view: wal_added
+
+  wal_frame_count:
+    asserts: [count, absent]
+    formats: [sqlite]
+    features: [archive_dst, glob_dst, count_comparison, negative]
+    not_for:
+      - goal: which rows live only in the WAL
+        use: sqlite.row_count
+      - goal: the values of rows in the WAL
+        use: sqlite.query_result
+      - goal: a value in stale WAL frames
+        use: text.occurrence_count
+    related:
+      - use: sqlite.row_count
+        why: '``view: wal_added`` / ``wal_removed`` show which rows the WAL adds or removes'
+    outcomes:
+      passed: the number of ``frames`` of the chosen kind satisfies ``comparison_type``; a missing ``-wal`` next to the database and an empty one have 0 frames
+      failed: the WAL was read and the count comparison does not hold
+      error:
+        - the database does not exist, or ``dst`` names a ``-wal`` that does not exist; a glob matches no file or more than one
+        - the WAL cannot be read
+        - 'an invalid WAL header: shorter than 32 bytes, a wrong magic, a version other than 3007000, a bad page size, a header checksum mismatch'
+        - a negative or non-integer ``expected_count``; an unknown ``comparison_type`` or ``frames``
+    limits:
+      - The WAL is parsed per the SQLite file format, without SQLite; a copy is read and its SHA-256 reported.
+      - Counts frames, not rows; one transaction may write several frames, one per changed page.
+      - '``dst`` inside an archive reads the ``-wal`` member next to the database member (or names the ``-wal`` member itself).'
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+      frames: [valid, commits, all, stale]
+    use_cases:
+      - title: Changes not yet checkpointed
+        text: '``frames: commits`` with ``comparison_type: greater_equal`` after an action, while the application still holds the database open.'
+      - title: Checkpoint ran
+        text: '``expected_count: 0`` after the application closed: the WAL was checkpointed and truncated or deleted.'
+      - title: Leftovers of earlier transactions
+        text: '``frames: stale`` greater than 0: frames from before a WAL reset that SQLite no longer reads, whose pages may still hold earlier content.'
+    examples:
+      - title: transactions not yet checkpointed
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          expected_count: 1
+          comparison_type: greater_equal
+          frames: commits
+      - title: old frames after a WAL reset
+        text: '``dst`` may name the ``-wal`` itself.'
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db-wal
+          expected_count: 1
+          comparison_type: greater_equal
+          frames: stale
+      - title: a WAL that still holds frames fails a checkpoint check
+        expect: failed
+        files:
+          /home/user/app/data.db: *wal_db
+          /home/user/app/data.db-wal: *wal_log
+        parameter:
+          dst: /home/user/app/data.db
+          expected_count: 0
+      - title: no -wal next to the database is 0 frames
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db
+          expected_count: 0
+      - title: a named -wal that does not exist is an error
+        expect: error
+        files:
+          /home/user/app/data.db: *items
+        parameter:
+          dst: /home/user/app/data.db-wal
+          expected_count: 0
+      - title: a WAL with a wrong magic is an error
+        expect: error
+        files:
+          /home/user/app/data.db: *items
+          /home/user/app/data.db-wal:
+            hex: 00000000 002de218 00000200 00000000 00000000 00000000 00000000 00000000
+        parameter:
+          dst: /home/user/app/data.db
+          expected_count: 0

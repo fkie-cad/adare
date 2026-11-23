@@ -8,12 +8,7 @@ Linux
 :Functions: 4
 :Category: Linux System Validation
 
-The **Linux** testset provides Linux-specific system testing capabilities for ADARE experiments. This testset focuses on systemd services, process monitoring, user account validation, and log file analysis on Linux systems.
-
-Overview
---------
-
-The Linux testset enables validation of Linux system state and configuration. It includes functions to check systemd service status, verify running processes, validate user accounts, and search log files for specific entries. ``log_entry_exists`` reads the log file itself (parameters ``dst``, ``content``, ``regex_match``), so unlike the other three it also works in host mode and on rotated, compressed logs (``/var/log/syslog.2.gz!``).
+.. adare-testfunction-collection:: linux
 
 Test Functions
 --------------

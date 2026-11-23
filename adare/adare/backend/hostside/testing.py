@@ -23,13 +23,11 @@ from typing import Any, cast
 
 from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
 from adare.backend.hostside.guestfs import GuestFileNotFound, GuestFS, GuestFSError, GuestFSUnsupported, normalize
+from adare.backend.testfunction.catalog import OFFLINE_PROBES  # QGA probes a disk image can answer
 from adarelib.event.event import TestResult
 from adarelib.testset.basictest import BasicTest, HostModeCategory
 
 log = logging.getLogger(__name__)
-
-#: QGA-probe test functions a disk image can answer (the rest need live state)
-OFFLINE_PROBES = frozenset({'file_permissions', 'file_timestamps', 'user_exists'})
 
 
 class GuestFSFileProxy:

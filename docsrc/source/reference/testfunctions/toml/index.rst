@@ -8,7 +8,7 @@ TOML
 :Functions: 4
 :Category: TOML Data
 
-The **TOML** testset reads TOML files (``tomllib``, or ``tomli`` on Python 3.10) and checks keys, values and counts by key path.
+.. adare-testfunction-collection:: toml
 
 Overview
 --------

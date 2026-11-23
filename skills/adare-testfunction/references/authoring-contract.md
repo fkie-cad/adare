@@ -145,3 +145,57 @@ def deleted_file_absent(ctx, dst: str):
     ctx.fail_if(bool(existing), f'{dst} still present: {existing}')
     return [f'{dst} absent — deletion confirmed']
 ```
+
+## `contract.yaml` — what the functions can and cannot do
+
+Next to `<name>.py`, a `contract.yaml` tells agents and readers what each function can and
+cannot do. `adare test search/info`, the agent tools, the skill references and the docs
+reference pages are rendered from it plus the docstring. Its examples run in ADARE's unit
+suite (bundled collections) and with `python scripts/check_contract.py <collection>`.
+`adare test validate` reports contract problems. Vocabulary (`asserts`, `formats`, feature
+ids) comes from `appdata/testfunctions/library.yaml` (`adare test feature`).
+
+```yaml
+collection:
+  title: My app files
+  summary: What the collection reads and how.
+functions:
+  report_has_title:                     # the testname (`name=` of @testfunction)
+    asserts: [value]                    # exists absent value count order compare content metadata state ui
+    formats: [json]
+    features: [archive_dst, glob_dst, key_path, regex_tag]   # shared features it supports
+    unsupported:                        # features it refuses, and what to do instead
+      ordered_comparison: 'Compares text only; use ``json.value_matches`` with ``comparison_type``.'
+    not_for:                            # goals it is confused with -> the right function
+      - goal: the title is absent
+        use: json.value_count
+    outcomes:
+      passed: the title equals ``expected_value``
+      failed: the file was read and the title differs or is missing
+      error: [the file does not exist, the file is no JSON]
+    limits: [Reads only the first report of the file.]
+    choices: {match_mode: [exact, prefix]}   # allowed values; the default must be listed
+    use_cases:
+      - title: A report was renamed
+        text: The title after the rename action.
+    examples:                           # at least one `expect: passed`; add boundaries
+      - title: title set
+        files:
+          /home/user/report.json: {json: {title: Q3}}
+        parameter: {dst: /home/user/report.json, expected_value: Q3}
+      - title: missing file is an error
+        expect: error
+        parameter: {dst: /home/user/none.json, expected_value: Q3}
+```
+
+- A file test (`dst`, category FILE_BASED/FILE_CONTENT) must declare `archive_dst` and
+  `glob_dst`, in `features` or in `unsupported`. A function with `expected_count` lists
+  `count_comparison`.
+- `files:` builds the example's files from a spec: `text` (+`encoding`), `hex`, `base64`,
+  `json`, `concat` (with `u8` … `i64be`, `f32le` … numbers), `sqlite: [sql, ...]`,
+  `zip`/`tar`/`tar.gz: {member: spec}`, `gzip`/`bzip2`/`xz: spec`, `xlsx: {sheet: rows}`,
+  `plist`/`plist_binary`, `png: {size, text}`, `jpeg: {size, exif}`, `dir: true`, `fixture: <file>`.
+  Guest paths (also `C:\...`) are mapped to a temp folder.
+- Examples of other categories, or with `!re`/`!timestamp`/`{{placeholders}}`, are rendered but
+  not run; `run: '<why>'` skips one explicitly.
+- YAML: quote prose that contains `: ` or starts with a backtick (`'...'` or a `>-` block).

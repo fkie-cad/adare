@@ -337,7 +337,9 @@ class GuiMcpServer:
 
         entries = [CatalogEntry.from_dict(entry) for entry in self._catalog]
         if query:
-            return [entry.to_dict() for entry in search(entries, query, limit=limit)]
+            # the catalog dicts carry the contract (supports / not for / outcomes / limits)
+            by_name = {entry['dotnotation']: entry for entry in self._catalog if 'dotnotation' in entry}
+            return [{**e.to_dict(), **by_name.get(e.dotnotation, {})} for e in search(entries, query, limit=limit)]
         return [entry.to_dict(compact=True) for entry in entries]
 
     # -- authoring ----------------------------------------------------------

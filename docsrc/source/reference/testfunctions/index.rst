@@ -83,6 +83,14 @@ a goal? See :doc:`/guide/choosing-testfunctions`.
      - 4
      - Binary containers without a parser: values at offsets (pointers followed), byte patterns in a region, key/value string tables
 
+What each function can and cannot do
+------------------------------------
+
+Every function page lists what the function asserts, the shared features it supports (and the
+ones it does not), goals it is *not* for with the function to use instead, when it passes, fails
+or errors, its limits and examples that run in the test suite. Features shared by many functions
+and goals no function covers are on :doc:`features`.
+
 Usage in Playbooks
 -------------------
 
@@ -175,6 +183,7 @@ Overview of all Test Functions
    :caption: Test Functions
    :hidden:
 
+   features
    standard/index
    json/index
    jsonl/index

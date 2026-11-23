@@ -1,0 +1,749 @@
+# Contract of the excel collection: what each function can and cannot do, and runnable examples.
+# Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run in the
+# unit suite (test_contract_examples.py); `adare test info excel.<name>` shows all of it.
+
+collection:
+  title: Excel
+  summary: >-
+    Excel workbooks (.xlsx) a spreadsheet application saved: a sheet exists, one cell has a value,
+    a row exists or occurs n times, the header layout, and whole sheets or workbooks compared with
+    reference data. Workbooks are read with pandas and openpyxl, and every cell is compared as a
+    string: an empty cell is ``''``, numbers use ``str()`` (``5.0`` when the whole row is numeric),
+    dates read as ``2024-01-31 00:00:00`` or ``2024-01-31T00:00:00``. Rows and columns are 0-based,
+    ``sheet`` is a name or a 0-based index, and ``header_row`` is the number of top rows to skip.
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  inventory: &inventory
+    xlsx:
+      Items:
+        - [Item, Count, Location]
+        - [Laptop, 3, Office]
+        - [Monitor, 5, Storage]
+        - [Laptop, 1, Home]
+      Archive:
+        - [Item, Count, Location]
+        - [Printer, 1, Office]
+  budget: &budget
+    xlsx:
+      Q2:
+        - [Account, Planned, Spent]
+        - [Travel, 1200, 950.5]
+        - [Hardware, 3000, 2800]
+      Q3:
+        - [Account, Planned, Spent]
+        - [Travel, 1500, 1500]
+        - [Hardware, 3000, 3100]
+      Q3 (copy):
+        - [Account, Planned, Spent]
+        - [Travel, 1500, 1500]
+        - [Hardware, 3000, 3100]
+      Report 2026:
+        - [Created, 2026-01-31]
+        - [Total, '=SUM(Q3!C2:C3)']
+  # the same workbook without the copied sheet
+  budget_saved: &budget_saved
+    xlsx:
+      Q2:
+        - [Account, Planned, Spent]
+        - [Travel, 1200, 950.5]
+        - [Hardware, 3000, 2800]
+      Q3:
+        - [Account, Planned, Spent]
+        - [Travel, 1500, 1500]
+        - [Hardware, 3000, 3100]
+      Report 2026:
+        - [Created, 2026-01-31]
+        - [Total, '=SUM(Q3!C2:C3)']
+
+functions:
+  sheet_exists:
+    asserts: [exists]
+    formats: [excel]
+    features: [archive_dst, glob_dst]
+    unsupported:
+      regex_tag: 'A ``!re`` tag as ``sheet`` is compared as plain text and never matches; use ``regex_match: true`` with a plain pattern.'
+    not_for:
+      - goal: a value in a cell of the sheet
+        use: excel.cell_value_matches
+      - goal: workbook properties (author, last modified by)
+        use: xml.element_text_matches
+      - goal: all sheet names and contents of two workbooks
+        use: excel.compare_files
+    outcomes:
+      passed: a sheet is named ``sheet`` (exact, case-sensitive) or, with ``regex_match``, a sheet name matches the regex
+      failed: the workbook was read and no sheet has the name, or the workbook has no sheets
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or is no valid .xlsx workbook
+        - an invalid regex with ``regex_match``
+    limits:
+      - '``regex_match`` uses ``re.search`` (unanchored); write ``^...$`` for the whole name.'
+      - 'A deleted or renamed sheet is asserted with ``expect_to_fail: true`` on the old name; there is no sheet count.'
+    use_cases:
+      - title: A GUI action added or renamed a sheet
+        text: 'The new name exists after the action; the old one fails with ``expect_to_fail: true``.'
+    examples:
+      - title: quarter sheet added
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: Q3
+      - title: some report sheet, by regex
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: '^Report \d{4}$'
+          regex_match: true
+      - title: a sheet inside a backup archive
+        files:
+          C:\Users\user\backup.zip:
+            zip:
+              Documents/budget.xlsx: *budget
+        parameter:
+          dst: C:\Users\user\backup.zip!/Documents/budget.xlsx
+          sheet: Q2
+      - title: names are case-sensitive
+        expect: failed
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: q3
+      - title: a file that is no workbook is an error
+        expect: error
+        files:
+          /home/user/Documents/budget.xlsx:
+            text: 'Account,Planned,Spent'
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: Q3
+      - title: an invalid regex is an error
+        expect: error
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: 'Report ['
+          regex_match: true
+
+  cell_value_matches:
+    asserts: [value, order]
+    formats: [excel]
+    features: [archive_dst, glob_dst, regex_tag, placeholder, timestamp_tag, ordered_comparison]
+    not_for:
+      - goal: a row anywhere in the sheet, whatever its position
+        use: excel.contains_row
+      - goal: a sheet exists
+        use: excel.sheet_exists
+      - goal: workbook properties (author, last modified by)
+        use: xml.element_text_matches
+      - goal: a value in a CSV file
+        use: csv.contains_line
+    outcomes:
+      passed: the cell at (``row``, ``column``) matches ``expected_value`` (exactly, by regex, or by the ordered comparison)
+      failed:
+        - the workbook was read and the cell value does not match
+        - '``row`` or ``column`` is outside the sheet''s used range; the sheet does not exist'
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or is no valid .xlsx workbook
+        - an invalid regex or unknown placeholder; more than one placeholder in ``expected_value``
+        - a cell or ``expected_value`` that is no number or timestamp for an ordered comparison
+        - '``!re``, ``{{placeholder}}`` or ``regex_match`` combined with an ordered comparison, or other bad comparison parameters'
+    limits:
+      - 'Cells compare as strings: numbers via ``str()`` (``5.0`` when every cell of the row is a number), dates as ``2024-01-31 00:00:00`` (or ``2024-01-31T00:00:00`` when every cell of the row is a date). Use ``!re`` or an ordered comparison when unsure.'
+      - '``expected_value`` compares as ``str(expected_value)``: ``1500`` matches the cell ``1500``, ``1500.0`` does not.'
+      - '``regex_match`` uses ``re.search`` (unanchored); a ``!re`` tag uses ``re.match`` (anchored at the start).'
+      - A formula reads as the result the spreadsheet application saved with it; a workbook written without calculated results reads ``''``.
+    choices:
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A value the user typed
+        text: The cell the playbook filled holds the text or number after saving.
+      - title: A saved formula result
+        text: The computed value stored in the workbook (not the formula) is the expected one.
+      - title: A threshold or a date
+        text: '``comparison_type: greater`` for a total, or a date cell later than a point in time.'
+    examples:
+      - title: total typed into Q3
+        text: Row 1 is spreadsheet row 2, column 2 is column C.
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: Q3
+          row: 1
+          column: 2
+          expected_value: '1500'
+      - title: an amount above a threshold
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: Q2
+          row: 1
+          column: 2
+          expected_value: 900
+          comparison_type: greater
+      - title: a date cell after a point in time
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: Report 2026
+          row: 0
+          column: 1
+          expected_value: '2026-01-01T00:00:00'
+          comparison_type: greater
+      - title: a number with or without decimals
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: Q3
+          row: 1
+          column: 2
+          expected_value: !re '^1500(\.0)?$'
+      - title: a different value fails
+        expect: failed
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: Q2
+          row: 1
+          column: 2
+          expected_value: '950'
+      - title: a formula without a saved result reads empty
+        text: The formula was written without being calculated, so the cell has no stored value.
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: Report 2026
+          row: 1
+          column: 1
+          expected_value: ''
+      - title: a row outside the sheet fails
+        expect: failed
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: Q3
+          row: 10
+          column: 0
+          expected_value: Travel
+      - title: an ordered comparison on text is an error
+        text: The cell holds no number or timestamp, so the test looked at the wrong cell.
+        expect: error
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: Q3
+          row: 1
+          column: 0
+          expected_value: 1000
+          comparison_type: greater
+
+  contains_row:
+    asserts: [exists]
+    formats: [excel]
+    features: [archive_dst, glob_dst, regex_tag, timestamp_tag, placeholder]
+    not_for:
+      - goal: a row is absent, or how often it occurs
+        use: excel.row_count
+      - goal: one cell at a fixed position
+        use: excel.cell_value_matches
+      - goal: every row of the sheet
+        use: excel.compare_rows
+      - goal: a record in a CSV file
+        use: csv.contains_line
+    outcomes:
+      passed: at least one row has the sheet's used width and every item of ``entry`` matches its column
+      failed:
+        - the workbook was read and no row matches (also an empty sheet); the closest rows are reported
+        - the sheet does not exist
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or is no valid .xlsx workbook
+        - '``entry`` is missing and the sheet has rows'
+        - an invalid regex, an unknown placeholder, more than one placeholder in one item
+    limits:
+      - '``entry`` needs one item per column of the sheet''s used width; empty trailing cells read as ``''''``.'
+      - Items compare as ``str(item)`` with the cell string (``3`` and ``'3'`` both match the cell ``3``); see the cell formatting in excel.cell_value_matches.
+      - '``header_row`` skips that many top rows; without it the header row can match too.'
+    use_cases:
+      - title: A record was added
+        text: A new line item exists anywhere in the sheet, whatever its position.
+      - title: A record was removed
+        text: '``excel.row_count`` with ``expected_count: 0``.'
+    examples:
+      - title: a laptop in the office
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          header_row: 1
+          entry: [Laptop, '3', Office]
+      - title: any count, with a regex item
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          entry: [Laptop, !re '[0-9]+', Home]
+      - title: a row of another sheet
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          sheet: Archive
+          entry: [Printer, 1, Office]
+      - title: a shorter entry fails
+        text: The sheet is three columns wide; an entry with two items matches no row.
+        expect: failed
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          entry: [Laptop, '3']
+      - title: an absent row fails
+        text: To assert absence use excel.row_count with ``expected_count`` 0, which passes.
+        expect: failed
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          entry: [Printer, '1', Office]
+      - title: an unknown sheet fails
+        expect: failed
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          sheet: Stock
+          entry: [Laptop, '3', Office]
+      - title: a missing file is an error
+        expect: error
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/stock.xlsx
+          entry: [Laptop, '3', Office]
+
+  row_count:
+    asserts: [count, absent]
+    formats: [excel]
+    features: [archive_dst, glob_dst, count_comparison, regex_tag, timestamp_tag, placeholder, negative]
+    not_for:
+      - goal: rows of a CSV file
+        use: csv.row_count
+      - goal: every row of the sheet
+        use: excel.compare_rows
+    related:
+      - use: excel.contains_row
+        why: one matching row, with the closest rows reported on failure
+    outcomes:
+      passed: the number of rows matching ``entry`` satisfies ``comparison_type`` against ``expected_count``
+      failed:
+        - the workbook was read and the count comparison does not hold
+        - the sheet does not exist (as in excel.contains_row)
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or is no valid .xlsx workbook
+        - '``entry`` is not a list; a negative or non-integer ``expected_count`` or ``header_row``; an unknown ``comparison_type``'
+        - an invalid regex, an unknown placeholder, more than one placeholder in one item
+    limits:
+      - Rows match exactly as in excel.contains_row (used width, ``str(item)``, ``!re`` / ``!timestamp`` items).
+      - Without ``header_row`` the header row is counted like any other row.
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: Record added exactly once
+        text: An edit or import must add one row, not zero and not a duplicate.
+      - title: Row removed
+        text: '``expected_count: 0`` after deleting a row in the spreadsheet application; pair it with a control test.'
+      - title: Several rows of one kind
+        text: '``comparison_type: greater_equal`` with ``!re`` items.'
+    examples:
+      - title: two laptop rows
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          entry: [Laptop, !re '[0-9]+', !re '.*']
+          expected_count: 2
+      - title: one laptop in the office
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          header_row: 1
+          entry: [Laptop, '3', Office]
+          expected_count: 1
+      - title: the printer is gone from the items sheet
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          sheet: Items
+          entry: [Printer, '1', Office]
+          expected_count: 0
+      - title: an unknown sheet fails, it does not count zero
+        expect: failed
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          sheet: Stock
+          entry: [Printer, '1', Office]
+          expected_count: 0
+      - title: absence in a missing file is an error, not a pass
+        expect: error
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/stock.xlsx
+          entry: [Printer, '1', Office]
+          expected_count: 0
+      - title: a negative header_row is an error
+        expect: error
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          header_row: -1
+          entry: [Laptop, '3', Office]
+          expected_count: 1
+
+  validate_columns:
+    asserts: [value]
+    formats: [excel]
+    features: [archive_dst, glob_dst]
+    unsupported:
+      regex_tag: Header names compare as exact text (whitespace-stripped, case-sensitive); a ``!re`` tag never matches.
+    not_for:
+      - goal: the data rows too
+        use: excel.compare_rows
+      - goal: a sheet exists
+        use: excel.sheet_exists
+    outcomes:
+      passed: the header names in row ``column_row`` match ``expected_columns`` within the allowed differences
+      failed:
+        - the workbook was read and headers are missing, extra or (when the names match exactly) in another order
+        - '``column_row`` is outside the sheet or the row is empty; the sheet does not exist'
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or is no valid .xlsx workbook
+        - '``expected_columns`` is not a list or is empty'
+    limits:
+      - Empty header cells inside the used width read as ``''`` and count as extra columns.
+      - The order is checked only when the sets of names are equal; ``ignore_order`` skips that check.
+    use_cases:
+      - title: Export layout
+        text: A version of the application writes the same column layout as the last one.
+      - title: Inserted or removed columns
+        text: A GUI action that adds or deletes a column changes the header row.
+    examples:
+      - title: inventory layout
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          expected_columns: [Item, Count, Location]
+      - title: required columns present, others allowed
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          expected_columns: [Count, Item]
+          allow_extra_columns: true
+          ignore_order: true
+      - title: another order fails
+        expect: failed
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          expected_columns: [Item, Location, Count]
+      - title: an empty list is an error
+        expect: error
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          expected_columns: []
+
+  compare_rows:
+    asserts: [compare, value]
+    formats: [excel]
+    features: [archive_dst, glob_dst, regex_tag, timestamp_tag, placeholder]
+    not_for:
+      - goal: all sheets of two workbooks
+        use: excel.compare_files
+      - goal: one row anywhere in the sheet
+        use: excel.contains_row
+      - goal: the header layout only
+        use: excel.validate_columns
+      - goal: the rows of a CSV file
+        use: csv.compare_rows
+    related:
+      - use: excel.compare_sheets
+        why: two sheets given by path, also of the same workbook
+    outcomes:
+      passed: the rows of ``sheet`` (or the selected ``columns``) match the reference rows within the allowed differences
+      failed:
+        - the workbooks were read and rows differ, are missing or extra; the report lists them by index
+        - the sheet of ``dst`` does not exist
+      error:
+        - '``dst`` or ``reference_file`` does not exist; a glob matches no file or more than one'
+        - a file cannot be read or is no valid .xlsx workbook; ``reference_sheet`` does not exist
+        - both or neither of ``reference_rows`` and ``reference_file``
+        - '``reference_rows`` is not a list, is empty, or holds an item that is not a list'
+        - an invalid regex, an unknown placeholder, more than one placeholder in one cell
+    limits:
+      - Cells compare as strings (see excel.cell_value_matches); a number in ``reference_rows`` must be quoted (``'3'``), or the row never matches (except in a row that also holds a ``!re`` / ``!timestamp`` cell).
+      - 'Ordered mode (default) compares row N with reference row N; ``allow_extra_rows`` / ``allow_missing_rows`` only excuse trailing rows there.'
+      - '``header_row`` skips rows of ``dst`` only; ``reference_header_row`` skips rows of ``reference_file``.'
+      - '``reference_file`` is not pulled in agentless host mode; it needs the in-guest agent.'
+      - Out-of-range indices in ``columns`` are dropped silently.
+    use_cases:
+      - title: A small sheet's full contents
+        text: Every row the playbook entered, and nothing else.
+      - title: Selected columns
+        text: '``columns`` ignores volatile columns such as IDs or times.'
+    examples:
+      - title: inventory rows below the header
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          header_row: 1
+          reference_rows:
+            - [Laptop, '3', Office]
+            - [Monitor, '5', Storage]
+            - [Laptop, '1', Home]
+      - title: names and counts in any order
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          header_row: 1
+          columns: [0, 1]
+          ignore_order: true
+          reference_rows: [[Monitor, '5'], [Laptop, '1'], [Laptop, '3']]
+      - title: against a sheet of a reference workbook
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+          /home/user/reference/budget.xlsx: *budget_saved
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: Q3 (copy)
+          reference_file: /home/user/reference/budget.xlsx
+          reference_sheet: Q3
+      - title: a regex for a volatile location
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          header_row: 1
+          reference_rows:
+            - [Laptop, '3', Office]
+            - [Monitor, '5', !re '.*']
+            - [Laptop, '1', !re '.*']
+      - title: an unquoted number never matches
+        text: YAML reads ``3`` as a number and the cell is the string ``'3'``; quote numbers.
+        expect: failed
+        files:
+          /home/user/Documents/inventory.xlsx: *inventory
+        parameter:
+          dst: /home/user/Documents/inventory.xlsx
+          sheet: Archive
+          header_row: 1
+          reference_rows: [[Printer, 1, Office]]
+      - title: a missing reference sheet is an error
+        text: The expectation cannot be built, so this is no finding about ``dst``.
+        expect: error
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+          /home/user/reference/budget.xlsx: *budget_saved
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          reference_file: /home/user/reference/budget.xlsx
+          reference_sheet: Q4
+      - title: both reference sources are an error
+        expect: error
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+          /home/user/reference/budget.xlsx: *budget_saved
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          reference_file: /home/user/reference/budget.xlsx
+          reference_rows: [[Account, Planned, Spent]]
+
+  compare_sheets:
+    asserts: [compare]
+    formats: [excel]
+    features: [archive_dst, glob_dst, placeholder]
+    not_for:
+      - goal: rows written in the playbook
+        use: excel.compare_rows
+      - goal: all sheets of two workbooks
+        use: excel.compare_files
+    outcomes:
+      passed: the rows of ``actual_sheet`` (or the selected ``columns``) match those of ``reference_sheet`` within the allowed differences
+      failed:
+        - the workbooks were read and rows differ, are missing or extra; the report lists them by index
+        - '``actual_sheet`` does not exist in ``actual``'
+      error:
+        - '``actual`` or ``reference`` does not exist; a glob matches no file or more than one'
+        - a file cannot be read or is no valid .xlsx workbook
+        - '``reference_sheet`` does not exist in ``reference``'
+        - an invalid regex or unknown placeholder in a cell of the reference sheet
+    limits:
+      - Needs the in-guest agent; agentless host mode only pulls a ``dst`` parameter, and this function has none.
+      - '``reference`` may be the same file as ``actual``; ``header_row`` skips rows in both sheets.'
+      - Globs and archive members work in ``actual`` and ``reference``.
+      - 'A cell of the reference sheet holding ``{{ name }}`` is compared with that playbook variable; an unknown name is an error. Other cells compare as exact strings.'
+      - 'Ordered mode (default) compares row N with row N; ``allow_extra_rows`` / ``allow_missing_rows`` only excuse trailing rows there.'
+    use_cases:
+      - title: Copy or move of a sheet
+        text: The copied sheet has the same rows as the original.
+      - title: Export against a known-good workbook
+        text: A reference workbook placed in the guest before the run.
+    examples:
+      - title: copied sheet identical
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/Documents/budget.xlsx
+          actual_sheet: Q3 (copy)
+          reference_sheet: Q3
+      - title: same accounts in both quarters
+        text: '``columns: [0]`` compares the account names only; the amounts differ.'
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/Documents/budget.xlsx
+          actual_sheet: Q3
+          reference_sheet: Q2
+          columns: [0]
+      - title: two quarters differ
+        expect: failed
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/Documents/budget.xlsx
+          actual_sheet: Q3
+          reference_sheet: Q2
+      - title: a missing sheet in actual fails
+        expect: failed
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/Documents/budget.xlsx
+          actual_sheet: Q4
+          reference_sheet: Q3
+      - title: a missing reference sheet is an error
+        expect: error
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/Documents/budget.xlsx
+          actual_sheet: Q3
+          reference_sheet: Q4
+
+  compare_files:
+    asserts: [compare]
+    formats: [excel]
+    features: [archive_dst, glob_dst, placeholder]
+    not_for:
+      - goal: one pair of sheets
+        use: excel.compare_sheets
+      - goal: two CSV files
+        use: csv.compare_files
+      - goal: byte-identical files
+        use: standard.file_hash_matches
+    outcomes:
+      passed: all paired sheets match and no sheet is missing or extra, within the allowed differences
+      failed: the workbooks were read and a sheet is missing or extra, or the rows of a paired sheet differ; the report lists the differences per sheet
+      error:
+        - '``actual`` or ``reference`` does not exist; a glob matches no file or more than one'
+        - a file or one of its sheets cannot be read, or is no valid .xlsx workbook
+        - an unknown ``sheet_mode``
+        - an invalid regex or unknown placeholder in a cell of a reference sheet
+    limits:
+      - Needs the in-guest agent; agentless host mode only pulls a ``dst`` parameter, and this function has none.
+      - '``by_index`` pairs sheets by position whatever their names; ``specific`` compares only ``specific_sheets`` present in both files, ignores all other sheets, and passes on an empty list.'
+      - In ``specific`` mode a listed name absent from ``actual`` counts as missing; one absent only from ``reference`` is skipped.
+      - '``header_row``, ``columns`` and the row options apply to every sheet pair.'
+      - Compares cell values only, not formatting, formulas or workbook properties.
+    choices:
+      sheet_mode: [by_name, by_index, specific]
+    use_cases:
+      - title: Save round trip
+        text: A workbook opened and saved again keeps all sheets and rows.
+      - title: Version comparison
+        text: The export of one application version against the export of another, placed in the guest as a reference.
+    examples:
+      - title: workbook like the reference
+        files:
+          /home/user/Documents/budget.xlsx: *budget_saved
+          /home/user/reference/budget.xlsx: *budget_saved
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/reference/budget.xlsx
+      - title: an extra sheet fails
+        expect: failed
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+          /home/user/reference/budget.xlsx: *budget_saved
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/reference/budget.xlsx
+      - title: extra sheets allowed
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+          /home/user/reference/budget.xlsx: *budget_saved
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/reference/budget.xlsx
+          allow_extra_sheets: true
+      - title: listed sheets only
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+          /home/user/reference/budget.xlsx: *budget_saved
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/reference/budget.xlsx
+          sheet_mode: specific
+          specific_sheets: [Q2, Q3]
+      - title: a listed sheet missing from actual fails
+        expect: failed
+        files:
+          /home/user/Documents/budget.xlsx: *budget_saved
+          /home/user/reference/budget.xlsx: *budget
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/reference/budget.xlsx
+          sheet_mode: specific
+          specific_sheets: [Q3, Q3 (copy)]
+      - title: a missing reference workbook is an error
+        expect: error
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          actual: /home/user/Documents/budget.xlsx
+          reference: /home/user/Documents/budget-reference.xlsx

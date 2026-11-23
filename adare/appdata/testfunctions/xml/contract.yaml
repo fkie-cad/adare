@@ -1,0 +1,560 @@
+# Contract of the xml collection: what each function can and cannot do, and runnable
+# examples. Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run
+# in the unit suite (test_contract_examples.py); `adare test info xml.<name>` shows all of it.
+
+collection:
+  title: XML
+  summary: >-
+    XML files, also XML inside office documents (``report.docx!/docProps/core.xml``): whether an
+    element exists, how many there are, the text or an attribute of an element, two values of one
+    file compared as numbers or times, and the namespace of the root element. Elements are selected
+    with the ElementTree ``ElementPath`` subset of XPath, the same parser on every guest.
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  settings: &settings
+    text: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <settings version="2">
+        <general>
+          <language>de_DE</language>
+          <theme>dark</theme>
+        </general>
+        <recent>
+          <entry ref="item-1" created="2026-03-01T10:00:00Z" modified="2026-03-01T10:00:04Z" visits="3">/home/user/Documents/report.txt</entry>
+          <entry ref="item-2" created="2026-03-02T08:00:00Z" modified="2026-03-02T09:30:00Z" visits="12">/home/user/Documents/notes.txt</entry>
+        </recent>
+        <counters>
+          <opened>41</opened>
+          <saved>42</saved>
+        </counters>
+      </settings>
+  # docProps/core.xml of an office document
+  core: &core
+    text: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+        <dc:creator>Alice Example</dc:creator>
+        <dcterms:modified xsi:type="dcterms:W3CDTF">2026-03-01T10:00:00Z</dcterms:modified>
+      </cp:coreProperties>
+  svg: &svg
+    text: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="16" height="16">
+        <title>Logo</title>
+      </svg>
+
+functions:
+  element_exists:
+    asserts: [exists]
+    formats: [xml]
+    features: [archive_dst, glob_dst]
+    not_for:
+      - goal: an element is absent
+        use: xml.element_count
+      - goal: the text or an attribute of the element
+        use: xml.element_text_matches
+      - goal: how many elements there are
+        use: xml.element_count
+    outcomes:
+      passed: '``xpath`` selects at least one element'
+      failed: the file was read and ``xpath`` selects nothing
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file is no well-formed XML
+        - '``xpath`` contains ``(``, ``::``, ``..`` or ``|`` (also inside a quoted value), or is otherwise invalid'
+    limits:
+      - 'XPath is the ``ElementPath`` subset: ``//tag``, ``/root/child`` (the first step must be the root tag), ``child/grandchild``, ``*``, ``[@attr]``, ``[@attr=''v'']``, ``[tag=''v'']``, ``[1]``. No functions (``text()``, ``contains()``), axes, ``..`` or unions.'
+      - A prefixed name needs ``namespaces`` (prefix -> URI); ``{uri}tag`` works without it. A default namespace has no prefix, so give it one in ``namespaces``.
+    use_cases:
+      - title: An entry was added
+        text: A bookmark, a recent document or an account in a settings or profile XML after an action in the GUI.
+    related:
+      - use: xml.element_count
+        why: '``expected_count: 0`` for absence, or how many entries there are'
+    examples:
+      - title: a recent entry exists
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry[@ref='item-2']
+      - title: an absolute path starts at the root element
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: /settings/general/theme
+      - title: an absent element fails
+        text: To assert absence use xml.element_count with ``expected_count`` 0, which passes.
+        expect: failed
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry[@ref='item-9']
+      - title: an XPath function is an error
+        text: '``text()`` is outside the ElementPath subset; the expression is refused instead of matching nothing.'
+        expect: error
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //language/text()
+      - title: a missing file is an error
+        expect: error
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/other.xml
+          xpath: //entry
+
+  element_text_matches:
+    asserts: [value, order]
+    formats: [xml]
+    features: [archive_dst, glob_dst, regex_tag, placeholder, timestamp_tag, ordered_comparison, wildcard_mode]
+    not_for:
+      - goal: an attribute value
+        use: xml.attribute_matches
+      - goal: how many elements there are, or that one is absent
+        use: xml.element_count
+      - goal: two values of one file compared with each other
+        use: xml.values_compare
+      - goal: a string anywhere in the file, whatever the structure
+        use: text.occurrence_count
+    outcomes:
+      passed: 'the text of the selected element (several: ``any`` one, or ``all``) equals or matches ``expected_value``'
+      failed: the file was read and ``xpath`` selects nothing, or the text does not match
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file is no well-formed XML; an XPath outside the ElementPath subset
+        - an invalid regex or placeholder; an invalid ``wildcard_mode`` when several elements match
+        - in ordered mode, a text that is no number or timestamp, or a ``!re`` / placeholder / ``regex_match`` with it
+        - bad ordered parameters (``comparison_type``, ``value_type``, ``timestamp_epoch``, ...)
+    limits:
+      - The text is ``element.text``, the text before the first child element, not stripped; an element with no text gives ``''``.
+      - 'Without ordered mode an unquoted YAML number (``41``) is not converted to text and never equals the element text: quote it (``''41''``), or set ``value_type: number``.'
+      - '``regex_match`` uses ``re.search`` (unanchored); a ``!re`` tag uses ``re.match`` (anchored at the start).'
+      - '``wildcard_mode`` is only checked when several elements match.'
+      - XPath rules as in xml.element_exists.
+    choices:
+      wildcard_mode: [any, all]
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A setting has a value
+        text: A language, theme or path in a settings XML after it was changed in the GUI.
+      - title: Office document properties
+        text: 'The author of a .docx is ``dc:creator`` in ``report.docx!/docProps/core.xml``.'
+      - title: A counter or time after an action
+        text: '``comparison_type: greater`` against a number, or a ``!timestamp`` between the times saved around the action.'
+    related:
+      - use: xml.xpath_result_matches
+        why: the first element's text as a number, or whether anything matched, as a typed result
+    examples:
+      - title: language setting
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./general/language
+          expected_value: de_DE
+      - title: author of an office document
+        text: The member of the zip container is read through ``!``; the ``dc`` prefix is mapped in ``namespaces``.
+        files:
+          /home/user/Documents/report.docx:
+            zip:
+              docProps/core.xml: *core
+        parameter:
+          dst: /home/user/Documents/report.docx!/docProps/core.xml
+          xpath: ./dc:creator
+          expected_value: Alice Example
+          namespaces:
+            dc: http://purl.org/dc/elements/1.1/
+      - title: every recent entry under Documents
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./recent/entry
+          expected_value: '^/home/user/Documents/'
+          regex_match: true
+          wildcard_mode: all
+      - title: counter greater than a number
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./counters/saved
+          expected_value: 40
+          comparison_type: greater
+      - title: document modified during the action
+        text: The two times are saved with ``save_timestamp`` before and after the action.
+        files:
+          /home/user/Documents/report.docx:
+            zip:
+              docProps/core.xml: *core
+        parameter:
+          dst: /home/user/Documents/report.docx!/docProps/core.xml
+          xpath: ./dcterms:modified
+          expected_value: !timestamp {after: '{{before_save}}', before: '{{after_save}}'}
+          namespaces:
+            dcterms: http://purl.org/dc/terms/
+      - title: an unquoted number never equals the text
+        text: 'The element text is ``41``, but ``expected_value: 41`` is a number. Quote it, or set ``value_type: number``.'
+        expect: failed
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./counters/opened
+          expected_value: 41
+      - title: a missing element fails
+        expect: failed
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./general/font
+          expected_value: Sans
+      - title: a text that is no number is an error in ordered mode
+        expect: error
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./general/theme
+          expected_value: 3
+          comparison_type: greater
+
+  attribute_matches:
+    asserts: [value, order]
+    formats: [xml]
+    features: [archive_dst, glob_dst, regex_tag, placeholder, timestamp_tag, ordered_comparison]
+    unsupported:
+      wildcard_mode: Only the first element ``xpath`` selects is checked; narrow ``xpath`` with a predicate (``[@ref='x']``).
+    not_for:
+      - goal: the text of an element
+        use: xml.element_text_matches
+      - goal: an element with that attribute value exists or is absent
+        use: xml.element_count
+      - goal: two attributes of one file compared with each other
+        use: xml.values_compare
+    outcomes:
+      passed: '``attribute`` of the first selected element equals or matches ``expected_value``'
+      failed: the file was read and ``xpath`` selects nothing, the first element has no such attribute, or the value does not match
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file is no well-formed XML; an XPath outside the ElementPath subset
+        - an invalid regex or placeholder
+        - in ordered mode, a value that is no number or timestamp, or a ``!re`` / placeholder / ``regex_match`` with it
+        - bad ordered parameters (``comparison_type``, ``value_type``, ``timestamp_epoch``, ...)
+    limits:
+      - Only the first selected element is checked.
+      - A namespaced attribute needs the ``{uri}name`` form; ``namespaces`` applies to ``xpath`` only.
+      - 'Without ordered mode an unquoted YAML number (``3``) never equals the attribute text: quote it (``''3''``), or set ``value_type: number``.'
+      - XPath rules as in xml.element_exists.
+    choices:
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: An id, state or flag
+        text: An attribute of an entry in a settings or history XML.
+      - title: A time stored in an attribute
+        text: '``comparison_type: greater`` against a point in time, or ``tolerance`` around one.'
+    examples:
+      - title: visit count of an entry
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry[@ref='item-1']
+          attribute: visits
+          expected_value: '3'
+      - title: entry modified after a point in time
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry[@ref='item-2']
+          attribute: modified
+          expected_value: '2026-03-02T09:00:00Z'
+          comparison_type: greater
+      - title: modified time has the expected date
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry[@ref='item-1']
+          attribute: modified
+          expected_value: !re '2026-03-01T'
+      - title: a missing attribute fails
+        expect: failed
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry[@ref='item-1']
+          attribute: deleted
+          expected_value: 'true'
+
+  element_count:
+    asserts: [count, absent]
+    formats: [xml]
+    features: [archive_dst, glob_dst, count_comparison, negative]
+    not_for:
+      - goal: the text or an attribute of the elements
+        use: xml.element_text_matches
+    outcomes:
+      passed: the number of elements ``xpath`` selects satisfies ``comparison_type``
+      failed: the file was read and the count comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file is no well-formed XML; an XPath outside the ElementPath subset
+        - a negative or non-integer ``expected_count``, or an unknown ``comparison_type``
+    limits:
+      - XPath rules as in xml.element_exists; select by attribute or child text with ``[@attr='v']`` / ``[tag='v']``.
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: An entry was removed
+        text: '``expected_count: 0`` with a predicate for that entry after a delete or clean-up action.'
+      - title: How many entries a list holds
+        text: Recent documents, accounts or bookmarks in a settings XML.
+    examples:
+      - title: two recent entries
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./recent/entry
+          expected_count: 2
+      - title: the entry is gone
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry[@ref='item-9']
+          expected_count: 0
+      - title: at least one entry
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry
+          expected_count: 1
+          comparison_type: greater_equal
+      - title: a glob matching two files is an error
+        text: The glob must match exactly one file, also for a count.
+        expect: error
+        files:
+          /home/user/.config/app/settings.xml: *settings
+          /home/user/.config/app/backup.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/*.xml
+          xpath: //entry
+          expected_count: 0
+
+  xpath_result_matches:
+    asserts: [value, exists]
+    formats: [xml]
+    features: [archive_dst, glob_dst]
+    unsupported:
+      regex_tag: '``expected_value`` is compared as plain text, number or boolean; use xml.element_text_matches for ``!re``, ``regex_match`` and ``!timestamp``.'
+      ordered_comparison: Only equality; use xml.element_text_matches with ``comparison_type`` for greater / less.
+    not_for:
+      - goal: text with regex, placeholders or several elements
+        use: xml.element_text_matches
+      - goal: an element is absent
+        use: xml.element_count
+    outcomes:
+      passed: the result of ``xpath`` as ``result_type`` equals ``expected_value``
+      failed: the file was read and the result differs
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file is no well-formed XML; an XPath outside the ElementPath subset
+        - '``result_type: number`` and the first element''s text is no number; an unknown ``result_type``'
+    limits:
+      - '``text`` and ``number`` use the first selected element only; with no match ``text`` is ``''''`` and ``number`` is ``0.0`` (so ``expected_value: 0`` passes on a missing element).'
+      - '``boolean`` is whether ``xpath`` selects anything. ``expected_value`` is converted with ``bool()``: a quoted ``''false''`` is true, write unquoted ``false``.'
+      - XPath rules as in xml.element_exists.
+    choices:
+      result_type: [text, number, boolean]
+    use_cases:
+      - title: A numeric field
+        text: A counter or size compared as a number (``42`` equals ``42.0``).
+    examples:
+      - title: opened counter as a number
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./counters/opened
+          expected_value: 41
+          result_type: number
+      - title: whether a recent entry exists
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry[@ref='item-1']
+          expected_value: true
+          result_type: boolean
+      - title: a quoted 'false' is true
+        text: '``bool(''false'')`` is true; the element is missing, so the result is false and the test fails.'
+        expect: failed
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry[@ref='item-9']
+          expected_value: 'false'
+          result_type: boolean
+      - title: a text that is no number is an error
+        expect: error
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./general/language
+          expected_value: 1
+          result_type: number
+
+  namespace_matches:
+    asserts: [value]
+    formats: [xml]
+    features: [archive_dst, glob_dst]
+    not_for:
+      - goal: elements in a namespace exist
+        use: xml.element_exists
+      - goal: the version or type of a document in an attribute
+        use: xml.attribute_matches
+    outcomes:
+      passed: 'the detected namespaces contain (``exact``: equal) ``expected_namespaces``'
+      failed: the file was read and an expected prefix is missing or has another URI (``exact``, also an extra one)
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file is no well-formed XML
+        - '``expected_namespaces`` missing; an unknown ``check_mode``'
+    limits:
+      - 'Only the namespace of the root element is detected, under prefix ``''''``, even when the root is written with a prefix. Other ``xmlns:prefix`` declarations are never seen: expecting them fails.'
+      - Prefixes and URIs compare exactly (case-sensitive).
+    choices:
+      check_mode: [contains, exact]
+    use_cases:
+      - title: Which dialect or schema version a file uses
+        text: The root namespace of an SVG, an office part or a settings file written by a newer version.
+    examples:
+      - title: an SVG file
+        files:
+          /home/user/Pictures/logo.svg: *svg
+        parameter:
+          dst: /home/user/Pictures/logo.svg
+          expected_namespaces:
+            '': http://www.w3.org/2000/svg
+      - title: exact also passes with other declared prefixes
+        text: '``xmlns:xlink`` is declared, but only the root namespace is detected.'
+        files:
+          /home/user/Pictures/logo.svg: *svg
+        parameter:
+          dst: /home/user/Pictures/logo.svg
+          expected_namespaces:
+            '': http://www.w3.org/2000/svg
+          check_mode: exact
+      - title: a declared prefix is not detected
+        text: The file declares ``xmlns:xlink``; the test fails anyway.
+        expect: failed
+        files:
+          /home/user/Pictures/logo.svg: *svg
+        parameter:
+          dst: /home/user/Pictures/logo.svg
+          expected_namespaces:
+            xlink: http://www.w3.org/1999/xlink
+
+  values_compare:
+    asserts: [compare, order]
+    formats: [xml]
+    features: [archive_dst, glob_dst, ordered_comparison]
+    unsupported:
+      wildcard_mode: Each side must select exactly one value; several are an error.
+      regex_tag: Values compare as numbers or times only; test text with xml.element_text_matches.
+    not_for:
+      - goal: one value against a constant
+        use: xml.element_text_matches
+      - goal: one attribute against a constant
+        use: xml.attribute_matches
+    outcomes:
+      passed: '``first <comparison_type> second + offset`` holds'
+      failed: the file was read and a side selects nothing (or no element with the attribute), or the comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file is no well-formed XML; an XPath outside the ElementPath subset
+        - a side selects several values
+        - a value is no number or timestamp (an empty element text too), or one is a number and the other a timestamp
+        - bad parameters (``comparison_type``, ``value_type``, ``tolerance`` with an order comparison, ``timestamp_epoch``, ...)
+    limits:
+      - Each side is the text (``element.text``) or ``attribute`` of the one element its XPath selects; ``other_xpath`` may equal ``xpath`` to compare two attributes of one element.
+      - XPath rules as in xml.element_exists.
+    choices:
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A is earlier than B
+        text: A last-saved value later than the first-opened one, an end after a start (``comparison_type`` ``less`` / ``greater``).
+      - title: A within a few seconds of B
+        text: 'Two timestamps written by one action (``tolerance: 5``).'
+      - title: A = B + n
+        text: 'A counter one above another (``offset: 1``), or a time a fixed interval after another (``offset`` in seconds).'
+    examples:
+      - title: modified not before created
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry[@ref='item-1']
+          attribute: modified
+          other_xpath: //entry[@ref='item-1']
+          other_attribute: created
+          comparison_type: greater_equal
+      - title: written within five seconds
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry[@ref='item-1']
+          attribute: modified
+          other_xpath: //entry[@ref='item-1']
+          other_attribute: created
+          tolerance: 5
+      - title: saved is one above opened
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./counters/saved
+          other_xpath: ./counters/opened
+          offset: 1
+      - title: a side that selects nothing fails
+        expect: failed
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./counters/printed
+          other_xpath: ./counters/opened
+      - title: a side with several values is an error
+        expect: error
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: //entry
+          attribute: visits
+          other_xpath: ./counters/opened
+          comparison_type: less

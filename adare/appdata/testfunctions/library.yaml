@@ -1,0 +1,262 @@
+# What all testfunction collections share: the vocabulary for `asserts:` and `formats:` in each
+# collection's contract.yaml, the cross-cutting features a function can support, and the known
+# gaps (goals no bundled testfunction covers). Rendered by `adare test feature`, `adare test
+# search` (filters, "no match" answers), the skill references and the Sphinx reference.
+# Text uses ``double backticks`` for code, as the docstrings do.
+
+asserts:
+  exists: a file, folder, key, row, element or entry is present
+  absent: something is gone or was never written (a negative test, INCONCLUSIVE without proof of the act)
+  value: a value equals or matches an expected value (exact, regex, placeholder)
+  count: how many times something occurs or how many items there are
+  order: a number or point in time is greater, less or within a tolerance of another
+  compare: two files, sheets or values of one file are compared with each other
+  content: the raw content or bytes of a file (contains, equals, regex, hash, size)
+  metadata: file system metadata (timestamps, permissions, owner)
+  state: live state of the guest system (service, process, user, registry)
+  ui: what is visible on the screen
+
+formats:
+  file: any file (existence, size, hash, timestamps, raw bytes)
+  directory: a folder and its entries
+  text: text or raw bytes of any file, in one or several encodings
+  binary: application-specific binary containers without a parser (offsets, byte patterns, string tables)
+  json: JSON documents (also LZ4 stores through ``store.jsonlz4!``)
+  jsonl: JSON Lines / NDJSON
+  csv: CSV (comma-separated; quoted fields, several encodings)
+  xml: XML, also office documents through ``report.docx!/docProps/core.xml``
+  excel: Excel workbooks (.xlsx)
+  sqlite: SQLite databases, including the write-ahead log (-wal)
+  ini: INI and key files
+  plist: property lists (XML and binary)
+  yaml: YAML (also several documents in one file)
+  toml: TOML
+  image: PNG text chunks, EXIF tags, image dimensions
+  registry: the Windows registry of the running guest
+  system: live Linux system state (services, processes, users, logs)
+  screen: the guest's screen, as seen by the host
+
+features:
+  archive_dst:
+    title: Files inside archives and compressed files
+    summary: >-
+      ``dst`` can name a member of an archive or the decompressed content of a compressed file, with
+      ``!``. tar (plain and compressed), zip (also .docx/.xlsx/.odt) and single-file gzip, bzip2, xz,
+      LZ4 (frame format and the LZ4 block with a magic header of ``.jsonlz4`` stores) and Snappy. The
+      format comes from the content, not the extension. Archives nest. Only file members can be read.
+    syntax: |-
+      archive!/member/path     a member of a tar or zip (member paths always use /)
+      file.gz!                 the decompressed content of a single-file archive
+      outer.zip!/inner.tar!/x  an archive inside an archive
+      {archive: ..., member: ...}  mapping form, same meaning
+    example: |-
+      dst: /home/user/backup.tar.gz!/etc/app/config.json
+    doc: /guide/archives
+    keywords: [archive, zip, tar, gzip, gz, lz4, jsonlz4, snappy, xz, bzip2, compressed, member, docx, xlsx, odt]
+
+  glob_dst:
+    title: Globs in dst
+    summary: >-
+      ``dst`` may be a glob (``*``, ``?``, ``[...]``). Unless the function says otherwise the glob must
+      match exactly one path: none or several is an ERROR, not a failure. Existence and count
+      functions accept several matches (``match_mode`` / ``expected_count``).
+    syntax: |-
+      /home/*/app/settings.json      one user's file, whoever the user is
+      C:\Users\*\AppData\...\x.db    Windows paths take globs too
+    example: |-
+      dst: /home/*/.config/app/settings.json
+    keywords: [glob, wildcard, pattern, path, star]
+
+  regex_tag:
+    title: Regex values (!re)
+    summary: >-
+      An expected value written as ``!re '<pattern>'`` matches with Python's ``re.match`` (anchored at
+      the start; add ``$`` to anchor the end). ``!reALL`` matches any value. A literal pattern is
+      checked when the playbook loads; an invalid one is an ERROR. Functions with a ``regex_match``
+      parameter take a plain string pattern instead.
+    syntax: |-
+      expected_value: !re '^[0-9]{4}-'
+      expected_value: !reALL
+    example: |-
+      expected_value: !re '^https://example\.org/'
+    doc: /reference/actions
+    keywords: [regex, regexp, pattern, re, match]
+
+  placeholder:
+    title: Placeholders ({{ variable }})
+    summary: >-
+      ``{{ name }}`` in a parameter is replaced by a playbook variable or a value saved during the
+      run (``save_timestamp``) before the test runs. An unknown placeholder is an ERROR.
+    syntax: |-
+      expected_value: '{{ username }}'
+    example: |-
+      content: 'login {{ username }}'
+    doc: /reference/actions
+    keywords: [placeholder, variable, template, jinja, saved, '{{']
+
+  timestamp_tag:
+    title: Times as expected values (!timestamp)
+    summary: >-
+      ``!timestamp`` compares a stored time with an interval or a tolerance: ``after`` / ``before``
+      (often the times saved around the action), ``tolerance`` in seconds, and ``epoch`` (1970, 1601,
+      2001) plus ``unit`` (s, ms, us, ns, 100ns) for times stored as numbers. Needs ``tolerance`` or
+      ``after`` and ``before``.
+    syntax: |-
+      expected_value: !timestamp {after: '{{t0}}', before: '{{t1}}', epoch: 1601, unit: 100ns}
+    example: |-
+      expected_value: !timestamp {after: '{{before_visit}}', before: '{{after_visit}}', epoch: 1970, unit: us}
+    doc: /guide/choosing-testfunctions
+    keywords: [timestamp, time, date, epoch, filetime, unix, interval, after, before, tolerance]
+
+  ordered_comparison:
+    title: Ordered comparison of numbers and times
+    summary: >-
+      ``comparison_type`` (equals, not_equals, greater, less, greater_equal, less_equal),
+      ``value_type`` (auto, number, timestamp), ``tolerance`` and the time parameters
+      (``time_format``, ``timestamp_epoch``, ``timestamp_unit``, ``utc_offset``) compare the found
+      value with ``expected_value`` as a number or a point in time. A value that is no number or time
+      is an ERROR (the test looked at the wrong field). ``!re``, placeholders and ``regex_match`` cannot
+      be combined with them.
+    syntax: |-
+      comparison_type: greater
+      timestamp_epoch: 1970
+      timestamp_unit: ms
+    example: |-
+      expected_value: '2026-03-01T12:00:00Z'
+      comparison_type: greater
+    doc: /reference/testfunctions/index
+    keywords: [greater, less, newer, older, earlier, later, before, after, tolerance, number, compare, threshold]
+
+  count_comparison:
+    title: Counts with a comparison
+    summary: >-
+      Count functions take ``expected_count`` and ``comparison_type`` (equals by default, greater,
+      less, greater_equal, less_equal). ``expected_count: 0`` asserts absence and makes the test a
+      negative test.
+    syntax: |-
+      expected_count: 0                          # absent
+      expected_count: 1, comparison_type: greater_equal   # at least once
+    example: |-
+      expected_count: 0
+    doc: /guide/absence
+    keywords: [count, how many, number, occurrences, at least, at most, none, zero]
+
+  key_path:
+    title: Key paths into structured files
+    summary: >-
+      Dot paths from the root: ``a.b.c``; ``*`` expands every value of an object, ``name[*]`` every
+      array element, ``name[0]`` / ``name[-1]`` one element; a leading ``[0]`` addresses a top-level
+      array and ``['a.b']`` a key containing dots. When a path selects several values,
+      ``wildcard_mode`` decides whether one (any) or all must match.
+    syntax: |-
+      key_path: profiles[*].name
+      key_path: "['window.size'].width"
+    example: |-
+      key_path: user.profile.name
+    doc: /reference/testfunctions/json/index
+    keywords: [key, path, dot, nested, field, property, wildcard]
+
+  wildcard_mode:
+    title: Several matches (wildcard_mode)
+    summary: >-
+      When a path, glob, key or several lines select several values, ``wildcard_mode: any`` (usual
+      default) passes if one matches and ``all`` only if every one matches.
+    syntax: |-
+      wildcard_mode: all
+    example: |-
+      wildcard_mode: any
+    keywords: [any, all, every, each, several, multiple]
+
+  encoding:
+    title: Text encodings
+    summary: >-
+      An ``encoding`` parameter reads the file in a given encoding (``utf-8``, ``utf-16-le``, ...);
+      functions that take a list search in each. A BOM is honoured where the function says so.
+    syntax: |-
+      encoding: utf-16-le
+      encoding: [utf-8, utf-16-le]
+    example: |-
+      encoding: utf-16-le
+    keywords: [encoding, utf, utf8, utf16, bom, unicode, latin1]
+
+  offset_expression:
+    title: Offset expressions (binary files)
+    summary: >-
+      ``offset`` / ``start`` / ``end`` of the ``binary`` functions take an int (negative counts from the
+      end) or an expression: ``u32be@-4`` reads a big-endian u32 at -4 and uses it as the offset (a
+      trailer pointer), ``+N`` / ``-N`` adds, parentheses nest, up to 4 ``@`` reads, and
+      ``find:<hex>`` is the offset of the first occurrence of those bytes.
+    syntax: |-
+      16, 0x10, -4
+      u32be@-4+8
+      u32le@(u32le@0+4)
+      find:6b6579+3
+    example: |-
+      start: u32be@-4+4
+    doc: /reference/testfunctions/binary/index
+    keywords: [offset, pointer, trailer, header, struct, byte, position]
+
+  sqlite_view:
+    title: SQLite views of the write-ahead log
+    summary: >-
+      ``view`` chooses which state of a database in WAL mode a query sees: ``current`` (main file plus
+      committed WAL frames, as an application sees it), ``main_file`` (the file alone), ``wal_added``
+      / ``wal_removed`` (rows the WAL adds or removes). All views come from one snapshot.
+    syntax: |-
+      view: wal_removed
+    example: |-
+      view: main_file
+    doc: /reference/testfunctions/sqlite/index
+    keywords: [wal, write-ahead, journal, checkpoint, uncommitted, deleted rows, main file]
+
+  negative:
+    title: Negative tests (absence)
+    summary: >-
+      A pass that means "something is absent" is only reported as SUCCESS when ADARE can show that the
+      actions before it took effect; otherwise it is INCONCLUSIVE. Pair the test with a control test
+      (``controls:``) that proves the act. A missing or unreadable file is an ERROR, never a pass.
+    syntax: |-
+      expected_count: 0          # count functions
+      controls: [file_was_written]
+    example: |-
+      controls: [history_entry_existed]
+    doc: /guide/negative-results
+    keywords: [absent, deleted, removed, gone, wiped, cleared, never, not, missing, inconclusive, control]
+
+gaps:
+  - id: archive_directory_entries
+    summary: A directory entry inside an archive cannot be tested; only file members can be read.
+    keywords: [directory in archive, folder in zip, archive directory, empty folder in archive]
+    instead: Test a file inside that directory (``a.zip!/dir/file``), or list the archive in a ``run`` action and test its output.
+  - id: archive_7z_rar
+    summary: 7z and RAR archives cannot be read through ``!`` (tar, zip, gzip, bzip2, xz, LZ4 and Snappy can).
+    keywords: [7z, 7zip, rar]
+    instead: Extract the archive in a ``run`` action first, then test the extracted file.
+  - id: windows_event_log
+    summary: No testfunction parses Windows event logs (.evtx).
+    keywords: [evtx, event log, eventlog, windows event, event viewer]
+    instead: Export the events to XML or CSV in a ``run`` action (``wevtutil qe ... /f:xml``) and use the xml or csv functions, or write a collection.
+  - id: windows_artifact_parsers
+    summary: No parsers for Windows artifacts such as prefetch, LNK, jump lists, shellbags or the recycle bin index files.
+    keywords: [prefetch, lnk, shortcut, jump list, jumplist, shellbags, recycle bin, $I, usnjrnl, mft]
+    instead: Read fixed fields with the binary functions (offsets, string tables), or write a collection with a parser.
+  - id: csv_other_delimiter
+    summary: The csv functions read comma-separated files only; there is no delimiter parameter (semicolon or tab files read as one column).
+    keywords: [semicolon, tab separated, tsv, delimiter, separator csv]
+    instead: Match whole lines with ``text.line_count`` (``regex_match``) or ``standard.file_content_matches_regex``.
+  - id: values_compare_text
+    summary: values_compare compares numbers and times only, not two text values.
+    keywords: [compare two strings, same text twice, text equals other key]
+    instead: Test each value against the expected text with ``value_matches``.
+  - id: sqlite_per_commit_view
+    summary: SQLite views cover the main file, the current state and the WAL difference, not the state after commit N.
+    keywords: [commit n, per commit, intermediate state, wal history]
+    instead: Use ``sqlite.wal_frame_count`` for the number of commits and the ``wal_added`` / ``wal_removed`` views.
+  - id: sqlite_freelist_carving
+    summary: Deleted SQLite records in free pages, freeblocks or stale WAL frames are not carved.
+    keywords: [carve, carving, freelist, free page, deleted record recovery, unallocated, slack]
+    instead: Search the raw bytes with ``text.occurrence_count`` or ``binary.pattern_count`` (main file and ``-wal``).
+  - id: memory_and_network
+    summary: Testfunctions read files and guest state, not memory dumps or network captures.
+    keywords: [memory, ram, dump, volatility, pcap, network, traffic, packet]
+    instead: Analyse such evidence outside the playbook tests.

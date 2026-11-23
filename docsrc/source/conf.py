@@ -33,6 +33,7 @@ extensions = [
     'sphinx.ext.autosectionlabel',
     'sphinx_design',
     'simple_datatables',
+    'adare_testfunctions',
 ]
 
 autosectionlabel_prefix_document = True

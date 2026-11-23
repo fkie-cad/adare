@@ -8,10 +8,10 @@ Image
 :Functions: 5
 :Category: Image Metadata
 
-The **image** testset checks metadata stored in image files: PNG text chunks, EXIF tags and pixel dimensions.
+.. adare-testfunction-collection:: image
 
-Overview
---------
+Reading the Metadata
+--------------------
 
 **PNG text chunks** are read by a standard-library chunk walker, not an image library: it checks the
 signature, visits every chunk up to ``IEND`` (also chunks after the image data), verifies every chunk's
@@ -29,11 +29,6 @@ number (``0x9003``, ``36867``). Values are compared by their text form:
 * a YAML number in ``expected_value`` is formatted the same way (``72``); write a sequence as text (``51, 30, 12.5``)
 
 **Dimensions** are read with Pillow without decoding the pixel data.
-
-Absence is checked with the count functions and ``expected_count: 0``. A missing file, a glob matching
-no file or more than one, an unreadable or corrupt file (bad PNG signature or CRC, truncated chunk, not an
-image) and bad parameters (unknown tag name, bad ``comparison_type``, invalid regex) are errors; a test
-fails only when the file was read and its content does not match.
 
 Test Functions
 --------------

@@ -1,0 +1,235 @@
+# Contract of the visual collection: what each screen check can and cannot do, and examples.
+# Schema and rendering: adare/adare/backend/testfunction/contract.py. The functions run on the
+# host against a screenshot of the running guest, so their examples are not run offline; their
+# parameters are still checked. The icon library is described in docsrc/source/guide/icon-library.rst.
+
+collection:
+  title: Visual
+  summary: >-
+    What the guest's screen shows: a text, an icon from the icon library or a template image is
+    visible, not visible, or visible a given number of times. The checks run on the host: they take
+    one fresh screenshot of the running guest and search it with the CV server (OCR for text,
+    template and feature matching for icons and images). They see only the screen; state that is not
+    shown (a file on disk, a saved setting) needs a file, registry or system test.
+
+functions:
+  exists:
+    asserts: [ui, exists]
+    formats: [screen]
+    not_for:
+      - goal: a file was written or saved
+        use: standard.file_exists
+      - goal: a text was written into a file
+        use: standard.file_content_contains
+      - goal: a setting was stored in the Windows registry
+        use: windows.registry_value_matches
+      - goal: a program is running, also without a window
+        use: linux.process_running
+      - goal: an element is not shown (any more)
+        use: visual.not_exists
+    related:
+      - use: visual.count_min
+        why: the same check with a minimum number of matches
+    outcomes:
+      passed: the text, icon or image is found at least once on the screenshot
+      failed: the screenshot was searched and nothing matches
+      error:
+        - none of ``text``, ``icon``, ``image`` is given
+        - the ``image`` file does not exist on the host; the ``icon`` name is unknown or cannot be extracted (no connected agent, no Windows target)
+        - no window matches ``window``; the screenshot or the CV server fails
+    limits:
+      - 'One screenshot at the moment of the test, no waiting or retry: an element that appears a moment later fails. Put a ``wait_until`` action before the test when the UI needs time.'
+      - 'Only what is on screen counts: a minimised or covered window, content scrolled out of view and state that is never displayed are invisible to it.'
+      - '``text`` is a case-insensitive substring of ONE OCR text box: a phrase split across boxes may not match, and OCR misreads (``l`` / ``I``, dropped punctuation) make it fail.'
+      - '``icon`` and ``image`` use the CV icon pipeline with a relaxed match threshold (0.5): it tolerates scale and some theme change, but a differently drawn icon (another version, another icon set) may not match, and a similar-looking icon may.'
+      - '``icon`` names come from ``icon-library.yml``; they are extracted from Windows targets only, through the guest agent. On other guests use ``image`` with a template PNG.'
+      - 'Precedence when several are given: ``text``, then ``icon``, then ``image``; the others are ignored.'
+      - '``window`` captures the first window whose title matches (Linux guests); on Windows the full screen is searched.'
+      - 'It needs a running guest screen: the hostside backend evaluates tests after the guest shut down, so screen checks cannot run there.'
+    use_cases:
+      - title: A dialog or message appeared
+        text: A confirmation, an error message or a status text after an action.
+      - title: An icon on the desktop or in a folder view
+        text: A new file icon, a recycle bin icon that shows it is full.
+      - title: Check a step before relying on it
+        text: As a control test (``controls:``) for a negative test that follows.
+    examples:
+      - title: a status message is shown
+        parameter:
+          text: Document saved
+      - title: an icon from the icon library
+        parameter:
+          icon: recycle_bin
+      - title: a template image in one window
+        text: The PNG lies next to the playbook; only the first window whose title contains ``Files`` is searched (Linux guests).
+        parameter:
+          image: img/new_folder.png
+          window: Files
+      - title: text wins over icon
+        text: With both given only the text is searched; the icon is ignored.
+        parameter:
+          text: Recycle Bin
+          icon: recycle_bin
+      - title: nothing to look for is an error
+        expect: error
+        parameter:
+          window: Files
+
+  not_exists:
+    asserts: [ui, absent]
+    formats: [screen]
+    features: [negative]
+    not_for:
+      - goal: a file was deleted
+        use: standard.file_does_not_exist
+      - goal: a value or entry was removed from a file
+        use: text.occurrence_count
+      - goal: an element is shown
+        use: visual.exists
+    related:
+      - use: visual.count_max
+        why: '``max: 0`` is the same check; a higher ``max`` allows a few'
+    outcomes:
+      passed: the screenshot was searched and the text, icon or image is not found
+      failed: the element is found at least once
+      error:
+        - none of ``text``, ``icon``, ``image`` is given
+        - the ``image`` file does not exist on the host; the ``icon`` name is unknown or cannot be extracted
+        - no window matches ``window``; the screenshot or the CV server fails (an error, never a pass)
+    limits:
+      - 'A pass only says the element is not visible now: a closed dialog, a minimised window, content scrolled away and an element not rendered yet all look the same. Prove the act with an earlier visual.exists as a control (``controls:``).'
+      - As a negative test it is INCONCLUSIVE when a GUI action before it failed or failed its ``verify:``.
+      - 'OCR misreads and a differently drawn icon also make the element "absent": a pass is weaker evidence than a fail.'
+      - 'Text, icon, image, precedence and ``window`` as in visual.exists; the hostside backend cannot run it.'
+    use_cases:
+      - title: A dialog closed
+        text: The confirmation is gone after clicking OK.
+      - title: An item disappeared from view
+        text: A deleted file's icon on the desktop, an emptied recycle bin.
+    examples:
+      - title: the recycle bin is not full
+        parameter:
+          icon: recycle_bin_full
+      - title: the error message is gone
+        parameter:
+          text: Could not save the document
+      - title: absence in one window only
+        text: Other windows may still show the text (Linux guests).
+        parameter:
+          text: report.odt
+          window: Files
+
+  count_equals:
+    asserts: [ui, count]
+    formats: [screen]
+    unsupported:
+      count_comparison: 'Takes ``n`` (exact); there is no ``expected_count`` / ``comparison_type``: use visual.count_min or visual.count_max for bounds.'
+      negative: '``n: 0`` is not recognised as a negative test (no INCONCLUSIVE check); use visual.not_exists or visual.count_max with ``max: 0``.'
+    not_for:
+      - goal: how many files are in a folder
+        use: standard.file_count
+      - goal: at least or at most a number of matches
+        use: visual.count_min
+    outcomes:
+      passed: the text, icon or image is found exactly ``n`` times
+      failed: the screenshot was searched and the number of matches differs
+      error:
+        - none of ``text``, ``icon``, ``image`` is given, or ``n`` is missing
+        - the ``image`` file does not exist on the host; the ``icon`` name is unknown or cannot be extracted
+        - no window matches ``window``; the screenshot or the CV server fails
+    limits:
+      - 'Icon and image matches are capped at 10, so a count above 10 cannot be observed (``n: 11`` never passes).'
+      - 'Text counts OCR text boxes that contain the string: two occurrences in one box count once, and OCR may merge neighbouring words into one box.'
+      - 'Overlapping icon matches are merged, but a similar-looking icon nearby can add a match: prefer a small ``window`` or a distinctive template.'
+      - 'Text, icon, image, precedence and ``window`` as in visual.exists; the hostside backend cannot run it.'
+    use_cases:
+      - title: Visible items
+        text: Three file icons on the desktop after a copy.
+    examples:
+      - title: three document icons
+        parameter:
+          image: icons/odt_file.png
+          n: 3
+      - title: one tab with a title
+        parameter:
+          text: Untitled
+          n: 1
+      - title: without n it is an error
+        expect: error
+        parameter:
+          icon: folder
+
+  count_min:
+    asserts: [ui, count]
+    formats: [screen]
+    unsupported:
+      count_comparison: 'Takes ``min`` (inclusive); there is no ``expected_count`` / ``comparison_type``.'
+    not_for:
+      - goal: an element is shown at all
+        use: visual.exists
+      - goal: how many files match a glob
+        use: standard.file_count
+    outcomes:
+      passed: the text, icon or image is found at least ``min`` times
+      failed: the screenshot was searched and fewer than ``min`` matches are found
+      error:
+        - none of ``text``, ``icon``, ``image`` is given, or ``min`` is missing
+        - the ``image`` file does not exist on the host; the ``icon`` name is unknown or cannot be extracted
+        - no window matches ``window``; the screenshot or the CV server fails
+    limits:
+      - 'Icon and image matches are capped at 10: ``min`` above 10 never passes for them.'
+      - Text counts OCR text boxes, as in visual.count_equals.
+      - 'Text, icon, image, precedence and ``window`` as in visual.exists; the hostside backend cannot run it.'
+    use_cases:
+      - title: At least N items visible
+        text: Two new documents open, several entries in a list.
+    examples:
+      - title: two untitled documents
+        parameter:
+          text: Untitled
+          min: 2
+      - title: at least one folder icon
+        parameter:
+          icon: folder
+          min: 1
+
+  count_max:
+    asserts: [ui, count, absent]
+    formats: [screen]
+    features: [negative]
+    unsupported:
+      count_comparison: 'Takes ``max`` (inclusive); there is no ``expected_count`` / ``comparison_type``.'
+    not_for:
+      - goal: a file count stays below a limit
+        use: standard.file_count
+    related:
+      - use: visual.not_exists
+        why: 'the same as ``max: 0``, and clearer'
+    outcomes:
+      passed: 'the text, icon or image is found at most ``max`` times (``max: 0``: not at all)'
+      failed: the screenshot was searched and more than ``max`` matches are found
+      error:
+        - none of ``text``, ``icon``, ``image`` is given, or ``max`` is missing
+        - the ``image`` file does not exist on the host; the ``icon`` name is unknown or cannot be extracted
+        - no window matches ``window``; the screenshot or the CV server fails
+    limits:
+      - 'Icon and image matches are capped at 10: with ``max`` 10 or more the test cannot fail for them.'
+      - '``max: 0`` is a negative test: INCONCLUSIVE when a GUI action before it failed, and a pass only means "not visible now" (see visual.not_exists).'
+      - Text counts OCR text boxes, as in visual.count_equals.
+      - 'Text, icon, image, precedence and ``window`` as in visual.exists; the hostside backend cannot run it.'
+    use_cases:
+      - title: No duplicates shown
+        text: At most one notification or one copy of an icon after repeating an action.
+    examples:
+      - title: at most five folders
+        parameter:
+          icon: folder
+          max: 5
+      - title: a single notification
+        parameter:
+          text: Download complete
+          max: 1
+      - title: none left, as a negative test
+        parameter:
+          icon: recycle_bin_full
+          max: 0

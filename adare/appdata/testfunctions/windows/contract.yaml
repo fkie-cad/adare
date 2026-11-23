@@ -1,0 +1,136 @@
+# Contract of the windows collection: what each function can and cannot do, and examples.
+# Schema and rendering: adare/adare/backend/testfunction/contract.py. Both functions read the
+# live registry of a running Windows guest, so their examples are not run offline; their
+# parameters are still checked. `adare test info windows.<name>` shows all of it.
+
+collection:
+  title: Windows
+  summary: >-
+    The registry of a running Windows guest: whether a key exists and whether a value has the
+    expected data (and type). The functions ask the live registry (in the guest agent through
+    ``winreg``, in host test mode through PowerShell over QGA); they do not read offline hive files,
+    and the hostside backend, which has no running Windows guest, cannot run them.
+
+functions:
+  registry_key_exists:
+    asserts: [state, exists]
+    formats: [registry]
+    features: [placeholder]
+    not_for:
+      - goal: the data of a value under the key
+        use: windows.registry_value_matches
+      - goal: a file or folder an installer created
+        use: standard.file_exists
+      - goal: a section or key in an INI or config file
+        use: ini.contains_key
+    outcomes:
+      passed: the key ``key_path`` can be opened for reading
+      failed: the key does not exist
+      error:
+        - the guest is not Windows, or ``winreg`` is missing
+        - a bare or unknown hive (``HKLM`` alone, ``HKEY_FOO\x``)
+        - the key exists but denies read access
+        - the hostside backend (refused before boot)
+    limits:
+      - 'Windows guests only. Runs in the guest agent, or in host test mode as a PowerShell ``Test-Path`` over QGA.'
+      - 'Hives: ``HKEY_CLASSES_ROOT`` / ``HKCR``, ``HKEY_CURRENT_USER`` / ``HKCU``, ``HKEY_LOCAL_MACHINE`` / ``HKLM``, ``HKEY_USERS`` / ``HKU``, ``HKEY_CURRENT_CONFIG`` / ``HKCC``, case-insensitive. ``/`` and ``\`` both separate keys.'
+      - '``HKCU`` is the hive of the user the test runs as (the agent''s user; in host test mode the account QGA commands run as), not necessarily the user who did the GUI actions; address another user through ``HKU\<SID>``.'
+      - 'A key exists or not: values, default value and subkeys are not looked at.'
+      - On 64-bit Windows the view (WOW6432Node redirection) is the one of the process that runs the test.
+      - In host test mode a bad hive and a denied key read as "does not exist" and fail instead of being an error.
+    use_cases:
+      - title: An installer or a setting created a key
+        text: Vendor keys under ``HKCU\Software`` or ``HKLM\SOFTWARE``.
+      - title: A key was removed
+        text: '``expect_to_fail: true`` after uninstalling or resetting; an unreadable key is still an error.'
+      - title: A list of last used items or a file association was written
+        text: The key appears only after the first use of a feature.
+    examples:
+      - title: the application's settings key
+        parameter:
+          key_path: 'HKCU\Software\ExampleVendor\ExampleApp'
+      - title: short hive name and forward slashes
+        parameter:
+          key_path: HKLM/SOFTWARE/Microsoft/Windows/CurrentVersion
+      - title: a key that was never created
+        expect: failed
+        parameter:
+          key_path: 'HKCU\Software\ExampleVendor\NotInstalled'
+      - title: a bare hive is an error
+        text: The path needs a hive and a subkey.
+        expect: error
+        parameter:
+          key_path: HKLM
+
+  registry_value_matches:
+    asserts: [state, value]
+    formats: [registry]
+    features: [placeholder]
+    unsupported:
+      regex_tag: '``expected_value`` is compared with ``==``; there is no regex matching and a ``!re`` value never matches.'
+      ordered_comparison: Only equality; no greater, less or tolerance.
+      timestamp_tag: A time stored in a value (FILETIME bytes, a number) is compared as raw data only.
+    not_for:
+      - goal: a key exists, whatever its values
+        use: windows.registry_key_exists
+      - goal: a setting stored in an INI or config file
+        use: ini.value_matches
+    outcomes:
+      passed: the value ``value_name`` under ``key_path`` equals ``expected_value`` (and has type ``value_type``, when given)
+      failed:
+        - the key or the value does not exist
+        - the data differs (also when only the Python type differs, ``'1'`` vs ``1``)
+        - the type name differs from ``value_type``
+        - a ``REG_MULTI_SZ`` value (a list), which never equals ``expected_value``
+      error:
+        - the guest is not Windows, or ``winreg`` is missing
+        - a bare or unknown hive
+        - the key or value denies read access
+        - the hostside backend (refused before boot)
+    limits:
+      - 'Windows guests only. Runs in the guest agent, or in host test mode as PowerShell over QGA; hives and separators as in windows.registry_key_exists.'
+      - '``value_name: ''''`` selects the default value of the key.'
+      - 'In the guest agent the type of ``expected_value`` matters: ``REG_DWORD`` / ``REG_QWORD`` data is an int (write ``1``, not ``''1''``), ``REG_SZ`` / ``REG_EXPAND_SZ`` a string (unexpanded, ``%USERPROFILE%`` stays), ``REG_BINARY`` bytes. A placeholder that resolves to digits becomes an int.'
+      - 'In the guest agent ``value_type`` names come from ``winreg``: a ``REG_DWORD`` is reported as ``REG_DWORD_LITTLE_ENDIAN`` and a ``REG_QWORD`` as ``UNKNOWN_TYPE_11``, so ``value_type: REG_DWORD`` never matches there.'
+      - 'Host test mode behaves differently: it compares the text PowerShell prints for the data with the text of ``expected_value`` (``1`` equals ``''1''``), and reports ``REG_DWORD`` / ``REG_QWORD`` under those names.'
+      - '``HKCU`` is the hive of the user the test runs as (the agent''s user; in host test mode the account QGA commands run as), not necessarily the user who did the GUI actions.'
+    use_cases:
+      - title: A setting changed in the GUI
+        text: A checkbox or option stored as ``REG_DWORD`` 0/1 or a string.
+      - title: A last used entry
+        text: The value an application writes for the last opened folder or file.
+      - title: Version or install path written by an installer
+        text: A ``REG_SZ`` under the vendor key.
+    examples:
+      - title: a string setting of the desktop
+        parameter:
+          key_path: 'HKCU\Control Panel\Desktop'
+          value_name: ScreenSaveActive
+          expected_value: '1'
+      - title: a DWORD flag
+        text: The data of a ``REG_DWORD`` is an int, so ``expected_value`` is unquoted.
+        parameter:
+          key_path: 'HKCU\Software\ExampleVendor\ExampleApp\Settings'
+          value_name: ShowToolbar
+          expected_value: 1
+      - title: string with a type check
+        parameter:
+          key_path: 'HKCU\Software\ExampleVendor\ExampleApp'
+          value_name: InstallDir
+          expected_value: 'C:\Program Files\ExampleApp'
+          value_type: REG_SZ
+      - title: a quoted number does not equal a DWORD
+        text: 'In the guest agent ``''1''`` (a string) is not the int ``1`` stored in a ``REG_DWORD``.'
+        expect: failed
+        parameter:
+          key_path: 'HKCU\Software\ExampleVendor\ExampleApp\Settings'
+          value_name: ShowToolbar
+          expected_value: '1'
+      - title: REG_DWORD as type name fails in the guest agent
+        text: 'Use ``REG_DWORD_LITTLE_ENDIAN`` there, or leave ``value_type`` out and let the int type check it.'
+        expect: failed
+        parameter:
+          key_path: 'HKCU\Software\ExampleVendor\ExampleApp\Settings'
+          value_name: ShowToolbar
+          expected_value: 1
+          value_type: REG_DWORD

@@ -463,22 +463,58 @@ def list_testfunctions(collection, category, os_name, full):
 @output_options
 @click.argument('query')
 @catalog_filters
-@click.option('--limit', '-n', default=8, show_default=True, help='Maximum number of results')
-def search(query, collection, category, os_name, limit):
+@click.option('--asserts', help='Only functions making this kind of assertion (absent, count, value, order, ...)')
+@click.option('--reads', help='Only functions reading this format (json, sqlite, binary, registry, screen, ...)')
+@click.option('--feature', help='Only functions supporting this shared feature (archive_dst, regex_tag, ...)')
+@click.option('--limit', '-n', default=5, show_default=True, help='Maximum number of results')
+def search(query, collection, category, os_name, asserts, reads, feature, limit):
     """Find the testfunction for a goal, e.g. "deleted file is gone".
 
-    Ranks by name, summary and parameter docs, with synonyms (deleted/gone/
-    removed, registry/hive, ...). Results include a ready-to-paste example.
+    Returns short cards: why each matched, what it asserts and reads, the
+    shared features it supports or not, goals it is not for (and what to use
+    instead), required parameters and an example. When nothing fits well the
+    answer says so ("match: weak") and names known gaps. Details of one:
+    `adare test info <name>`; shared syntax: `adare test feature <id>`.
 
     \b
     Examples:
       adare test search "file was deleted"
+      adare test search "value gone" --asserts absent --reads sqlite
       adare --format json test search "registry value" --os windows
     """
     from adare.cli.testfunction_catalog import exec_catalog_search
 
-    args = SimpleNamespace(query=query, collection=collection, category=category, os=os_name, limit=limit)
+    args = SimpleNamespace(
+        query=query,
+        collection=collection,
+        category=category,
+        os=os_name,
+        asserts=asserts,
+        reads=reads,
+        feature=feature,
+        limit=limit,
+    )
     exec_with_error_printing(exec_catalog_search, args)
+
+
+@test.command()
+@output_options
+@click.argument('feature', required=False)
+def feature(feature):
+    """Shared features (archives in dst, globs, !re, !timestamp, ...) and known gaps.
+
+    Without FEATURE: every feature with the number of functions supporting
+    it, and the goals no testfunction covers. With FEATURE: its syntax, an
+    example, and which functions support it or explicitly do not.
+
+    \b
+    Examples:
+      adare test feature
+      adare test feature archive_dst
+    """
+    from adare.cli.testfunction_catalog import exec_catalog_feature
+
+    exec_with_error_printing(exec_catalog_feature, SimpleNamespace(feature=feature))
 
 
 @test.command(hidden=True)
@@ -510,18 +546,23 @@ def info(dotnotation, example):
 @test.command()
 @output_options
 @click.option('--markdown', is_flag=True, help='Render a Markdown reference instead of structured output')
-def catalog(markdown):
+@click.option(
+    '--markdown-dir',
+    type=click.Path(file_okay=False),
+    help='Write the split Markdown references (catalog/index.md, catalog/<collection>.md, features.md) here',
+)
+def catalog(markdown, markdown_dir):
     """Export the bundled testfunction catalog (for docs and agent skills).
 
     Machine-independent: only collections shipped with ADARE, not local ones.
 
     \b
     Example:
-      adare test catalog --markdown > skills/adare-testfunction/references/catalog.md
+      adare test catalog --markdown-dir skills/adare-testfunction/references
     """
     from adare.cli.testfunction_catalog import exec_catalog_export
 
-    args = SimpleNamespace(markdown=markdown)
+    args = SimpleNamespace(markdown=markdown, markdown_dir=markdown_dir)
     exec_with_error_printing(exec_catalog_export, args)
 
 

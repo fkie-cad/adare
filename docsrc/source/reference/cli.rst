@@ -721,12 +721,25 @@ print tab-separated text; use ``--json`` for structured output.
 
 ``adare test search "<goal>"``
   Find the testfunction for a goal, e.g. ``"deleted file is gone"``. Ranks by name,
-  summary and parameter docs with synonyms (deleted/gone/removed, registry/hive, ...).
-  Each result includes a ready-to-paste ``tests:`` example. Alias: ``find``.
+  summary, "Use for", use cases and parameter docs with synonyms (deleted/gone/removed,
+  registry/hive, ...), and follows the contracts' "not for this goal, use X" redirects.
+  Each result is a short card: why it matched, what it asserts and reads, the shared
+  features it supports and the ones it refuses, goals it is not for, required parameters
+  and an example. ``match: weak`` says that no function clearly covers the goal; known
+  gaps that match the query are named with what to do instead. Alias: ``find``.
 
   Options:
     * ``--collection/--set TEXT``, ``--category TEXT``, ``--os [windows|linux|any]`` - Filters
-    * ``--limit, -n INTEGER`` - Maximum results (default 8)
+    * ``--asserts TEXT`` - Only functions making this kind of assertion (``absent``, ``count``, ``value``, ...)
+    * ``--reads TEXT`` - Only functions reading this format (``json``, ``sqlite``, ``binary``, ...)
+    * ``--feature TEXT`` - Only functions supporting a shared feature (``archive_dst``, ``regex_tag``, ...)
+    * ``--limit, -n INTEGER`` - Maximum results (default 5)
+
+``adare test feature [<feature>]``
+  The shared features (files inside archives through ``!`` in ``dst``, globs, ``!re``,
+  ``!timestamp``, ordered comparison, key paths, offset expressions, ...) with the number of
+  functions supporting each, and the known gaps. With a feature id: its syntax, an example
+  and which functions support it or explicitly do not.
 
 ``adare test list``
   List every testfunction with its parameters (optional ones marked ``?``).
@@ -737,8 +750,10 @@ print tab-separated text; use ``--json`` for structured output.
     * ``--full`` - Structured output with every field (default: compact)
 
 ``adare test info <dotnotation>``
-  Signature, parameter types/defaults/docs, the current installed version and an
-  example ``tests:`` entry. Unknown names suggest close matches.
+  The function's contract: signature, parameter types, defaults, docs and allowed values,
+  what it asserts and reads, the features it supports or refuses, goals it is not for,
+  when it passes, fails or errors, its limits, use cases, examples and the current
+  installed version. Piped, it prints Markdown. Unknown names suggest close matches.
 
   Options:
     * ``--example`` - Print only the ``tests:`` YAML block
@@ -748,7 +763,9 @@ print tab-separated text; use ``--json`` for structured output.
   ignores local collections).
 
   Options:
-    * ``--markdown`` - Render a Markdown reference (used for the agent skill reference)
+    * ``--markdown`` - Render one Markdown reference
+    * ``--markdown-dir DIR`` - Write the agent skill's split references: ``catalog/index.md``
+      (one line per function), ``catalog/<collection>.md`` (contracts) and ``features.md``
 
 ``adare test create <name>``
   Create a new testfunction collection from a template.
