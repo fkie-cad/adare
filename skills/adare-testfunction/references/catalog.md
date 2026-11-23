@@ -4,6 +4,132 @@
 
 Reference a test from a playbook `tests:` block by its dotnotation. Required parameters are marked **bold**. Search instead of scrolling: `adare test search "<goal>"`.
 
+## binary
+
+### `binary.pair_count`
+
+tests how often a key (optionally with a value) occurs in a key/value string table of a binary file
+
+**Use for:** asserting a metadata element is absent from a key/value string table (``expected_count: 0``) or occurs a given number of times. The table is read as in binary.pair_value_matches.
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the file; a glob must match exactly one path. A missing file is an error. |
+| **key** | `str` |  | Key string to count. |
+| **expected_count** | `int` |  | Non-negative integer to compare with; ``0`` asserts absence. |
+| expected_value | `str \| int \| float \| bool \| None` | `None` | Only count entries whose value matches this (as in binary.pair_value_matches). ``None`` (default) counts every entry of ``key``. |
+| start | `int \| str` | `0` | Offset of the first key (default 0); int or offset expression. |
+| end | `int \| str \| None` | `None` | End of the table, exclusive (default: end of file). |
+| separator | `str` | `'\x00'` | Bytes between the strings (default NUL), ASCII and Python escapes. |
+| encoding | `str` | `'utf-8'` | Encoding of keys and values (default ``utf-8``). |
+| regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched in each value. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``. |
+
+```yaml
+tests:
+- name: check_pair_count
+  function: binary.pair_count
+  parameter:
+    dst: <str>
+    key: <str>
+    expected_count: <int>
+```
+
+### `binary.pair_value_matches`
+
+tests the value of a key in a table of separator-delimited key/value strings in a binary file
+
+**Use for:** "metadata element X has value Y" in a binary container that stores its metadata as alternating key and value strings (``key\0value\0key\0value\0``), e.g. in a block that the file's last bytes point to. An absent key fails; to assert absence use binary.pair_count with ``expected_count: 0``.
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the file; a glob must match exactly one path. A missing file is an error. |
+| **key** | `str` |  | Key string to look up (compared exactly after decoding). |
+| **expected_value** | `str \| int \| float \| bool \| None` |  | The value the key must have, compared as text (a number as its text). A ``!re`` tag (``re.match``) or ``{{placeholder}}`` is supported. A value not valid in ``encoding`` is an error. |
+| start | `int \| str` | `0` | Offset of the first key (default 0); an int (negative from the end) or an offset expression as in binary.struct_value_matches (``u32be@-4+4``). |
+| end | `int \| str \| None` | `None` | End of the table, exclusive (default: end of file). The region must hold whole key/value pairs: one separator after the last value is allowed, an odd number of strings is an error. |
+| separator | `str` | `'\x00'` | Bytes between the strings (default NUL), ASCII and Python escapes (``\x00``, ``\n``). For UTF-16 tables use ``\x00\x00``; matches are aligned to the encoding's code units. |
+| encoding | `str` | `'utf-8'` | Encoding of keys and values (default ``utf-8``; ``utf-16-le``, ...). |
+| regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``). |
+| wildcard_mode | `str` | `'any'` | When the key occurs several times: ``any`` (default): one value must match; ``all``: every value must match. |
+
+```yaml
+tests:
+- name: check_pair_value_matches
+  function: binary.pair_value_matches
+  parameter:
+    dst: <str>
+    key: <str>
+    expected_value: <str | int | float | bool | None>
+```
+
+### `binary.pattern_count`
+
+tests how often a byte pattern, text or regex occurs within a region of a binary file
+
+**Use for:** counting records, markers or values inside one part of a binary file (only the metadata block a trailer points to, the records after a header); a regex over raw bytes; asserting a value is gone from that part: ``expected_count: 0``. For the whole file in several encodings at once use text.occurrence_count.
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the file; a glob must match exactly one path. A missing file is an error; the region is read whole, up to the read cap. |
+| **pattern** | `str` |  | What to count; must not be empty. Its meaning depends on ``pattern_type``. |
+| pattern_type | `str` | `'bytes'` | ``bytes`` (default): ASCII characters stand for their byte, Python escapes (``\x00``) are decoded. ``hex``: hex digits, whitespace allowed (``00 00 01 00``). ``regex``: an ASCII regular expression over the raw bytes (``\x00`` escapes for other bytes; empty matches are not counted). ``text``: ``pattern`` encoded in ``encoding``. Invalid escapes, hex or regexes are an error. |
+| start | `int \| str` | `0` | Offset where the region starts (default 0); an int (negative from the end) or an offset expression as in binary.struct_value_matches (``u32be@-4``). |
+| end | `int \| str \| None` | `None` | Offset where the region ends, exclusive (default: the end of the file). An offset outside the file, or ``end`` before ``start``, is an error. |
+| encoding | `str` | `'utf-8'` | Encoding for ``text`` (default ``utf-8``; ``utf-16-le``, ``utf-16-be``, ...). |
+| expected_count | `int` | `1` | Non-negative integer to compare with (default 1); ``0`` asserts absence. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default, like every count function), ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Use ``greater_equal`` with ``expected_count: 1`` for "at least once". |
+
+```yaml
+tests:
+- name: check_pattern_count
+  function: binary.pattern_count
+  parameter:
+    dst: <str>
+    pattern: <str>
+```
+
+### `binary.struct_value_matches`
+
+tests a number, string, byte sequence or timestamp read at an offset of a binary file
+
+**Use for:** a field of a binary container no parser knows: a counter, flag, size or timestamp in a header, a record of an index file, a string in a metadata block that the file's last bytes point to. ``offset`` follows pointers (``u32be@-4``), so the field is found even when the block moves. For key/value string tables use binary.pair_value_matches; to count byte patterns use binary.pattern_count.
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the file; a glob must match exactly one path; ``archive.tar!/member`` reads an archive member. A missing file is an error. |
+| **offset** | `int \| str` |  | Where the value starts. An int (negative counts from the end: ``-8``) or an offset expression: ``u32be@-4`` (the offset stored as big-endian u32 in the last 4 bytes), ``u32be@-4+8`` (that plus 8), ``u32le@(u32le@0+4)`` (pointer read at pointer+4), ``find:6b6579`` (first occurrence of the hex bytes). Integer types: ``u8``, ``i8``, ``u16le``/``u16be`` ... ``i64le``/``i64be``; numbers may be ``0x``-hex. A malformed expression, or an offset or value outside the file, is an error. |
+| **value_format** | `str` |  | ``u8``, ``i8``, ``u16le`` ... ``i64be`` (integers), ``f32le``/``be``, ``f64le``/``be`` (floats), ``bytes:<n>`` (n bytes, compared as lowercase hex), ``string:<n>`` (n bytes decoded with ``encoding``, trailing NULs dropped) or ``cstring`` (up to the first NUL, ``\x00\x00`` in UTF-16). A string not valid in ``encoding`` is an error. |
+| **expected_value** | `str \| int \| float \| bool \| None` |  | What the value must be. Numbers and timestamps compare by value (``comparison_type``); strings compare as text, a number written here as its text; ``bytes:<n>`` as hex (whitespace ignored: ``de ad be ef``). A ``!re`` tag or ``{{placeholder}}`` compares the value's text (a ``!timestamp`` placeholder with ``epoch``/``unit`` reads a numeric field as a time). |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Ordered comparisons need numbers or timestamps (a string field is read as one); for text and ``bytes`` only ``equals``/``not_equals``. |
+| tolerance | `int \| float \| None` | `None` | For ``equals``/``not_equals`` of numbers or timestamps: the largest difference that still counts as equal (seconds for timestamps). |
+| regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``) in the value's text; an invalid regex is an error. |
+| encoding | `str` | `'utf-8'` | Encoding of ``string``/``cstring`` values (default ``utf-8``; ``utf-16-le`` ...). Encodings without a fixed byte order (``utf-16``) are an error. |
+| value_type | `str` | `'auto'` | ``auto`` (default), ``number`` or ``timestamp``. ``auto`` compares as timestamps when ``timestamp_epoch`` or ``time_format`` is set, else as numbers, else as ISO 8601 / RFC 2822 timestamps; a value of neither kind is an error. |
+| timestamp_epoch | `int \| None` | `None` | Read a number as time since 1 January of 1970, 1601 or 2001 (also a numeric ``expected_value``). |
+| timestamp_unit | `str` | `'s'` | Unit of such numbers: ``s`` (default), ``ms``, ``us``, ``ns``, ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of times without one, e.g. ``+02:00``; default UTC. |
+| time_format | `str \| None` | `None` | ``strptime`` format of a string timestamp (``%d.%m.%Y %H:%M``). |
+
+```yaml
+tests:
+- name: check_struct_value_matches
+  function: binary.struct_value_matches
+  parameter:
+    dst: <str>
+    offset: <int | str>
+    value_format: <str>
+    expected_value: <str | int | float | bool | None>
+```
+
 ## csv
 
 ### `csv.compare_files`
@@ -125,6 +251,13 @@ validates specific cell value with placeholder support
 | expected_value | `str \| int \| float \| bool \| None` | `None` | Compared exactly with ``str(expected_value)`` (``None`` -> ``''``). A single ``!re``/``!timestamp`` tag is matched by type. |
 | sheet | `str \| int` | `0` | Sheet name (str) or 0-based sheet index (int); unknown sheets fail. |
 | regex_match | `bool` | `False` | Treat ``expected_value`` as a regex searched in the cell value (``re.search``, unanchored; ``^...$`` for the whole value); an invalid regex is an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter below, compares the value with ``expected_value`` as a number or point in time (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an error, and so is a value that is no number or timestamp. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 
 ```yaml
 tests:
@@ -389,6 +522,13 @@ tests if an EXIF tag (IFD0, Exif or GPS IFD) equals or matches an expected value
 | **expected_value** | `str \| int \| float \| bool` |  | Compared with the value's text form: text as stored (trailing NULs removed); integers in decimal; rationals and floats as decimals (``72``, ``2.8``, ``0.004``; ``nan`` for x/0); sequences joined with ``", "`` (GPS ``51, 30, 12.5``); bytes as text when printable UTF-8, else lowercase hex; the user comment without its 8-byte charset prefix; the UTF-16 title/comment tags (0x9C9B-0x9C9F) decoded. A YAML number is formatted the same way (write a sequence as text, ``51, 30, 12.5``); a ``!re``/``!timestamp`` tag or ``{{placeholder}}`` is matched by type. |
 | regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). An invalid regex is an error. |
 | wildcard_mode | `str` | `'any'` | With the tag in several IFDs, ``any`` (default): one occurrence must match; ``all``: every one must match. Other values are an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter below, compares the value with ``expected_value`` as a number or point in time (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an error, and so is a value that is no number or timestamp. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 
 ```yaml
 tests:
@@ -553,6 +693,13 @@ tests if an INI value equals or matches an expected value (regex and placeholder
 | case_sensitive | `bool` | `True` | ``False`` compares section and key names case-insensitively; values are always compared as given. |
 | encoding | `str` | `None` | Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8). |
 | wildcard_mode | `str` | `'any'` | With several occurrences, ``any`` (default): one must match; ``all``: every one must match. Other values are an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter below, compares the value with ``expected_value`` as a number or point in time (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an error, and so is a value that is no number or timestamp. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 
 ```yaml
 tests:
@@ -659,6 +806,13 @@ tests if JSON value at key path matches expected value using placeholders (suppo
 | regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``. |
 | wildcard_mode | `str` | `'any'` | ``any`` (default): one value must match; ``all``: every value must match. Other values are an error. |
 | encoding | `str \| None` | `None` | ``None`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. Unknown names are an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter below, compares the value with ``expected_value`` as a number or point in time (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an error, and so is a value that is no number or timestamp. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 
 ```yaml
 tests:
@@ -668,6 +822,39 @@ tests:
     dst: <str>
     key_path: <str>
     expected_value: <str | int | float | bool | None>
+```
+
+### `json.values_compare`
+
+compares two values of one JSON file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)
+
+**Use for:** relations inside one file: a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (``comparison_type: equals`` with ``offset: 1``). To compare one value with a constant use json.value_matches with ``comparison_type``.
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the JSON file; a glob must match exactly one path. A missing file or invalid JSON is an error. ``x.jsonlz4!`` reads LZ4-compressed JSON. |
+| **key_path** | `str` |  | Dot path of the first value (syntax as in json.value_matches). It must select exactly one value (a one-element array counts as its element): nothing fails, several values are an error. |
+| **other_key_path** | `str` |  | Dot path of the second value; same rules. |
+| comparison_type | `str` | `'equals'` | How the first value relates to the second: ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal`` (``less`` = earlier for timestamps). Other values are an error. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both are numbers, else timestamps), ``number`` or ``timestamp``. A value that is no number or timestamp is an error. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| offset | `int \| float \| None` | `None` | Added to the second value before comparing (seconds for timestamps, may be negative): ``first <comparison_type> second + offset``. |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
+| encoding | `str \| None` | `None` | ``None`` (default) detects UTF-8/16/32 with or without BOM; a name (``latin-1``) decodes BOM-less files with it. Unknown names are an error. |
+
+```yaml
+tests:
+- name: check_values_compare
+  function: json.values_compare
+  parameter:
+    dst: <str>
+    key_path: <str>
+    other_key_path: <str>
 ```
 
 ## jsonl
@@ -739,6 +926,13 @@ tests if specified key path with expected value exists in any line of JSONL file
 | regex_match | `bool` | `False` | Treat string expected values as regexes searched (``re.search``) in ``str(value)``; the value ``"*"`` then means "key exists". Without it, values are compared with type-sensitive ``==``; ``!re``/``!timestamp`` tags always work. |
 | skip_malformed | `bool` | `True` | ``True`` (default) ignores lines that are not valid JSON; ``False`` makes the first malformed line an error. |
 | encoding | `str \| None` | `None` | ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable content are an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter below, compares the value with ``expected_value`` as a number or point in time (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an error, and so is a value that is no number or timestamp. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 
 ```yaml
 tests:
@@ -906,6 +1100,13 @@ tests if the property list value at a key path matches the expected value (dates
 | **expected_value** | `str \| int \| float \| bool \| None` |  | Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``). A ``!re`` tag (``re.match``) or ``{{placeholder}}`` compares ``str(value)``. |
 | regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``. An invalid regex is an error. |
 | wildcard_mode | `str` | `'any'` | ``any`` (default): one value must match; ``all``: every value must match. Other values are an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter below, compares the value with ``expected_value`` as a number or point in time (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an error, and so is a value that is no number or timestamp. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 
 ```yaml
 tests:
@@ -917,13 +1118,45 @@ tests:
     expected_value: <str | int | float | bool | None>
 ```
 
+### `plist.values_compare`
+
+compares two values of one property list file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)
+
+**Use for:** relations inside one file: a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (``comparison_type: equals`` with ``offset: 1``). To compare one value with a constant use plist.value_matches with ``comparison_type``.
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the plist (XML or binary, detected from the content); a glob must match exactly one path. A missing or invalid file is an error. ``<date>`` values are UTC. |
+| **key_path** | `str` |  | Dot path of the first value (syntax as in plist.contains_key). It must select exactly one value (a one-element array counts as its element): nothing fails, several values are an error. |
+| **other_key_path** | `str` |  | Dot path of the second value; same rules. |
+| comparison_type | `str` | `'equals'` | How the first value relates to the second: ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal`` (``less`` = earlier for timestamps). Other values are an error. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both are numbers, else timestamps), ``number`` or ``timestamp``. A value that is no number or timestamp is an error. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| offset | `int \| float \| None` | `None` | Added to the second value before comparing (seconds for timestamps, may be negative): ``first <comparison_type> second + offset``. |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
+
+```yaml
+tests:
+- name: check_values_compare
+  function: plist.values_compare
+  parameter:
+    dst: <str>
+    key_path: <str>
+    other_key_path: <str>
+```
+
 ## sqlite
 
 ### `sqlite.query_result`
 
 executes SQL query against SQLite database and validates result
 
-**Use for:** asserting that a row was written, changed or removed. The original file is never opened: ``dst`` and any ``-wal``/``-journal`` sidecar are copied to a temp dir and the copy is queried, so uncheckpointed changes are seen and the evidence is not modified. Details report ``queried snapshot: <file> sha256=...`` per copied file and, once the query ran, the rows read (``query result: [...]``, also on success). With neither expectation set, it passes whenever the query runs. To only count rows use sqlite.row_count. Timestamps stored as numbers (Unix seconds, microseconds since 1601) are compared with ``!timestamp`` and its ``epoch``/``unit`` options.
+**Use for:** asserting that a row was written, changed or removed; which rows exist only in the write-ahead log, not yet checkpointed into the main file (``view: wal_added``), or are still in the main file but deleted or changed in the WAL (``view: wal_removed``). The original file is never opened: ``dst`` and any ``-wal``/``-journal`` sidecar are copied to a temp dir and the copy is queried, so uncheckpointed changes are seen and the evidence is not modified. Details report ``queried snapshot: <file> sha256=...`` per copied file and, once the query ran, the rows read (``query result: [...]``, also on success). With neither expectation set, it passes whenever the query runs. To only count rows use sqlite.row_count. Timestamps stored as numbers (Unix seconds, microseconds since 1601) are compared with ``!timestamp`` and its ``epoch``/``unit`` options.
 
 *FILE_CONTENT*, os: any
 
@@ -934,6 +1167,7 @@ executes SQL query against SQLite database and validates result
 | expected_count | `int \| None` | `None` | Number of rows the query must return, compared with ``comparison_type``; ``None`` skips the check. Use ``0`` to assert a row is gone. A negative number or a non-integer is an error. |
 | expected_result | `list \| None` | `None` | Exact expected rows as a list of ``{column: value}`` mappings, in query order; ``None`` skips the check. Placeholders compare the stringified result. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal`` for ``expected_count``; other values are an error. |
+| view | `str` | `'current'` | Which state of the database the query sees, compared with ``expected_count`` / ``expected_result``; all views come from one snapshot (the files are copied once). ``current`` (default): the database as SQLite sees it, the ``-wal`` replayed. ``main_file``: the main database file alone, the ``-wal`` left out. ``wal_added``: the result rows of ``current`` that are not in ``main_file``; ``wal_removed``: the rows of ``main_file`` not in ``current`` (multiset difference of whole rows, in query order). Select identifying columns for the differences: a changed row appears in both. A ``-journal`` is used in every view, so a hot rollback journal is rolled back. Details name the view and the ``-wal`` sha256. Other values are an error. |
 
 ```yaml
 tests:
@@ -948,7 +1182,7 @@ tests:
 
 tests the number of rows an SQL query returns on an SQLite database
 
-**Use for:** asserting how many records an action left behind (exactly one history entry for a URL); asserting a record is gone: ``expected_count: 0``. Queried like sqlite.query_result: ``dst`` and any ``-wal``/``-journal`` sidecar are copied to a temp dir and the copy is queried, so uncheckpointed changes are seen and the evidence is not modified. Details report the count, the rows read (``query result: [...]``) and ``queried snapshot: <file> sha256=...`` per copied file. To check the row contents use sqlite.query_result with ``expected_result``.
+**Use for:** asserting how many records an action left behind (exactly one history entry for a URL); asserting a record is gone: ``expected_count: 0``; asserting a row is only in the write-ahead log, not yet checkpointed into the main file: one test with ``view: wal_added`` and ``expected_count: 1``. Queried like sqlite.query_result: ``dst`` and any ``-wal``/``-journal`` sidecar are copied to a temp dir and the copy is queried, so uncheckpointed changes are seen and the evidence is not modified. Details report the count, the rows read (``query result: [...]``) and ``queried snapshot: <file> sha256=...`` per copied file. To check the row contents use sqlite.query_result with ``expected_result``.
 
 *FILE_CONTENT*, os: any
 
@@ -958,6 +1192,7 @@ tests the number of rows an SQL query returns on an SQLite database
 | **query** | `str` |  | SQL to execute, e.g. ``SELECT id FROM items WHERE name = 'example'``; every returned row counts (``SELECT COUNT(*)`` returns one row). A SQL error (syntax, unknown table, unreadable database) is an error. |
 | **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
 | comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+| view | `str` | `'current'` | Which state of the database is counted; all views come from one snapshot (the files are copied once). ``current`` (default): the database as SQLite sees it, the ``-wal`` replayed. ``main_file``: the main database file alone, the ``-wal`` left out. ``wal_added``: the result rows of ``current`` that are not in ``main_file``; ``wal_removed``: the rows of ``main_file`` not in ``current`` (multiset difference of whole rows; their number is counted). Select identifying columns for the differences: a changed row appears in both. A ``-journal`` is used in every view, so a hot rollback journal is rolled back. Details name the view and the ``-wal`` sha256. Other values are an error. |
 
 ```yaml
 tests:
@@ -966,6 +1201,30 @@ tests:
   parameter:
     dst: <str>
     query: <str>
+    expected_count: <int>
+```
+
+### `sqlite.wal_frame_count`
+
+tests the number of frames in the write-ahead log (-wal) of an SQLite database
+
+**Use for:** asserting that changes are still in the WAL, not yet checkpointed into the main file (``frames: valid`` greater than 0), how many transactions the WAL holds (``frames: commits``), or that a checkpoint emptied it (``expected_count: 0``); finding old frames a WAL reset left behind that SQLite no longer reads (``frames: stale``). The WAL is parsed per the SQLite file format, without SQLite: header magic and version, page size, salts and the checksum chain. A copy of the WAL is read, never the original. Details report the header fields, all four counts and ``read snapshot: <file> sha256=...``. To find which rows live only in the WAL use sqlite.row_count with ``view: wal_added``.
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the database; its ``<dst>-wal`` is read. A missing ``-wal`` next to an existing database counts as 0 frames, a missing database is an error. May also name the ``-wal`` file itself (then it must exist). A glob must match exactly one file. |
+| **expected_count** | `int` |  | Non-negative integer to compare against; anything else is an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or ``less_equal``; other values are an error. |
+| frames | `str` | `'valid'` | ``valid`` (default): the frames SQLite replays, i.e. salts matching the header and an intact checksum chain, up to the last commit frame; ``commits``: commit frames among them (one per transaction); ``all``: every complete frame in the file; ``stale``: ``all`` minus ``valid`` (frames from before a WAL reset, an unfinished transaction). Other values are an error. |
+
+```yaml
+tests:
+- name: check_wal_frame_count
+  function: sqlite.wal_frame_count
+  parameter:
+    dst: <str>
     expected_count: <int>
 ```
 
@@ -1395,6 +1654,13 @@ tests if the TOML value at a key path matches the expected value (dates/times as
 | **expected_value** | `str \| int \| float \| bool \| None` |  | Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``). A ``!re`` tag (``re.match``) or ``{{placeholder}}`` compares ``str(value)``. |
 | regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``. An invalid regex is an error. |
 | wildcard_mode | `str` | `'any'` | ``any`` (default): one value must match; ``all``: every value must match. Other values are an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter below, compares the value with ``expected_value`` as a number or point in time (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an error, and so is a value that is no number or timestamp. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 
 ```yaml
 tests:
@@ -1404,6 +1670,38 @@ tests:
     dst: <str>
     key_path: <str>
     expected_value: <str | int | float | bool | None>
+```
+
+### `toml.values_compare`
+
+compares two values of one TOML file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)
+
+**Use for:** relations inside one file: a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (``comparison_type: equals`` with ``offset: 1``). To compare one value with a constant use toml.value_matches with ``comparison_type``.
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the TOML file; a glob must match exactly one path. A missing or invalid file is an error. Dates and times are read as ISO 8601 (a local date-time without zone is in ``utc_offset``). |
+| **key_path** | `str` |  | Dot path of the first value (syntax as in toml.contains_key). It must select exactly one value (a one-element array counts as its element): nothing fails, several values are an error. |
+| **other_key_path** | `str` |  | Dot path of the second value; same rules. |
+| comparison_type | `str` | `'equals'` | How the first value relates to the second: ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal`` (``less`` = earlier for timestamps). Other values are an error. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both are numbers, else timestamps), ``number`` or ``timestamp``. A value that is no number or timestamp is an error. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| offset | `int \| float \| None` | `None` | Added to the second value before comparing (seconds for timestamps, may be negative): ``first <comparison_type> second + offset``. |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
+
+```yaml
+tests:
+- name: check_values_compare
+  function: toml.values_compare
+  parameter:
+    dst: <str>
+    key_path: <str>
+    other_key_path: <str>
 ```
 
 ## visual
@@ -1582,6 +1880,13 @@ tests if XML element attribute matches expected value with regex and timestamp t
 | regex_match | `bool` | `False` | Search ``expected_value`` as a Python regex (``re.search``, unanchored). |
 | case_sensitive | `bool` | `True` | ``False`` compares lower-cased / uses ``re.IGNORECASE``. |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` + ``//ns:item``); ``{uri}tag`` also works without it. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter below, compares the value with ``expected_value`` as a number or point in time (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an error, and so is a value that is no number or timestamp. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 
 ```yaml
 tests:
@@ -1660,6 +1965,13 @@ tests if XML element text content matches expected value with placeholder suppor
 | case_sensitive | `bool` | `True` | ``False`` compares lower-cased / uses ``re.IGNORECASE``. |
 | wildcard_mode | `str` | `'any'` | For several matched elements: ``any`` (default) or ``all`` must match; other values are an execution error (only checked when several elements match). |
 | namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` + ``//ns:item``); ``{uri}tag`` also works without it. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter below, compares the value with ``expected_value`` as a number or point in time (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an error, and so is a value that is no number or timestamp. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 
 ```yaml
 tests:
@@ -1691,6 +2003,41 @@ tests:
   function: xml.namespace_matches
   parameter:
     dst: <str>
+```
+
+### `xml.values_compare`
+
+compares two values (element text or attribute) of one XML file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)
+
+**Use for:** relations inside one XML file: a last-saved value later than the first-opened one (two attributes, or two elements), two timestamps within a few seconds of each other, a counter one above another (``comparison_type: equals`` with ``offset: 1``). To compare one value with a constant use xml.element_text_matches or xml.attribute_matches with ``comparison_type``.
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the XML file; a glob must match exactly one path. A missing file or malformed XML is an error. |
+| **xpath** | `str` |  | Selects the element of the first value (ElementTree ``ElementPath`` subset as in xml.element_text_matches). It must select exactly one element (with ``attribute``: one element that has the attribute): nothing fails, several are an error. |
+| **other_xpath** | `str` |  | Selects the element of the second value; same rules (may equal ``xpath`` to compare two attributes of one element). |
+| attribute | `str \| None` | `None` | Take the first value from this attribute (``{uri}name`` for namespaced attributes); ``None`` (default) takes the element text (``element.text``, before the first child, not stripped). |
+| other_attribute | `str \| None` | `None` | The same for the second value. |
+| comparison_type | `str` | `'equals'` | How the first value relates to the second: ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal`` (``less`` = earlier for timestamps). Other values are an error. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both are numbers, else timestamps), ``number`` or ``timestamp``. A value that is no number or timestamp is an error. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| offset | `int \| float \| None` | `None` | Added to the second value before comparing (seconds for timestamps, may be negative): ``first <comparison_type> second + offset``. |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
+| namespaces | `dict[str, str]` | `None` | Prefix -> URI map for prefixed names in both XPaths (``{ns: 'http://...'}`` + ``//ns:item``); ``{uri}tag`` also works without it. |
+
+```yaml
+tests:
+- name: check_values_compare
+  function: xml.values_compare
+  parameter:
+    dst: <str>
+    xpath: <str>
+    other_xpath: <str>
 ```
 
 ### `xml.xpath_result_matches`
@@ -1785,6 +2132,13 @@ tests if the YAML value at a key path matches the expected value (supports wildc
 | **expected_value** | `str \| int \| float \| bool \| None` |  | Compared with Python ``==``, which is type-sensitive (``5`` != ``"5"``; ``null`` needs ``null``). A ``!re`` tag (``re.match``) or ``{{placeholder}}`` compares ``str(value)``. |
 | regex_match | `bool` | `False` | Treat a string ``expected_value`` as a regex searched (``re.search``, unanchored) in ``str(value)``. An invalid regex is an error. |
 | wildcard_mode | `str` | `'any'` | ``any`` (default): one value must match; ``all``: every value must match. Other values are an error. |
+| comparison_type | `str` | `'equals'` | ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter below, compares the value with ``expected_value`` as a number or point in time (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or ``regex_match`` is then an error, and so is a value that is no number or timestamp. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both sides are numbers, else timestamps), ``number`` or ``timestamp``. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
 
 ```yaml
 tests:
@@ -1794,4 +2148,36 @@ tests:
     dst: <str>
     key_path: <str>
     expected_value: <str | int | float | bool | None>
+```
+
+### `yaml.values_compare`
+
+compares two values of one YAML file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset)
+
+**Use for:** relations inside one file: a last-saved value later than the first-opened one, two timestamps within a few seconds of each other, a counter one above another (``comparison_type: equals`` with ``offset: 1``). To compare one value with a constant use yaml.value_matches with ``comparison_type``.
+
+*FILE_CONTENT*, os: any
+
+| parameter | type | default | description |
+|---|---|---|---|
+| **dst** | `str` |  | Guest path to the YAML file; a glob must match exactly one path. Several documents form a top-level list. A missing or invalid file is an error. |
+| **key_path** | `str` |  | Dot path of the first value (syntax as in yaml.contains_key). It must select exactly one value (a one-element array counts as its element): nothing fails, several values are an error. |
+| **other_key_path** | `str` |  | Dot path of the second value; same rules. |
+| comparison_type | `str` | `'equals'` | How the first value relates to the second: ``equals`` (default), ``not_equals``, ``greater``, ``less``, ``greater_equal`` or ``less_equal`` (``less`` = earlier for timestamps). Other values are an error. |
+| value_type | `str` | `'auto'` | ``auto`` (default; numbers if both are numbers, else timestamps), ``number`` or ``timestamp``. A value that is no number or timestamp is an error. |
+| tolerance | `int \| float \| None` | `None` | Allowed difference for ``equals``/``not_equals`` (seconds for timestamps). |
+| offset | `int \| float \| None` | `None` | Added to the second value before comparing (seconds for timestamps, may be negative): ``first <comparison_type> second + offset``. |
+| time_format | `str \| None` | `None` | ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822. |
+| timestamp_epoch | `int \| None` | `None` | Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``. |
+| timestamp_unit | `str \| None` | `None` | Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``. |
+| utc_offset | `str \| None` | `None` | Zone of timestamps without one (``+02:00``); default UTC. |
+
+```yaml
+tests:
+- name: check_values_compare
+  function: yaml.values_compare
+  parameter:
+    dst: <str>
+    key_path: <str>
+    other_key_path: <str>
 ```
