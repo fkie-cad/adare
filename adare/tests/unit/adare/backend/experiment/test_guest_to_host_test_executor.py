@@ -432,6 +432,18 @@ class TestSidecarPulling:
         ]
 
     @pytest.mark.asyncio
+    async def test_dst_that_is_a_sidecar_probes_no_companions(self, tmp_path):
+        executor, guest_file = self._make_executor(tmp_path, {'/home/user/app.db-wal'})
+        test = SidecarTest(parameter=SidecarParam(dst='/home/user/app.db-wal'))
+
+        result = await executor._execute_file_based_test('t', 'sqlite.wal_frame_count', test)
+
+        assert result.status == StatusEnum.SUCCESS
+        assert guest_file.pull_file.await_args_list == [(('/home/user/app.db-wal',), {'force': True})]
+        probed = [call.args[0] for call in guest_file.file_exists.await_args_list]
+        assert not any(p.endswith(('-wal-wal', '-wal-journal')) for p in probed), probed
+
+    @pytest.mark.asyncio
     async def test_removes_stale_local_sidecar_gone_from_guest(self, tmp_path):
         stale = tmp_path / 'home/user/app.db-wal'
         stale.parent.mkdir(parents=True)
