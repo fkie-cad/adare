@@ -580,6 +580,25 @@ class TestQueryResult:
 
         assert_test_success(result)
 
+    @pytest.mark.parametrize('expected_count', [None, 5])
+    def test_query_result_invalid_regex_placeholder_is_error(self, create_sqlite_db, expected_count):
+        """An invalid regex placeholder is an ERROR, also when a count mismatch would come first."""
+        db_file = create_sqlite_db("test.db", "CREATE TABLE test_table (id INTEGER, name TEXT)", [(1, "Alice")])
+
+        test = QueryResult(
+            name="test_query",
+            parameter=QueryResultParameter(
+                dst=str(db_file),
+                query="SELECT id, name FROM test_table",
+                expected_count=expected_count,
+                expected_result=[{"id": 1, "name": "{{BAD_RE}}"}],
+            ),
+            variable_metadata={"BAD_RE": {"type": "regex", "resolved_value": "(unclosed"}},
+        )
+        result = test.test()
+
+        assert result.status == StatusEnum.ERROR, result.details
+
     def test_query_result_failure_placeholder_mismatch(self, create_sqlite_db, variable_metadata_simple):
         """Test failure when placeholder doesn't match."""
         db_file = create_sqlite_db(

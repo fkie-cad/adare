@@ -66,7 +66,7 @@ Parameters
      - **Optional.** Decode the value read from the file before comparing: one step or a list applied in order: ``url``, ``base64``, ``hex``, ``utf16``, ``json`` (see "Decoding a stored value" under :ref:`ordered-comparison`). A value a step cannot decode, or an unknown step, is an ERROR.
    * - ``decoded_key_path``
      - string
-     - **Optional.** With ``json`` in ``value_decode``: key path into the decoded value; it must select one value. Required with ``json``, an ERROR without it.
+     - **Optional.** With ``json`` in ``value_decode``: key path into the decoded value; it must select one value: none is FAILED (the value decoded, the key is not in it), several are an ERROR. Required with ``json``, an ERROR without it.
 
 Numbers and Timestamps
 ----------------------

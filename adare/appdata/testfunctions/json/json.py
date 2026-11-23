@@ -5,13 +5,13 @@ import json
 from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
-from adarelib.testset.compare import get_nested_value
+from adarelib.testset.compare import get_nested_value, regex_expected_problem
 from adarelib.testset.content import decode_text
 from adarelib.testset.structured import StructuredFormat, compare_value, load_data
 from adarelib.testset.structured import value_count as _structured_value_count
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.valuecompare import ordered_setup, structured_values_compare
-from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
+from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, decoder_setup
 
 # configure logging
 import logging
@@ -34,10 +34,14 @@ def _json_format(encoding: str | None) -> StructuredFormat:
 def _compare(ctx, value, expected_value, regex_match, ordered, decoder=None):
     """``ordered.compare`` in ordered mode, else equality / ``!re`` / placeholders / regex.
 
-    ``decoder`` (``value_decode``) decodes the value first.
+    ``decoder`` (``value_decode``) decodes the value first; a ``decoded_key_path`` that selects
+    nothing in it is no match (not an error).
     """
     if decoder is not None:
-        value = decoder(value)
+        try:
+            value = decoder(value)
+        except DecodedKeyPathMissing as e:
+            return False, str(e)
     if ordered is not None:
         return ordered.compare(value, expected_value)
     return compare_value(ctx, value, expected_value, regex_match=regex_match)
@@ -213,7 +217,8 @@ def value_matches(
             left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
             unknown step, is an error.
         decoded_key_path: Key path into the value ``json`` decoded (syntax as in ``key_path``);
-            it must select one value. Required with ``json``, an error without it.
+            it must select one value: none fails (the value decoded, the key is not in it), several are an error.
+            Required with ``json``, an error without it.
 
     Example:
         function: json.value_matches
@@ -241,6 +246,10 @@ def value_matches(
     )
     if problem is not None:
         return problem
+    if ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     data, error = load_data(ctx, dst, _json_format(encoding))
     if error is not None:
         return error
@@ -299,6 +308,9 @@ def array_contains(
           array_path: recent_files
           expected_value: /home/user/Documents/report.odt
     """
+    problem = regex_expected_problem(ctx, [expected_value])
+    if problem is not None:
+        return problem
     data, error = load_data(ctx, dst, _json_format(encoding))
     if error is not None:
         return error
@@ -437,7 +449,8 @@ def values_compare(
             ``dst``, ``archive!/member`` included); default ``None``: ``dst``. A missing file is
             an error. Compares a file with a copy saved before an action.
         value_decode: Decode both values before comparing (steps as in json.value_matches).
-        decoded_key_path: With ``json`` in ``value_decode``: key path into the decoded value.
+        decoded_key_path: With ``json`` in ``value_decode``: key path into the decoded value; it must select one
+            value: none fails, several are an error.
 
     Example:
         function: json.values_compare

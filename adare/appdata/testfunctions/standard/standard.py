@@ -10,6 +10,7 @@ from typing import Optional, Union
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
+from adarelib.testset.compare import regex_expected_problem
 from adarelib.testset.content import detect_encoding_from_bom as _detect_encoding_from_bom
 from adarelib.testset.content import strip_bom_from_text as _strip_bom_from_text
 from adarelib.testset.content import file_hash, parse_byte_string, parse_duration
@@ -366,7 +367,8 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
         content: Expected text. Both sides are ``strip()``-ed; inner whitespace must match
             (line endings are normalised to ``\n`` by text-mode reading). ``!re``/``!timestamp``
             tags inside the value become placeholders matched by type; the literal text
-            around them must match exactly.
+            around them must match exactly. An invalid ``!re`` regex is an error even when
+            the text around it does not match.
         encoding: Python codec used to decode the file (strict). ``BOM`` detects UTF-8/16/32
             from the byte-order mark and errors if there is none.
         strip_bom: Remove a leading U+FEFF from the decoded text before comparing.
@@ -377,6 +379,9 @@ def file_content_equals(ctx, dst: str = '', content: str = '', encoding: str = '
           dst: '{{ out_dir }}/exit_code.txt'
           content: '0'
     """
+    problem = regex_expected_problem(ctx, [content], many_placeholders=True)
+    if problem is not None:
+        return problem
     dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:

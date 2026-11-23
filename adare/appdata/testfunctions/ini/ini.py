@@ -23,11 +23,12 @@ from typing import Any
 from adarelib.testset.api import testfunction
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
+from adarelib.testset.compare import regex_expected_problem
 from adarelib.testset.content import decode_text, read_bytes_capped
 from adarelib.testset.structured import WILDCARD_MODES, compare_count, compare_value, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.valuecompare import ordered_setup
-from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
+from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, decoder_setup
 
 # configure logging
 import logging
@@ -275,7 +276,7 @@ def value_matches(
             number or boolean is compared as its text (``8080``, ``true``/``false``). A
             ``!re``/``!timestamp`` tag or ``{{placeholder}}`` is matched by type.
         regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
-            An invalid regex is an error.
+            An invalid regex is an error even when the key is absent.
         case_sensitive: ``False`` compares section and key names case-insensitively; values
             are always compared as given.
         encoding: Text encoding; default auto (BOM, BOM-less UTF-16, else UTF-8).
@@ -299,7 +300,8 @@ def value_matches(
             left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
             unknown step, is an error.
         decoded_key_path: Key path into the value ``json`` decoded (dot path as in json.value_matches);
-            it must select one value. Required with ``json``, an error without it.
+            it must select one value: none fails (the value decoded, the key is not in it), several are an error.
+            Required with ``json``, an error without it.
 
     Example:
         function: ini.value_matches
@@ -328,6 +330,10 @@ def value_matches(
     )
     if problem is not None:
         return problem
+    if ordered is None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     ini, error = _load_ini(ctx.resolve_globfilepath(dst), dst, encoding)
     if error is not None:
         return error
@@ -335,12 +341,20 @@ def value_matches(
     if not found:
         return TestResult.failed([f'{_where(section, key)} does not exist'])
     expected = _expected_text(expected_value)
+    results = []
     try:
-        values = [e.value if decoder is None else decoder(e.value, as_text=True) for e in found]
-        if ordered is not None:
-            results = [(e, *ordered.compare(v, expected)) for e, v in zip(found, values, strict=True)]
-        else:
-            results = [(e, *compare_value(ctx, v, expected, regex_match)) for e, v in zip(found, values, strict=True)]
+        for e in found:
+            v = e.value
+            if decoder is not None:
+                try:
+                    v = decoder(v, as_text=True)
+                except DecodedKeyPathMissing as missing:  # decoded fine, the key is not in it: no match
+                    results.append((e, False, str(missing)))
+                    continue
+            if ordered is not None:
+                results.append((e, *ordered.compare(v, expected)))
+            else:
+                results.append((e, *compare_value(ctx, v, expected, regex_match)))
     except (re.error, OrderingError, ValueDecodeError) as e:
         return TestResult.error([str(e)])
     if len(results) == 1:
@@ -389,6 +403,7 @@ def value_count(
         expected_value: Count only occurrences whose raw value equals/matches this (same
             rules as ini.value_matches); ``None`` (default) counts every occurrence.
         regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
+            An invalid regex is an error even when the key is absent.
         comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
             ``less_equal``; other values are an error.
         case_sensitive: ``False`` compares section and key names case-insensitively.
@@ -407,6 +422,10 @@ def value_count(
     problems = count_parameter_errors(expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
+    if expected_value is not None:
+        problem = regex_expected_problem(ctx, [expected_value], regex_match)
+        if problem is not None:
+            return problem
     ini, error = _load_ini(resolved, dst, encoding)
     if error is not None:
         return error

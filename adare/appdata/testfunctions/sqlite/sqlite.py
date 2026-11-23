@@ -9,6 +9,7 @@ from adarelib.constants import StatusEnum
 from adarelib.testset import binary
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
+from adarelib.testset.compare import regex_expected_problem
 from adarelib.event.event import TestResult
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.sqlite_freespace import REGION_KINDS, FreeSpace, SqliteFreeSpaceError, read_free_space
@@ -203,6 +204,11 @@ def query_result(
         problems += count_parameter_errors(expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
+    if expected_result is not None:
+        # a regex placeholder in expected_result is checked before a count mismatch can hide it
+        regex_problem = regex_expected_problem(ctx, [str(expected_result)], many_placeholders=True)
+        if regex_problem is not None:
+            return regex_problem
 
     result, snapshot_details, error = _run_query(ctx, dst, query, view)
     if error is not None:
@@ -617,10 +623,27 @@ def free_space_pattern_count(
     it (``expected_count: 0``, as with ``PRAGMA secure_delete``). The file is parsed per the
     SQLite file format, without SQLite: freelist pages (pages no longer in use, including the
     overflow pages of a deleted large row), freeblocks (freed cells inside a b-tree page)
-    and the unallocated space of each b-tree page. Occurrences are counted per region, so a
-    match never spans two regions. Details list which pages and regions matched (absolute
+    and the unallocated space of each b-tree page. Regions never overlap and occurrences
+    are counted per region, so a match never spans two regions. SQLite can leave a record in the file twice (the old cell in a
+    page it rewrote and a copy in the page that took over the rows), which is then counted
+    twice; and it overwrites freed data when it rewrites or merges pages, so a deleted record
+    is not always recoverable. Details list which pages and regions matched (absolute
     file offsets) and the size of each kind of free space. To search the whole file use
     binary.pattern_count; live rows are counted there too.
+
+    Free space is not "all stale bytes": a count of 0 here does not prove a deleted value is
+    gone from the file. Not covered: the sampled keys in ``sqlite_stat4`` (until the next
+    ANALYZE) and the segments of a full-text index (``<name>_data`` of FTS5, ``_segments`` of
+    FTS3/4; until a merge or optimize), live rows of ordinary b-trees that a query can read
+    (``SELECT ... FROM sqlite_stat4``); the unused tail of an overflow page in use, which
+    keeps the old bytes of a page SQLite freed and reused within one transaction (even
+    ``secure_delete`` wipes it); the reserved bytes of each page, fragments of fewer than 4
+    bytes and bytes after the last complete page; and the ``-wal`` (``view: current`` folds
+    it in). Deleted index keys are covered: an index is a b-tree whose interior cells are
+    index entries, and deleting one replaces it, so the old cell is free space. Table
+    interior pages keep the rowids of deleted rows as dividers (no text; ``secure_delete``
+    does not remove them). To assert "gone from the whole file" use text.occurrence_count
+    on dst with ``expected_count: 0`` (and on ``<dst>-wal`` when it exists).
 
     A corrupt header or a broken freelist / freeblock chain (a pointer out of range, a
     cycle, a freelist count that does not match the header) is an error: the free space

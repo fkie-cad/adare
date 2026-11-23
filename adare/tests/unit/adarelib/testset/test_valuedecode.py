@@ -2,11 +2,12 @@
 
 import base64
 import json
+import re
 
 import pytest
 
 from adarelib.constants import StatusEnum
-from adarelib.testset.valuedecode import ValueDecodeError, build_decoder, decoder_setup
+from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, build_decoder, decoder_setup
 
 pytestmark = pytest.mark.unit
 
@@ -55,7 +56,6 @@ def test_no_decoding_by_default():
         ('utf16', None, 'text', 'utf16'),  # needs bytes
         (['hex', 'utf16'], None, '00d8', 'utf16'),  # lone surrogate
         ('json', 'a', 'not json', 'json'),
-        ('json', 'a', '{"b": 1}', 'json'),  # selects nothing
         ('json', '*', '{"a": 1, "b": 2}', 'json'),  # selects two
         ('url', None, {'a': 1}, 'url'),
         (['url', 'json'], 'a', '%FF', 'json'),  # no UTF-8 text
@@ -83,3 +83,38 @@ def test_bad_parameters(steps, key_path, message):
         build_decoder(steps, key_path)
     decoder, problem = decoder_setup(steps, key_path)
     assert decoder is None and problem.status == StatusEnum.ERROR
+
+
+@pytest.mark.parametrize(
+    ('steps', 'key_path', 'value'),
+    [
+        ('json', 'a', '{"b": 1}'),
+        ('json', 'a.b', '{"a": {"c": 1}}'),
+        ('json', 'items[5]', '{"items": [1]}'),
+        (['base64', 'json'], 'id', base64.b64encode(b'{"other": 1}').decode()),
+        (['url', 'json'], 'a', '%7B%7D'),
+    ],
+)
+def test_key_path_selecting_nothing_is_a_distinct_signal(steps, key_path, value):
+    """The value decoded fine and the key is not in it: a subclass, so callers can say FAILED."""
+    with pytest.raises(
+        DecodedKeyPathMissing, match=f"step 'json'.*decoded_key_path {re.escape(repr(key_path))} selects nothing"
+    ):
+        build_decoder(steps, key_path)(value)
+
+
+def test_missing_key_path_is_still_a_value_decode_error_for_old_callers():
+    assert issubclass(DecodedKeyPathMissing, ValueDecodeError)
+
+
+@pytest.mark.parametrize(
+    ('key_path', 'value'),
+    [
+        ('*', '{"a": 1, "b": 2}'),  # selects two values: still an error
+        ('a', 'not json'),  # the decode step fails
+    ],
+)
+def test_other_json_problems_are_not_the_missing_signal(key_path, value):
+    with pytest.raises(ValueDecodeError) as raised:
+        build_decoder('json', key_path)(value)
+    assert not isinstance(raised.value, DecodedKeyPathMissing)
