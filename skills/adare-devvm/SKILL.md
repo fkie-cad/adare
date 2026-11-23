@@ -39,6 +39,7 @@ need **no** VLM.
 adare dev start -e <env>                 # boot a VM session; prints the session id
 adare dev start -e <env> --reuse         # attach to the most-recent running session instead
 adare dev start -e <env> --watch         # also open the live screen in the browser
+adare dev start -e <env> --no-postsetup  # skip the environment's post-setup steps (run by default)
 adare dev list                           # active sessions
 adare dev state [-s <id>]                # variables, stats, snapshots
 adare dev resume [<id>]                  # resume a stopped session (most-recent if omitted)

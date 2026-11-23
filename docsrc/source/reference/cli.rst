@@ -540,7 +540,8 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
 **Session Management**
 
 ``adare dev start``
-  Start a new dev mode session. Boots the VM, takes a base snapshot, and prepares for interactive use.
+  Start a new dev mode session. Boots the VM, runs the environment's post-setup steps (as a run
+  does; a failing step fails the start), takes a base snapshot, and prepares for interactive use.
 
   Options:
     * ``-e, --environment TEXT`` - Environment name (required)
@@ -553,6 +554,7 @@ Session IDs are auto-detected when only one session is running; use ``-s <sessio
     * ``--debug-screenshots`` - Save screenshots for debugging
     * ``--reuse`` - Attach to the most recent running session of the project instead of booting a new VM
     * ``--watch`` - Open the VM's live screen in the browser (needs ``adare ui start``)
+    * ``--no-postsetup`` - Skip the environment's post-setup steps
 
 ``adare dev stop [session_id]``
   Stop a running dev mode session. Shuts down the VM but preserves all resources for later resumption.

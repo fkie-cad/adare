@@ -31,12 +31,13 @@ from websockets.exceptions import WebSocketException
 
 from adare.backend.experiment.exceptions import PostSetupStepError
 from adare.backend.experiment.websocket_client import WebSocketTimeoutError
+from adare.types.environment import DEFAULT_POSTSETUP_TIMEOUT
 from adarelib.constants import StatusEnum
 
 log = logging.getLogger(__name__)
 
 #: Seconds a step may run when it sets no ``timeout`` (installers are slow).
-DEFAULT_STEP_TIMEOUT = 600.0
+DEFAULT_STEP_TIMEOUT = DEFAULT_POSTSETUP_TIMEOUT
 #: Lines of stderr (or stdout) quoted in a failure message.
 FAILURE_TAIL_LINES = 20
 #: File in the run's ``logs/`` directory.
@@ -66,8 +67,7 @@ class PostsetupStep:
 def normalize_step(raw: Any, index: int = 1) -> PostsetupStep:
     """A :class:`PostsetupStep` from a DB row or ``PostsetupInstallations``.
 
-    ``admin``, ``allow_failure`` and ``timeout`` are read defensively: rows stored before
-    those fields existed simply do not have them.
+    Optional fields are read with ``getattr`` so plain objects (tests, sketches) work too.
     """
     timeout = getattr(raw, 'timeout', None)
     return PostsetupStep(
