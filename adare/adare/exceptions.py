@@ -141,6 +141,10 @@ class TestFunctionNotFoundError(LoggedErrorException):
     pass
 
 
+class TestfunctionUploadError(LoggedErrorException):
+    """Testfunctions could not be uploaded to the guest (missing file, path outside the state dir, ...)."""
+
+
 class EnvironmentVMNotFoundError(LoggedErrorException):
     pass
 
