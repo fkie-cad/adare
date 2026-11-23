@@ -112,17 +112,17 @@ class LinuxFSSnapshot:
         except subprocess.TimeoutExpired as e:
             msg = f"Snapshot collection timed out after {e.timeout} seconds"
             log.error(msg)
-            raise LinuxFSSnapshotException(msg)
+            raise LinuxFSSnapshotException(msg) from e
 
         except subprocess.SubprocessError as e:
             msg = f"Failed to execute find command: {e}"
             log.error(msg)
-            raise LinuxFSSnapshotException(msg)
+            raise LinuxFSSnapshotException(msg) from e
 
         except Exception as e:
             msg = f"Unexpected error during snapshot collection: {e}"
             log.error(msg)
-            raise LinuxFSSnapshotException(msg)
+            raise LinuxFSSnapshotException(msg) from e
 
     @staticmethod
     def _build_find_command(root_path: str = '/') -> str:
@@ -171,7 +171,7 @@ class LinuxFSSnapshot:
             ctime = float(ctime_str)
             size = int(size_str)
         except ValueError as e:
-            raise ValueError(f"Failed to parse numeric fields: {e}")
+            raise ValueError(f"Failed to parse numeric fields: {e}") from e
 
         return (path, mtime, atime, ctime, size)
 

@@ -8,8 +8,13 @@ from pathlib import Path
 from typing import Any
 
 import attrs
-import dateutil.tz
 
+from adarelib.common.timezones import (  # noqa: F401 - _apply_timezone and ValidationError stay importable here
+    ValidationError,
+    _apply_timezone,
+    check_timestamp_format,
+    check_timezone,
+)
 from adarelib.testset.timeinterval import parse_timestamp_text
 
 log = logging.getLogger(__name__)
@@ -27,44 +32,6 @@ class VariableType(Enum):
     BOOLEAN = "boolean"
     LIST = "list"
     DICT = "dict"
-
-
-class ValidationError(ValueError):
-    """Raised when variable validation fails.
-
-    A ``ValueError`` so that callers loading a playbook (which already report ``ValueError`` as a
-    playbook error) report a bad variable too instead of crashing.
-    """
-
-
-_UTC_OFFSET_RE = re.compile(r'([+-])(\d{2})(?::?(\d{2}))?')
-
-
-def _apply_timezone(dt: datetime.datetime, timezone_str: str) -> datetime.datetime:
-    """Give a naive datetime the time zone ``timezone_str`` (the wall-clock time is kept).
-
-    ``timezone_str`` is a UTC offset (``+02:00``, ``-0500``, ``+02``) or a zone name
-    (``Europe/Berlin``, ``UTC``). An aware datetime already has its zone and is returned unchanged.
-
-    :raises ValidationError: the offset is malformed or out of range, or the zone name is unknown
-    """
-    if dt.tzinfo is not None:
-        return dt
-    if timezone_str.startswith(('+', '-')):
-        match = _UTC_OFFSET_RE.fullmatch(timezone_str)
-        if not match:
-            raise ValidationError(f"Invalid timezone offset '{timezone_str}' (expected e.g. +02:00 or -0500)")
-        sign, hours, minutes = match.groups()
-        offset = datetime.timedelta(hours=int(hours), minutes=int(minutes or 0))
-        try:
-            tz = datetime.timezone(-offset if sign == '-' else offset)
-        except ValueError as e:  # the offset must be strictly between -24h and +24h
-            raise ValidationError(f"Invalid timezone offset '{timezone_str}': {e}") from e
-    else:
-        tz = dateutil.tz.gettz(timezone_str)
-        if tz is None:
-            raise ValidationError(f"Unknown timezone '{timezone_str}'")
-    return dt.replace(tzinfo=tz)
 
 
 @attrs.define
@@ -97,14 +64,11 @@ class TimestampMetadata:
         :raises ValidationError: the time zone is unknown or malformed, or the format is not a
             string (checked here, when the playbook loads, rather than mid-run)
         """
-        timezone_str = data.get('timezone')
+        timezone_str, format_str = data.get('timezone'), data.get('format')
         if timezone_str is not None:
-            if not isinstance(timezone_str, str):
-                raise ValidationError(f"Timezone must be a string, got {timezone_str!r}")
-            _apply_timezone(datetime.datetime(2000, 1, 1), timezone_str)
-        format_str = data.get('format')
-        if format_str is not None and not isinstance(format_str, str):
-            raise ValidationError(f"Timestamp format must be a string, got {format_str!r}")
+            check_timezone(timezone_str)
+        if format_str is not None:
+            check_timestamp_format(format_str)
         tolerance = data.get('tolerance', [0, 0])
         if isinstance(tolerance, (list, tuple)) and len(tolerance) >= 2:
             tolerance_upper, tolerance_lower = tolerance[0], tolerance[1]
@@ -126,7 +90,7 @@ class TimestampMetadata:
 
         def timezone_filter(value, tz_name):
             """Convert timestamp to specified timezone and capture metadata."""
-            # Find the variable this filter is being applied to
+            check_timezone(tz_name)  # before storing it, so a bad zone can't break later resolutions
             source_var = self._find_variable_by_value(variable_registry, value, VariableType.TIMESTAMP)
             if source_var:
                 # Update the variable's metadata
@@ -141,7 +105,7 @@ class TimestampMetadata:
 
         def format_filter(value, format_str):
             """Set timestamp format and capture metadata."""
-            # Find the variable this filter is being applied to
+            check_timestamp_format(format_str)
             source_var = self._find_variable_by_value(variable_registry, value, VariableType.TIMESTAMP)
             if source_var:
                 # Update the variable's metadata

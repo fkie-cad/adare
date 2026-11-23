@@ -10,6 +10,7 @@ import yaml
 from cattrs.gen import make_dict_structure_fn
 
 # Re-exported: callers import these from adare.types.playbook.
+from adare.types.playbook_templates import check_timestamp_filters
 from adare.types.targets import (
     BestConfidenceStrategy,
     BottomLeftStrategy,
@@ -583,6 +584,8 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
 
     with yaml_path.open('r') as f:
         data = yaml.load(f, Loader=get_custom_loader())
+
+    check_timestamp_filters(data)
 
     # Convert variables to VariableRegistry if present (automatic variables added during resolution)
     if 'variables' in data and data['variables']:

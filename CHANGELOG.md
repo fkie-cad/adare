@@ -311,6 +311,10 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   timestamp (it used to come through as its raw text) and a non-string `format` raise
   `ValidationError` when the playbook loads. `ValidationError` is now a `ValueError`, so
   `playbook validate` and `experiment run` report it as a playbook error.
+- The `timezone(...)` / `format(...)` Jinja filters (adarelib) check their argument before
+  storing it on the variable. A bad zone used to be stored and broke every later variable
+  resolution in the run; it now fails at that template, and a literal bad zone
+  (`{{ t | timezone('Europe/Berln') }}`) already fails when the playbook loads.
 - `adare experiment create` wrote a `metadata.yml` whose `environments:` held only comments
   (null), so `experiment run` and `experiment add-env` rejected the new experiment. The
   skeleton now writes `environments: []`, and a null list in an existing `metadata.yml` loads as
