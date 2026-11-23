@@ -40,6 +40,61 @@ two regions. B-tree pages are recognised by their page type byte; pointer-map pa
 Combine it with :doc:`row_count` (``expected_count: 0``) to show that a record is gone from the
 live data but still recoverable from the file.
 
+.. warning::
+
+   **Free space is not every stale byte.** ``expected_count: 0`` here proves only that the text is
+   not in the free space; it can still be in the file. What this test does *not* search:
+
+   * **Index interior cells are not a gap.** An index is a b-tree whose interior cells are index
+     entries (not copies of leaf keys). Deleting an entry on an interior page replaces it with the
+     entry before it, and the old cell becomes a freeblock or unallocated space, which is searched.
+   * **Table interior pages** keep the *rowids* of deleted rows as dividers until the page is
+     rebalanced or the table rewritten (``secure_delete`` does not remove them). They hold numbers,
+     not text, and a pattern search cannot single them out (a rowid is a short varint).
+   * **``sqlite_stat4``** (after ``ANALYZE`` or ``PRAGMA optimize``) stores up to 24 sampled index
+     keys per index as live rows. A deleted row whose key was sampled stays there, even with
+     ``secure_delete``, until the next ANALYZE. A query reads it:
+     ``SELECT 1 FROM sqlite_stat4 WHERE instr(sample, CAST('text' AS BLOB)) > 0``.
+   * **Full-text indexes** (FTS5: ``<name>_data``; FTS3/4: ``<name>_segments``) keep the terms of a
+     deleted document in their segments until a merge or ``optimize``, again with ``secure_delete``.
+     Terms are stored prefix-compressed, so only the part after the shared prefix may match.
+   * **The unused tail of an overflow page in use.** When SQLite frees a page and takes it again as
+     the last overflow page of a big value within one transaction, the bytes after the value keep
+     the old content of the page. The page is neither on the freelist nor a b-tree page, so no
+     region covers it. ``secure_delete`` zeroes freed pages, so this needs the default (off).
+   * Reserved bytes at the end of each page, fragments of fewer than 4 bytes, bytes after the last
+     complete page, and the ``-wal`` file (``view: current`` folds it into the copy first).
+
+   In a table with an index on a text column, 400 rows and 100 deleted (10 runs, 1000 deleted
+   values), every deleted value was in the free space with the default settings, and none was
+   anywhere in the file with ``secure_delete`` on. After ``ANALYZE`` with ``secure_delete`` on,
+   55 of the 1000 were still in ``sqlite_stat4`` and none in the free space.
+
+   To assert that a value is **gone from the whole file**, search all of it, in the encodings
+   the database uses, and the write-ahead log if there is one:
+
+   .. code-block:: yaml
+
+      tests:
+        - name: value_not_in_main_file
+          function: text.occurrence_count
+          parameter:
+            dst: /data/app/state.db
+            content: deleted-note-title
+            encoding: [utf-8, utf-16-le]
+            expected_count: 0
+        - name: value_not_in_wal
+          function: text.occurrence_count
+          parameter:
+            dst: /data/app/state.db-wal   # an error when there is no -wal
+            content: deleted-note-title
+            expected_count: 0
+
+   :doc:`../binary/pattern_count` does the same for a pattern type of ``bytes``, ``hex`` or ``regex``.
+   Live rows are counted too, and each indexed value is in the file at least twice while the row
+   lives (table cell and index entry), so "deleted but still in the file" is
+   :doc:`row_count` ``expected_count: 0`` together with a whole-file count of at least 1.
+
 Parameters
 ----------
 
