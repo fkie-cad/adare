@@ -109,6 +109,23 @@ class TestYamlTags:
                 {'parameter': {'entry': [YamlTimestamp(timestamp='{{ later }}', tolerance=5)]}}, {'x': 1}
             )
 
+    @pytest.mark.parametrize('context', [{}, None])
+    def test_unset_timestamp_variable_with_empty_context_is_an_error(self, context):
+        # an empty context must not hand the raw '{{ later }}' to the test
+        with pytest.raises(TemplateResolutionError, match="'later' is undefined"):
+            _resolver().process_data(
+                {'parameter': {'entry': [YamlTimestamp(timestamp='{{ later }}', tolerance=5)]}}, context
+            )
+
+    def test_unset_timestamp_variable_without_tolerance_is_an_error(self):
+        with pytest.raises(TemplateResolutionError, match="'later' is undefined"):
+            _resolver().process_data({'parameter': {'entry': [YamlTimestamp(timestamp='{{ later }}')]}}, {})
+
+    def test_timestamp_variable_set_to_empty_is_not_replaced_by_the_template(self):
+        resolver = _resolver()
+        resolver.process_data({'parameter': {'entry': [YamlTimestamp(timestamp='{{ t }}', tolerance=5)]}}, {'t': ''})
+        assert resolver.get_placeholder_metadata()['t_resolved']['resolved_value'] == ''
+
     def test_single_timestamp_tag_in_mapping(self):
         resolver = _resolver()
         out = resolver.process_data(

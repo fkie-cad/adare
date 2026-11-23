@@ -19,6 +19,20 @@ from adare.backend.experiment.yaml_tag_processor import YamlTagProcessor
 log = logging.getLogger(__name__)
 
 
+def create_jinja_environment(variables=None) -> jinja2.Environment:
+    """A Jinja environment carrying the custom filters of a playbook's variable registry (if any)."""
+    filters = {}
+    if variables:
+        from adarelib.common.variables import TimestampMetadata
+
+        filters.update(TimestampMetadata().get_jinja_filters(variables))
+
+    env = jinja2.Environment()
+    env.filters.update(filters)
+    log.debug(f"Created Jinja environment with filters: {list(filters.keys())}")
+    return env
+
+
 class VariableResolver:
     """
     Resolves YAML custom tags in data by converting them to variable placeholders

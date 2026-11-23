@@ -2,13 +2,16 @@
 
 import json
 
+import jinja2
 import pytest
 
 from adare.backend.experiment.clock import GUEST_UTC_OFFSET_KEY, ClockRecorder, ClockSample, ClockSummary, is_jump
+from adare.backend.experiment.jinja_template_resolver import JinjaTemplateResolver
 from adare.backend.experiment.test_loader import _attach_guest_utc_offset
 from adare.backend.experiment.timestamp_interval import resolve_interval_bounds
 from adare.backend.experiment.variable_resolver import VariableResolver
 from adare.backend.experiment.websocket_client import WebSocketTimeoutError
+from adare.exceptions import TemplateResolutionError
 from adarelib.common.variables import VariableRegistry
 from adarelib.testset.yaml.customtags import YamlTimestamp
 
@@ -134,9 +137,17 @@ class TestIntervalResolution:
         metadata = resolve_interval_bounds({'interval': ['{{ t0 }}', '{{ t1 }}']}, resolve, {'t0': 1.5, 't1': 2.5})
         assert metadata['interval'] == ['1.5', '2.5']
 
-    def test_unset_bound_kept_for_runtime(self):
-        metadata = resolve_interval_bounds({'interval': ['{{ t0 }}', '{{ t1 }}']}, lambda t, c: '', {'x': 1})
-        assert metadata['interval'] == ['{{ t0 }}', '{{ t1 }}']
+    @pytest.mark.parametrize('context', [{'x': 1}, {}, None])
+    def test_unset_bound_is_an_error_naming_the_variable(self, context):
+        resolver = JinjaTemplateResolver(jinja2.Environment()).resolve_template_with_context
+        with pytest.raises(TemplateResolutionError, match="'t1' is undefined"):
+            resolve_interval_bounds({'interval': ['{{ t0 }}', '{{ t1 }}']}, resolver, {'t0': 1.5, **(context or {})})
+        with pytest.raises(TemplateResolutionError, match="'t0' is undefined"):
+            resolve_interval_bounds({'interval': ['{{ t0 }}', '{{ t1 }}']}, resolver, context)
+
+    def test_empty_bound_value_is_not_replaced_by_the_template(self):
+        metadata = resolve_interval_bounds({'interval': ['{{ t0 }}']}, lambda t, c: '', {'t0': ''})
+        assert metadata['interval'] == ['']
 
     def test_interval_tag_becomes_placeholder(self):
         resolver = VariableResolver(variable_registry=VariableRegistry())
@@ -152,6 +163,13 @@ class TestIntervalResolution:
         metadata = resolver.get_placeholder_metadata()['t0_resolved']
         assert metadata['interval'] == ['100.0', '105.0']
         assert metadata['precision'] == 1
+
+    def test_interval_tag_with_unset_bound_is_an_error(self):
+        resolver = VariableResolver(variable_registry=VariableRegistry())
+        test = {'name': 'x', 'parameter': {'entry': [YamlTimestamp(after='{{ t0 }}', before='{{ t1 }}', precision=1)]}}
+
+        with pytest.raises(TemplateResolutionError, match="'t1' is undefined"):
+            resolver.process_data(test, {'t0': 100.0})
 
 
 class TestGuestUtcOffsetAttachment:

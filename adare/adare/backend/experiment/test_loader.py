@@ -322,21 +322,6 @@ class TestLoader:
         except (ValueError, TypeError, KeyError, jinja2.TemplateError) as e:
             raise TemplateResolutionError(log, f"Cannot resolve test '{test_name}': {type(e).__name__}: {e}") from e
 
-    def _create_jinja_environment(self):
-        """Create Jinja environment with all necessary filters."""
-        # Get filters from variable registry if available
-        filters = {}
-        if hasattr(self.playbook, 'variables') and self.playbook.variables:
-            from adarelib.common.variables import TimestampMetadata
-
-            metadata = TimestampMetadata()  # Create temp metadata object
-            filters.update(metadata.get_jinja_filters(self.playbook.variables))
-
-        env = jinja2.Environment()
-        env.filters.update(filters)
-        log.debug(f"Created Jinja environment with filters: {list(filters.keys())}")
-        return env
-
     def _extract_used_testfunction_names(self) -> set[str]:
         """Extract all testfunction names used in the current playbook."""
         try:

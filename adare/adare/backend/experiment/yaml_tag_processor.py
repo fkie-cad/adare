@@ -53,10 +53,14 @@ class YamlTagProcessor:
     def process_yaml_tags(
         self,
         data: Any,
-        template_context: dict[str, Any] | None = None,
-        template_resolver: TemplateResolver | None = None,
+        template_context: dict[str, Any] | None,
+        template_resolver: TemplateResolver,
     ) -> Any:
-        """Replace every tag anywhere in ``data`` (mappings and lists at any depth); returns a new structure."""
+        """Replace every tag anywhere in ``data`` (mappings and lists at any depth); returns a new structure.
+
+        ``template_resolver`` renders a templated tag value strictly: a variable that is not set raises
+        ``TemplateResolutionError`` (see ``JinjaTemplateResolver``).
+        """
         self._names_in_use = set()  # placeholder names only need to be unique within one test
         return self._process(data, template_context, template_resolver)
 
@@ -98,11 +102,11 @@ class YamlTagProcessor:
 
     def _convert_timestamp(self, tag, template_context: dict[str, Any] | None, template_resolver) -> Any:
         value = tag.string
+        resolved = _render(value, template_context, template_resolver)
         if not self.tolerance_detector.has_yaml_tolerance(tag):
             # Compared exactly: the tag is just a value.
-            return _render(value, template_context, template_resolver, keep_unset=False)
+            return resolved
 
-        resolved = _render(value, template_context, template_resolver, keep_unset=True)
         placeholder_name = self._timestamp_placeholder_name(value)
         self.metadata_manager.add_timestamp_metadata(
             placeholder_name,
@@ -130,15 +134,8 @@ def _is_template(value: Any) -> bool:
     return '{{' in str(value) and '}}' in str(value)
 
 
-def _render(value: Any, template_context: dict[str, Any] | None, template_resolver, keep_unset: bool) -> Any:
-    """Resolve a templated value; with ``keep_unset``, an empty result keeps the template.
-
-    Empty means the variable is only set later in the run (``save_timestamp``); the
-    test is resolved again with the runtime context then.
-    """
-    if not _is_template(value) or not (template_resolver and template_context):
+def _render(value: Any, template_context: dict[str, Any] | None, template_resolver: TemplateResolver) -> Any:
+    """Resolve a templated value strictly; a variable that is not set raises ``TemplateResolutionError``."""
+    if not _is_template(value):
         return value
-    rendered = template_resolver(value, template_context)
-    if keep_unset and (not rendered or rendered.isspace()):
-        return value
-    return rendered
+    return template_resolver(value, template_context or {})

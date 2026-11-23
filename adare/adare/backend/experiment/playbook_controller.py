@@ -27,7 +27,7 @@ from adare.backend.experiment.filesystem_diff_manager import FilesystemDiffManag
 # Target resolution using MCP GUI server
 from adare.backend.experiment.target_resolver import MCPConditionChecker, MCPTargetResolver
 from adare.backend.experiment.test_loader import TestLoader
-from adare.backend.experiment.variable_resolver import VariableResolver
+from adare.backend.experiment.variable_resolver import VariableResolver, create_jinja_environment
 
 # WebSocket client import
 from adare.backend.experiment.websocket_client import AdareVMClient
@@ -301,7 +301,8 @@ class PlaybookController(FailureHandlingMixin):
 
         # Variable resolver for template processing
         self.variable_resolver = VariableResolver(
-            variable_registry=variable_registry, jinja_env=self._create_jinja_environment()
+            variable_registry=variable_registry,
+            jinja_env=create_jinja_environment(getattr(self.playbook, 'variables', None)),
         )
 
         # Event manager for action event creation and emission
@@ -356,7 +357,8 @@ class PlaybookController(FailureHandlingMixin):
         # Rebuild the resolver so its registry *and* its Jinja filters (which are bound
         # to a registry) refer to the new playbook.
         self.variable_resolver = VariableResolver(
-            variable_registry=merged_registry, jinja_env=self._create_jinja_environment()
+            variable_registry=merged_registry,
+            jinja_env=create_jinja_environment(getattr(self.playbook, 'variables', None)),
         )
 
         # Keep the components holding their own references in sync.
@@ -427,23 +429,6 @@ class PlaybookController(FailureHandlingMixin):
 
         # Keep the icon library's extraction transport in sync after reconnect
         self.target_resolver.set_vm_client(new_client)
-
-    def _create_jinja_environment(self):
-        """Create Jinja environment with all necessary filters."""
-        import jinja2
-
-        # Get filters from variable registry if available
-        filters = {}
-        if hasattr(self.playbook, 'variables') and self.playbook.variables:
-            from adarelib.common.variables import TimestampMetadata
-
-            metadata = TimestampMetadata()  # Create temp metadata object
-            filters.update(metadata.get_jinja_filters(self.playbook.variables))
-
-        env = jinja2.Environment()
-        env.filters.update(filters)
-        log.debug(f"Created Jinja environment with filters: {list(filters.keys())}")
-        return env
 
     def _initialize_playbook_items_mapping(self):
         """Initialize mapping from action index to playbook_item_id."""

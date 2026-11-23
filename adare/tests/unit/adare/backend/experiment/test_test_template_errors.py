@@ -13,7 +13,7 @@ import pytest
 
 from adare.backend.experiment import test_loader
 from adare.backend.experiment.execution import test_actions
-from adare.backend.experiment.variable_resolver import VariableResolver
+from adare.backend.experiment.variable_resolver import VariableResolver, create_jinja_environment
 from adare.exceptions import TemplateResolutionError
 from adare.types.playbook import ActionTestAction, parse_playbook
 from adarelib.common.automatic_variables import AutomaticVariables
@@ -74,7 +74,7 @@ def parts(tmp_path):
     playbook = parse_playbook(tmp_path / 'playbook.yml')
     automatic = AutomaticVariables.get_automatic_variables('linux', 'user')
     playbook.variables = AutomaticVariables.merge_with_user_variables(automatic, playbook.variables)
-    jinja_env = test_loader.TestLoader(tmp_path, tmp_path, playbook=playbook)._create_jinja_environment()
+    jinja_env = create_jinja_environment(playbook.variables)
     return tmp_path, playbook, jinja_env
 
 
@@ -133,7 +133,7 @@ def real_run_test(tmp_path):
     playbook = parse_playbook(tmp_path / 'playbook.yml')
     automatic = AutomaticVariables.get_automatic_variables('linux', 'user')
     playbook.variables = AutomaticVariables.merge_with_user_variables(automatic, playbook.variables)
-    jinja_env = test_loader.TestLoader(tmp_path, tmp_path, playbook=playbook)._create_jinja_environment()
+    jinja_env = create_jinja_environment(playbook.variables)
     resolver = VariableResolver(variable_registry=playbook.variables, jinja_env=jinja_env)
     loader = test_loader.TestLoader(tmp_path, tmp_path, playbook=playbook, variable_resolver=resolver)
     loader.get_test_class = lambda name: None
