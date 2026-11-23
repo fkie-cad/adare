@@ -337,6 +337,25 @@ def _write_run_image_record(context: ExperimentRunCtx, run_dir) -> None:
         log.warning(f'Could not write the run image record: {e}')
 
 
+def _check_qemu_socket_paths(context: ExperimentRunCtx) -> None:
+    """Fail now, with guidance, if a QEMU machine's QMP/QGA socket paths exceed the OS limit.
+
+    Runs before the CV server or anything else is started: a deep ``ADARE_HOME`` would
+    otherwise surface as a traceback late in VM setup. Uses the VM's real name when the
+    environment's VM is registered, else the shortest possible one.
+    """
+    from adare.hypervisor.qemu.socket_paths import check_run_socket_paths
+
+    for machine_key, machine in context.machines.items():
+        if machine.hypervisor_type != 'qemu':
+            continue
+        vm_name = ''
+        if machine.environment_ulid:
+            env = environment_database.get_environment_by_ulid(machine.environment_ulid, fields=['vm_name'])
+            vm_name = (env or {}).get('vm_name') or ''
+        check_run_socket_paths(vm_name, machine_key)
+
+
 def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool = False):
     """Consolidated step: Check application data and create run directory.
 
@@ -350,6 +369,8 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
         - The adarevm agent writes to logs/adarevm.log automatically
     """
     with StageCtxManager(PrepareRunEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        _check_qemu_socket_paths(context)
+
         # Check application data
         adarevm_uv_lock = ADAREVM_DIR / 'uv.lock'
         adarelib_uv_lock = ADARELIB_DIR / 'uv.lock'
