@@ -8,7 +8,7 @@ values_compare
 :Category: XML Data
 :Function Name: ``values_compare``
 
-**Compares two values (element text or attribute) of one XML file as numbers or timestamps (earlier/later, within a tolerance, A = B + offset).**
+**Compares two values (element text or attribute) of one XML file (or of two files) as numbers or timestamps (earlier/later, within a tolerance, A = B + offset).**
 
 Passes when ``first <comparison_type> second + offset`` holds, where each side is the text or an attribute of the one element its XPath selects. Both values are compared as numbers or as points in time.
 
@@ -48,7 +48,7 @@ Parameters
      - **Optional.** Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
    * - ``offset``
      - number
-     - **Optional.** Added to the second value before comparing (seconds for timestamps, may be negative): ``first <comparison_type> second + offset``.
+     - **Optional.** Added to the second value before comparing (seconds for timestamps, may be negative): ``first <comparison_type> second + offset``. ``'{{ name }}'`` takes a saved number (:ref:`ordered-comparison`).
    * - ``time_format``
      - string
      - **Optional.** ``strptime`` format of text timestamps; default ISO 8601 or RFC 2822.
@@ -64,6 +64,15 @@ Parameters
    * - ``namespaces``
      - dict
      - **Optional.** Prefix -> URI map for prefixed names in both XPaths.
+   * - ``other_dst``
+     - string
+     - **Optional.** Path of a second file to read the second value from, loaded like ``dst`` (``archive.zip!/member`` included); default: ``dst``. A missing file is an ERROR. Compares a file with a copy saved before an action: :ref:`before-after-action`.
+   * - ``value_decode``
+     - list / string
+     - **Optional.** Decode both values before comparing (steps as in :doc:`element_text_matches`; see "Decoding a stored value" under :ref:`ordered-comparison`).
+   * - ``decoded_key_path``
+     - string
+     - **Optional.** With ``json`` in ``value_decode``: key path into the decoded value.
 
 Usage Example
 -------------

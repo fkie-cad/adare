@@ -316,6 +316,13 @@ def exec_validate_testfunction(arguments):
     console.print()
 
 
+def _print_path_params(console, testclass, params: dict) -> None:
+    """Show the other guest paths a test reads (``host_mode_path_params``, e.g. ``other_dst``)."""
+    for name in getattr(testclass, 'host_mode_path_params', ()):
+        if params.get(name):
+            console.print(f'  {name}: {params[name]}')
+
+
 def exec_dry_run_testfunction(arguments):
     """Execute a single testfunction against a local sample path (no VM).
 
@@ -421,6 +428,7 @@ def exec_dry_run_testfunction(arguments):
     status_name = StatusEnum(result.status).name
     color = StatusEnum.get_color(result.status) or 'white'
     console.print(f'\n[bold]{target}[/bold] (sample: {sample or params.get("dst", "—")})')
+    _print_path_params(console, testclass, params)
     console.print(f'  status: [{color}]{status_name}[/{color}]')
     if result.details:
         console.print('  details:')

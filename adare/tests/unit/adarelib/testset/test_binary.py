@@ -14,6 +14,7 @@ from adarelib.testset.binary import (
     Deref,
     Find,
     Literal,
+    NonFiniteValueError,
     OffsetError,
     compile_pattern,
     count_pattern,
@@ -295,3 +296,11 @@ def test_odd_string_table_is_an_error():
 def test_separator_must_fit_the_code_unit():
     with pytest.raises(BinaryParameterError):
         split_strings(b'a\x00', b'\x00', 'utf-16-le')
+
+
+def test_non_finite_float_is_its_own_documented_error():
+    # found by test_parser_fuzz.py: a plain ValueError, which the binary collection did not handle
+    data = BinaryFile(io.BytesIO(struct.pack('>d', float('nan'))), 8)
+
+    with pytest.raises(NonFiniteValueError, match='not a finite number'):
+        read_value(data, 0, parse_value_format('f64be'))

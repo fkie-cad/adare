@@ -5,6 +5,7 @@ import gzip
 import io
 import lzma
 import os
+import struct
 import tarfile
 import zipfile
 
@@ -117,6 +118,8 @@ def test_normalize_test_parameters():
     assert normalize_test_parameters(test)['parameter'] == {'dst': '/a.zip!/x', 'k': 1}
     plain = {'name': 't', 'parameter': {'dst': '/x'}}
     assert normalize_test_parameters(plain) is plain
+    both = {'parameter': {'dst': '/x', 'other_dst': {'archive': '/b.tar.gz', 'member': '/s.json'}}}
+    assert normalize_test_parameters(both)['parameter'] == {'dst': '/x', 'other_dst': '/b.tar.gz!/s.json'}
 
 
 def test_max_bytes_from_env(monkeypatch):
@@ -538,3 +541,61 @@ def test_tar_inside_stream_honours_the_max_bytes_argument(tmp_path, work, monkey
         _resolve(f'{path}!/etc/big.bin', work, max_bytes=20_000)
     assert 'single-file' not in str(caught.value)  # still read as a tar, refused by the cap
     assert 'cap' in str(caught.value) or 'limit' in str(caught.value) or 'max' in str(caught.value)
+
+
+# --- corrupt zip member names (found by test_parser_fuzz.py) -----------------
+
+
+def _resolve_bytes(tmp_path, data: bytes, member: str):
+    path = tmp_path / 'input.zip'
+    path.write_bytes(data)
+    work = tmp_path / 'work'
+    work.mkdir()
+    return resolve_archive_path(str(path), [member], str(work))
+
+
+def _zip_with_bad_utf8_name(local: bool, central: bool) -> bytes:
+    """A one-member zip whose name is flagged UTF-8 (bit 11) but starts with byte 0xa3."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as zf:
+        zf.writestr('data.json', b'{}')
+    data = bytearray(buf.getvalue())
+    central_start = data.find(b'PK\x01\x02')
+    if local:
+        data[7] |= 0x08  # local header: general purpose flags at 6
+        data[30] = 0xA3  # first byte of the local name
+    if central:
+        data[central_start + 9] |= 0x08  # central header: general purpose flags at 8
+        data[central_start + 46] = 0xA3  # first byte of the central name
+    return bytes(data)
+
+
+@pytest.mark.parametrize(('local', 'central'), [(True, False), (False, True)], ids=['local-name', 'central-name'])
+def test_zip_member_name_flagged_utf8_but_not_utf8_is_an_archive_error(tmp_path, local, central):
+    # zipfile raised UnicodeDecodeError, which escaped resolve_archive_path
+    with pytest.raises(ArchiveError, match='utf-8'):
+        _resolve_bytes(tmp_path, _zip_with_bad_utf8_name(local, central), 'data.json')
+
+
+def _zip_with_empty_central_name() -> bytes:
+    """A one-member zip whose central directory entry has a 0-byte name (the local header keeps 'x')."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as zf:
+        zf.writestr('x', b'{}')
+    data = bytearray(buf.getvalue())
+    central = data.find(b'PK\x01\x02')
+    data[central + 28 : central + 30] = b'\x00\x00'  # file name length
+    del data[central + 46]  # the name 'x'
+    eocd = data.find(b'PK\x05\x06')
+    size = struct.unpack_from('<I', data, eocd + 12)[0]
+    struct.pack_into('<I', data, eocd + 12, size - 1)  # central directory size
+    return bytes(data)
+
+
+def test_zip_member_with_empty_name_is_an_archive_error_or_absent(tmp_path):
+    # ZipInfo.is_dir() raised IndexError for an empty name on Python 3.10
+    try:
+        resolution = _resolve_bytes(tmp_path, _zip_with_empty_central_name(), 'data.json')
+    except ArchiveError:
+        return
+    assert not os.path.exists(resolution.paths[0])  # the member is simply not there

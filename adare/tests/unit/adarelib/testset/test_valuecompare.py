@@ -10,6 +10,7 @@ from adarelib.testset.valuecompare import (
     expected_conflicts,
     ordered_comparison,
     ordered_setup,
+    saved_value,
 )
 from adarelib.testset.yaml.customtags import YamlRegexString
 
@@ -17,9 +18,21 @@ pytestmark = pytest.mark.unit
 
 
 class _Ctx:
+    def __init__(self, metadata=None):
+        self.metadata = metadata or {}
+
     @staticmethod
     def has_placeholders(text):
         return '{{' in text and '}}' in text
+
+    def get_placeholder_metadata(self, name):
+        return self.metadata.get(name, {})
+
+    @staticmethod
+    def parse_expected_timestamp(value, metadata):
+        import datetime
+
+        return datetime.datetime.fromisoformat(value)
 
 
 def test_defaults_mean_plain_equality():
@@ -76,18 +89,54 @@ def test_expected_conflicts():
     assert expected_conflicts(ctx, 5) == []
     assert 'regex_match' in expected_conflicts(ctx, '5', regex_match=True)[0]
     assert '!re' in expected_conflicts(ctx, YamlRegexString('^5'))[0]
-    assert 'placeholder' in expected_conflicts(ctx, '{{start}}')[0]
+    assert expected_conflicts(ctx, '{{start}}') == []  # placeholders: saved_value decides
 
 
 def test_ordered_setup_returns_errors_as_results():
     ctx = _Ctx()
-    assert ordered_setup(ctx, '5', True) == (None, None)  # defaults: regex_match is fine
-    ordered, problem = ordered_setup(ctx, '5', True, 'greater')
+    assert ordered_setup(ctx, '5', True) == (None, '5', None)  # defaults: regex_match is fine
+    ordered, _, problem = ordered_setup(ctx, '5', True, 'greater')
     assert ordered is None and problem.status == StatusEnum.ERROR
-    ordered, problem = ordered_setup(ctx, '5', False, 'sideways')
+    ordered, _, problem = ordered_setup(ctx, '5', False, 'sideways')
     assert ordered is None and problem.status == StatusEnum.ERROR
-    ordered, problem = ordered_setup(ctx, '5', False, 'greater')
-    assert problem is None and ordered.compare(6, '5')[0]
+    ordered, expected, problem = ordered_setup(ctx, '5', False, 'greater')
+    assert problem is None and expected == '5' and ordered.compare(6, expected)[0]
+
+
+def test_ordered_setup_resolves_a_lone_saved_variable():
+    ctx = _Ctx(
+        {
+            'n': {'type': 'integer', 'resolved_value': '5'},
+            't': {'type': 'timestamp', 'resolved_value': '2026-01-01T00:00:00+00:00'},
+        }
+    )
+    ordered, expected, problem = ordered_setup(ctx, '{{ n }}', False, 'greater')
+    assert problem is None and expected == '5' and ordered.compare(6, expected)[0]
+    _, expected, problem = ordered_setup(ctx, '{{t}}', False, 'less')
+    assert problem is None and expected.year == 2026
+    # equality mode: the placeholder stays for the placeholder comparison
+    assert ordered_setup(ctx, '{{ n }}', False) == (None, '{{ n }}', None)
+
+
+@pytest.mark.parametrize(
+    ('value', 'metadata', 'message'),
+    [
+        ('{{ n }}', {}, 'not set before the test'),
+        ('{{ n }}', {'n': {'type': 'regex', 'resolved_value': '^5'}}, 'type regex'),
+        ('{{ n }}', {'n': {'type': 'timestamp', 'resolved_value': '2026-01-01', 'tolerance': 5}}, 'tolerance'),
+        ('a{{ n }}', {'n': {'type': 'integer', 'resolved_value': '5'}}, 'mixes text'),
+    ],
+)
+def test_saved_value_errors(value, metadata, message):
+    resolved, errors = saved_value(_Ctx(metadata), value)
+    assert resolved == value and message in errors[0]
+
+
+def test_saved_value_without_timestamps():
+    ctx = _Ctx({'t': {'type': 'timestamp', 'resolved_value': '2026-01-01T00:00:00+00:00'}})
+    _, errors = saved_value(ctx, '{{ t }}', 'offset', timestamps=False)
+    assert 'offset' in errors[0] and 'a number' in errors[0]
+    assert saved_value(ctx, 5) == (5, [])
 
 
 @pytest.mark.parametrize(

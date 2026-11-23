@@ -109,6 +109,13 @@ there), ``value_matches`` (a value) and ``value_count`` (how many values, ``0`` 
    * - Two values of one file: A earlier than B, A within 5 s of B, A = B + 1
      - ``<format>.values_compare`` (JSON, YAML, TOML, plist, XML)
      - two ``value_matches`` tests: cannot relate the values to each other
+   * - A value changed by an action: after greater than before
+     - ``<format>.values_compare`` with ``other_dst``, a copy saved before the action
+       (:ref:`before-after-action`)
+     - a fixed ``expected_value``: breaks when the starting value differs
+   * - A value stored encoded (base64, hex, percent-encoded, JSON in a string)
+     - ``value_decode`` on ``<format>.value_matches`` (:ref:`ordered-comparison`)
+     - ``regex_match`` on the encoded text
    * - How many entries, or a key/value is absent
      - ``<format>.value_count`` (``expected_count: 0``)
      - ``expect_to_fail`` on ``value_matches``: also passes when *another* value is there

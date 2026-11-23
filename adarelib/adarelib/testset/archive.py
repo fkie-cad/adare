@@ -151,11 +151,20 @@ def normalize_dst(value: Any) -> Any:
     return join_archive_path(value['archive'], [member])
 
 
+# Test parameters that hold a guest file path and take the archive mapping form like dst.
+PATH_PARAMETERS = ('dst', 'other_dst')
+
+
 def normalize_test_parameters(test: dict) -> dict:
-    """Return ``test`` with a mapping ``parameter.dst`` turned into its string form."""
+    """Return ``test`` with a mapping ``parameter.dst`` (or ``other_dst``) turned into its string form."""
     parameter = test.get('parameter')
-    if isinstance(parameter, dict) and isinstance(parameter.get('dst'), dict):
-        test = {**test, 'parameter': {**parameter, 'dst': normalize_dst(parameter['dst'])}}
+    if not isinstance(parameter, dict):
+        return test
+    mappings = {
+        name: normalize_dst(parameter[name]) for name in PATH_PARAMETERS if isinstance(parameter.get(name), dict)
+    }
+    if mappings:
+        test = {**test, 'parameter': {**parameter, **mappings}}
     return test
 
 
@@ -221,8 +230,10 @@ _STREAMS: dict[str, Callable[[str, int, int | None], IO[bytes]]] = {
 }
 
 # Errors that mean "this archive cannot be read": truncated or corrupt data, encrypted or
-# unsupported zip entries (RuntimeError / NotImplementedError from zipfile).
+# unsupported zip entries (RuntimeError / NotImplementedError from zipfile), a zip member name
+# flagged as UTF-8 that is not (UnicodeDecodeError from zipfile).
 _READ_ERRORS = (
+    UnicodeDecodeError,
     OSError,
     EOFError,
     tarfile.TarError,
@@ -363,7 +374,7 @@ class _ZipContainer:
         result = []
         for info in self._zip.infolist():
             self._infos[info.filename] = info
-            if info.is_dir():
+            if info.filename.endswith('/'):  # ZipInfo.is_dir() of Python 3.10 fails on an empty name
                 kind = 'dir'
             elif (info.external_attr >> 16) & 0o170000 == 0o120000:  # unix symlink
                 kind = 'link'

@@ -80,6 +80,18 @@ CASES = {
     'binary.pattern_count': {'pattern': 'a', 'expected_count': 0},
     'binary.pair_value_matches': {'key': 'a', 'expected_value': 'b'},
     'binary.pair_count': {'key': 'a', 'expected_count': 0},
+    # round 2: sqlite
+    'sqlite.values_compare': {'query': 'SELECT 1'},
+    'sqlite.free_space_pattern_count': {'pattern': 'a', 'expected_count': 0},
+    # round 2: lines_in_order
+    'text.lines_in_order': {'patterns': ['a']},
+    'jsonl.lines_in_order': {'conditions': [{'a': 1}]},
+    # round 2: values_compare other_dst / value_decode
+    'json.values_compare': {'key_path': 'a', 'other_key_path': 'b'},
+    'yaml.values_compare': {'key_path': 'a', 'other_key_path': 'b'},
+    'toml.values_compare': {'key_path': 'a', 'other_key_path': 'b'},
+    'plist.values_compare': {'key_path': 'a', 'other_key_path': 'b'},
+    'xml.values_compare': {'xpath': './/a', 'other_xpath': './/b'},
 }
 TWO_PATHS = {'csv.compare_files', 'excel.compare_sheets', 'excel.compare_files'}
 
@@ -137,3 +149,34 @@ def test_existence_tests_still_fail_on_a_missing_path(dotted, tmp_path):
     result = testfunction._test_class(name='t', parameter=param).test()
 
     assert result.status == StatusEnum.FAILED, f'{result.status}: {result.details}'
+
+
+# round 2: values_compare other_dst / value_decode
+OTHER_DST = {
+    'json.values_compare': ('{"a": 1}', 'a.json'),
+    'yaml.values_compare': ('a: 1\n', 'a.yaml'),
+    'toml.values_compare': ('a = 1\n', 'a.toml'),
+    'plist.values_compare': (
+        '<?xml version="1.0"?><plist version="1.0"><dict><key>a</key><integer>1</integer></dict></plist>',
+        'a.plist',
+    ),
+    'xml.values_compare': ('<r><a>1</a></r>', 'a.xml'),
+}
+
+
+@pytest.mark.parametrize('dotted', sorted(OTHER_DST))
+@pytest.mark.parametrize('other', ['missing.dat', 'nothing*.dat'])
+def test_missing_other_dst_is_an_error(dotted, other, tmp_path):
+    content, name = OTHER_DST[dotted]
+    dst = tmp_path / name
+    dst.write_text(content)
+    testfunction = _testfunction(dotted)
+    params = {**CASES[dotted], 'dst': str(dst), 'other_dst': str(tmp_path / other)}
+    if dotted == 'xml.values_compare':
+        params['other_xpath'] = './/a'
+    else:
+        params['other_key_path'] = 'a'
+
+    result = testfunction._test_class(name='t', parameter=testfunction._parameter_class(**params)).test()
+
+    assert result.status == StatusEnum.ERROR, f'{result.status}: {result.details}'

@@ -1,4 +1,4 @@
-"""Unit tests for the text collection (occurrence_count, line_count).
+"""Unit tests for the text collection (occurrence_count, line_count, lines_in_order).
 
 Runs on the guests' Python 3.10 too (``make test-testfunctions-guest``).
 """
@@ -18,6 +18,8 @@ OccurrenceCount = text.occurrence_count._test_class
 OccurrenceCountParameter = text.occurrence_count._parameter_class
 LineCount = text.line_count._test_class
 LineCountParameter = text.line_count._parameter_class
+LinesInOrder = text.lines_in_order._test_class
+LinesInOrderParameter = text.lines_in_order._parameter_class
 
 
 def _occurrences(dst, **params):
@@ -26,6 +28,10 @@ def _occurrences(dst, **params):
 
 def _lines(dst, **params):
     return LineCount(name='t', parameter=LineCountParameter(dst=str(dst), **params)).test()
+
+
+def _in_order(dst, **params):
+    return LinesInOrder(name='t', parameter=LinesInOrderParameter(dst=str(dst), **params)).test()
 
 
 def _file(tmp_path, data: bytes, name='data.bin'):
@@ -336,3 +342,141 @@ class TestLineCount:
         _file(tmp_path, b'x', 'a2.log')
 
         assert _lines(tmp_path / pattern, content='x', expected_count=1).status == StatusEnum.ERROR
+
+
+# ============================================================================
+# lines_in_order
+# ============================================================================
+
+SERVICE_LOG = (
+    '10:00 service started\n'  # 1
+    '10:01 opened /data/report.txt\n'  # 2
+    '10:02 heartbeat\n'  # 3
+    '10:03 Deleted /data/report.txt\n'  # 4
+    '10:04 opened /data/notes.txt\n'  # 5
+    '10:05 service stopped\n'  # 6
+)
+
+
+class TestLinesInOrder:
+    """Tests for lines_in_order."""
+
+    @pytest.fixture
+    def log(self, tmp_path):
+        return _file(tmp_path, SERVICE_LOG.encode(), 'service.log')
+
+    def test_patterns_in_order_pass_and_report_line_numbers(self, log):
+        result = _in_order(log, patterns=['started', 'opened', 'Deleted', 'stopped'])
+
+        assert result.status == StatusEnum.SUCCESS, result.details
+        assert result.details[0] == '4 pattern(s) matched in order on lines 1, 2, 4, 6'
+        assert "pattern 3 'Deleted' matched line 4" in result.details
+
+    def test_each_pattern_takes_the_earliest_later_line(self, log):
+        # 'opened' twice: the first one takes line 2, the second one line 5
+        result = _in_order(log, patterns=['opened', 'opened', 'stopped'])
+
+        assert result.status == StatusEnum.SUCCESS, result.details
+        assert 'lines 2, 5, 6' in result.details[0]
+
+    def test_two_patterns_never_share_a_line(self, log):
+        result = _in_order(log, patterns=['Deleted', 'report'])
+
+        assert result.status == StatusEnum.FAILED, result.details
+        assert "pattern 2 'report' matches no line after line 4" in result.details[0]
+        assert 'only earlier, on line(s) 2, 4' in result.details[0]
+
+    def test_out_of_order_names_the_pattern_and_its_earlier_lines(self, log):
+        result = _in_order(log, patterns=['heartbeat', 'started'])
+
+        assert result.status == StatusEnum.FAILED, result.details
+        assert result.details[0] == (
+            "pattern 2 'started' matches no line after line 3 (6 line(s)); "
+            'it occurs only earlier, on line(s) 1: out of order'
+        )
+        assert result.details[1] == "pattern 1 'heartbeat' matched line 3"
+
+    def test_missing_pattern_fails(self, log):
+        result = _in_order(log, patterns=['started', 'renamed'])
+
+        assert result.status == StatusEnum.FAILED, result.details
+        assert "pattern 2 'renamed' matches no line after line 1" in result.details[0]
+        assert 'earlier' not in result.details[0]
+
+    def test_first_pattern_missing_fails(self, log):
+        result = _in_order(log, patterns=['renamed'])
+
+        assert result.status == StatusEnum.FAILED
+        assert "matches no line in the file" in result.details[0]
+
+    def test_regex_and_case_insensitive(self, log):
+        assert _in_order(log, patterns=[r'opened .*report\.txt', r'deleted'], regex=True).status == StatusEnum.FAILED
+        result = _in_order(log, patterns=[r'opened .*report\.txt', r'^\S+ deleted'], regex=True, case_sensitive=False)
+        assert result.status == StatusEnum.SUCCESS, result.details
+        assert _in_order(log, patterns=['STARTED', 'deleted'], case_sensitive=False).status == StatusEnum.SUCCESS
+
+    def test_regex_metacharacters_are_literal_without_regex(self, tmp_path):
+        path = _file(tmp_path, b'a.c\nabc\n', 'app.log')
+
+        assert _in_order(path, patterns=['abc', 'a.c']).status == StatusEnum.FAILED
+        assert _in_order(path, patterns=['abc', 'a.c'], regex=True).status == StatusEnum.FAILED
+        assert _in_order(path, patterns=['a.c', 'abc']).status == StatusEnum.SUCCESS
+
+    def test_utf16_with_bom_and_auto_encoding(self, tmp_path):
+        path = _file(tmp_path, SERVICE_LOG.encode('utf-16'), 'service.log')
+
+        assert _in_order(path, patterns=['started', 'stopped']).status == StatusEnum.SUCCESS
+        bomless = _file(tmp_path, SERVICE_LOG.encode('utf-16-le'), 'bomless.log')
+        assert _in_order(bomless, patterns=['started', 'stopped'], encoding=None).status == StatusEnum.SUCCESS
+
+    def test_undecodable_content_is_an_error(self, tmp_path):
+        path = _file(tmp_path, 'café\nthé\n'.encode('latin-1'), 'app.log')
+
+        assert _in_order(path, patterns=['caf']).status == StatusEnum.ERROR
+        assert _in_order(path, patterns=['café', 'thé'], encoding='latin-1').status == StatusEnum.SUCCESS
+
+    def test_empty_file_fails(self, tmp_path):
+        result = _in_order(_file(tmp_path, b'', 'empty.log'), patterns=['x'])
+
+        assert result.status == StatusEnum.FAILED
+
+    def test_archive_member(self, tmp_path):
+        import io
+        import tarfile
+
+        archive = tmp_path / 'logs.tar.gz'
+        with tarfile.open(archive, 'w:gz') as tar:
+            info = tarfile.TarInfo('logs/service.log')
+            info.size = len(SERVICE_LOG.encode())
+            tar.addfile(info, io.BytesIO(SERVICE_LOG.encode()))
+
+        result = _in_order(f'{archive}!/logs/service.log', patterns=['started', 'stopped'])
+        assert result.status == StatusEnum.SUCCESS, result.details
+        missing = _in_order(f'{archive}!/logs/other.log', patterns=['started'])
+        assert missing.status == StatusEnum.ERROR, missing.details
+
+    @pytest.mark.parametrize(
+        'params',
+        [
+            {'patterns': []},
+            {'patterns': 'started'},
+            {'patterns': None},
+            {'patterns': ['started', 5]},
+            {'patterns': ['started', '']},
+            {'patterns': ['[unclosed'], 'regex': True},
+            {'patterns': ['{{value}}']},
+            {'patterns': ['x'], 'encoding': 'no-such-codec'},
+            {'patterns': ['x'], 'regex': 'yes'},
+            {'patterns': ['x'], 'case_sensitive': 'no'},
+        ],
+    )
+    def test_bad_parameters_are_errors(self, log, params):
+        result = _in_order(log, **params)
+
+        assert result.status == StatusEnum.ERROR, result.details
+
+    def test_missing_file_is_an_error(self, tmp_path):
+        result = _in_order(tmp_path / 'missing.log', patterns=['x'])
+
+        assert result.status == StatusEnum.ERROR
+        assert 'does not exist' in result.details[0]

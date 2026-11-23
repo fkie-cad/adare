@@ -101,6 +101,32 @@ def test_counts_transactions_in_wal(tmp_path):
     }
 
 
+def test_commit_frame_indices_cut_the_wal_per_transaction(tmp_path):
+    db = tmp_path / 'data.db'
+    with wal_db(db) as conn:
+        _insert(conn, 1, 2, 3)
+        info = parse_wal(_copy_wal(db, tmp_path / 'copy-wal'))
+        evidence = tmp_path / 'evidence'
+        evidence.mkdir()
+        shutil.copyfile(db, evidence / 'data.db')
+
+    assert len(info.commit_frame_indices) == 3
+    assert info.commit_frame_indices[-1] == info.valid_frames
+    assert list(info.commit_frame_indices) == sorted(set(info.commit_frame_indices))
+    for k, frame in enumerate(info.commit_frame_indices, 1):
+        wal = (tmp_path / 'copy-wal').read_bytes()[: sqlite_wal.frame_offset(PAGE, frame)]
+        (evidence / 'data.db-wal').write_bytes(wal)
+        target = tmp_path / f'commit{k}'
+        target.mkdir()
+        shutil.copyfile(evidence / 'data.db', target / 'data.db')
+        shutil.copyfile(evidence / 'data.db-wal', target / 'data.db-wal')
+        assert _rows(target / 'data.db') == [(i,) for i in range(1, k + 1)]
+
+
+def test_empty_wal_has_no_commit_frames():
+    assert sqlite_wal.EMPTY_WAL.commit_frame_indices == ()
+
+
 def test_frames_left_from_before_a_wal_reset_are_stale(tmp_path):
     db = tmp_path / 'data.db'
     with wal_db(db) as conn:

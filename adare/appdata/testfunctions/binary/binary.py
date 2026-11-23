@@ -10,6 +10,7 @@ from adarelib.testset.basictest import HostModeCategory
 from adarelib.testset.content import FileTooLargeError
 from adarelib.testset.ordering import OrderingError, TimeFormat, compare, parameter_errors
 from adarelib.testset.structured import WILDCARD_MODES, compare_count, compare_value, count_parameter_errors, text
+from adarelib.testset.valuecompare import saved_value
 
 # configure logging
 import logging
@@ -40,7 +41,7 @@ def _run(path: str, dst: str, status: str, body: Callable[[binary.BinaryFile], T
     with handle:
         try:
             return body(binary.BinaryFile(handle, size, path))
-        except (binary.OffsetError, binary.BinaryParameterError, OrderingError) as e:
+        except (binary.OffsetError, binary.BinaryParameterError, binary.NonFiniteValueError, OrderingError) as e:
             return TestResult.error([f'{path}: {e}'])
         except UnicodeDecodeError as e:
             return TestResult.execution_error(e, f'Cannot decode the value in {path}')
@@ -171,7 +172,9 @@ def struct_value_matches(
             (``comparison_type``); strings compare as text, a number written here as its
             text; ``bytes:<n>`` as hex (whitespace ignored: ``de ad be ef``). A ``!re`` tag or
             ``{{placeholder}}`` compares the value's text (a ``!timestamp`` placeholder with
-            ``epoch``/``unit`` reads a numeric field as a time).
+            ``epoch``/``unit`` reads a numeric field as a time); with an ordered
+            ``comparison_type`` or ``tolerance`` a lone ``{{ name }}`` is the saved number or
+            timestamp of that variable (not set yet, a regex, or a timestamp with tolerance: error).
         comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
             ``greater_equal`` or ``less_equal``. Ordered comparisons need numbers or
             timestamps (a string field is read as one); for text and ``bytes`` only
@@ -212,9 +215,14 @@ def struct_value_matches(
     problems += offset_problems + _encoding_problems(encoding)
     time_fmt, time_problems = _time_format(timestamp_epoch, timestamp_unit, utc_offset, time_format)
     problems += time_problems
+    ordered = comparison_type not in _TEXT_COMPARISONS
+    if (ordered or tolerance is not None) and not regex_match:
+        # a lone {{ variable }} compared in order is the saved number or timestamp
+        expected_value, saved_problems = saved_value(ctx, expected_value)
+        if saved_problems:
+            return TestResult.error(problems + saved_problems)
     as_text = _text_match(ctx, expected_value, regex_match)
     textual = fmt is not None and not fmt.is_number
-    ordered = comparison_type not in _TEXT_COMPARISONS
     if (as_text or (fmt is not None and fmt.kind == 'bytes')) and (ordered or tolerance is not None):
         problems.append(f'comparison_type {comparison_type!r} / tolerance need a number or timestamp, not text')
     if fmt is not None and fmt.kind == 'bytes' and not as_text:

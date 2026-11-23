@@ -319,16 +319,25 @@ class TestLoader:
                     # Re-process with variable resolver using runtime context
                     if self.variable_resolver:
                         # Re-run the full variable resolution process with runtime context
+                        from adare.backend.experiment.saved_timestamps import (
+                            keep_point_in_time,
+                            saved_timestamp_variable,
+                        )
+
+                        registry = getattr(self.variable_resolver, 'variable_registry', None)
+                        saved_timestamp = saved_timestamp_variable(test, registry)
                         resolved_test = self.variable_resolver.process_data(test, combined_context)
                         log.info(f"Re-processed test '{test_name}' with variable resolver and runtime context")
                         log.debug(f"Resolved test data: {resolved_test}")
 
                         # Also capture any new metadata generated
                         metadata = self.variable_resolver.get_placeholder_metadata()
-                        _attach_guest_utc_offset(metadata, runtime_execution_context)
                         if metadata:
-                            resolved_test['_VARIABLE_METADATA'] = metadata
+                            resolved_test['_VARIABLE_METADATA'] = dict(metadata)  # the resolver keeps its own
                             log.info(f"Generated metadata during runtime resolution: {list(metadata.keys())}")
+                        if saved_timestamp is not None:
+                            keep_point_in_time(resolved_test, saved_timestamp, registry)
+                        _attach_guest_utc_offset(resolved_test.get('_VARIABLE_METADATA', {}), runtime_execution_context)
 
                         return resolved_test
                     log.warning("No variable resolver available for runtime resolution")

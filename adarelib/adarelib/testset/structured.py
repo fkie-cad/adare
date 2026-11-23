@@ -220,18 +220,26 @@ def value_matches(
     fmt: StructuredFormat,
     regex_match: bool = False,
     wildcard_mode: str = 'any',
+    value_decode: Any = None,
+    decoded_key_path: Any = None,
     **ordered_parameters: Any,
 ) -> TestResult:
     """Pass when the value(s) at ``key_path`` match ``expected_value`` (``wildcard_mode``: any/all).
 
     ``ordered_parameters`` (``comparison_type``, ``value_type``, ``tolerance``, time parameters;
     see :mod:`adarelib.testset.valuecompare`) switch to an ordered comparison when one is set.
+    ``value_decode`` / ``decoded_key_path`` (:mod:`adarelib.testset.valuedecode`) decode each
+    value before it is compared.
     """
     if wildcard_mode not in WILDCARD_MODES:
         return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
     from adarelib.testset.valuecompare import ordered_setup  # imports this module
+    from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
 
-    ordered, problem = ordered_setup(ctx, expected_value, regex_match, **ordered_parameters)
+    decoder, problem = decoder_setup(value_decode, decoded_key_path)
+    if problem is not None:
+        return problem
+    ordered, expected_value, problem = ordered_setup(ctx, expected_value, regex_match, **ordered_parameters)
     if problem is not None:
         return problem
     data, error = load_data(ctx, dst, fmt)
@@ -243,11 +251,13 @@ def value_matches(
     candidates = _candidates(values)
     expected = normalize(expected_value)
     try:
+        if decoder is not None:
+            candidates = [decoder(v) for v in candidates]
         if ordered is not None:
             results = [(v, *ordered.compare(v, expected)) for v in candidates]
         else:
             results = [(v, *compare_value(ctx, v, expected, regex_match)) for v in candidates]
-    except (re.error, OrderingError) as e:
+    except (re.error, OrderingError, ValueDecodeError) as e:
         return TestResult.error([str(e)])
     if not results:
         return TestResult.failed([f'key path "{key_path}" selects an empty array'])

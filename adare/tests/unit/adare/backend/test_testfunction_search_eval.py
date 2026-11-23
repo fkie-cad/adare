@@ -90,6 +90,12 @@ GOLDEN = [
     ('changes not yet checkpointed in the sqlite wal', 'sqlite.wal_frame_count'),
     ('number of transactions in the wal file', 'sqlite.wal_frame_count'),
     ('row only in the write-ahead log, not in the main database file', 'sqlite.row_count'),
+    # round 2: before/after, deleted data, order
+    ('value in a JSON file larger than in a copy taken before the action', 'json.values_compare'),
+    ('deleted row text still recoverable in sqlite free pages', 'sqlite.free_space_pattern_count'),
+    ('row count in the current database compared to the main file', 'sqlite.values_compare'),
+    ('lines of a log file appear in a given order', 'text.lines_in_order'),
+    ('json lines events logged in order', 'jsonl.lines_in_order'),
 ]
 
 
