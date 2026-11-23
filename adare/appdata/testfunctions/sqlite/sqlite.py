@@ -631,6 +631,20 @@ def free_space_pattern_count(
     file offsets) and the size of each kind of free space. To search the whole file use
     binary.pattern_count; live rows are counted there too.
 
+    Free space is not "all stale bytes": a count of 0 here does not prove a deleted value is
+    gone from the file. Not covered: the sampled keys in ``sqlite_stat4`` (until the next
+    ANALYZE) and the segments of a full-text index (``<name>_data`` of FTS5, ``_segments`` of
+    FTS3/4; until a merge or optimize), live rows of ordinary b-trees that a query can read
+    (``SELECT ... FROM sqlite_stat4``); the unused tail of an overflow page in use, which
+    keeps the old bytes of a page SQLite freed and reused within one transaction (even
+    ``secure_delete`` wipes it); the reserved bytes of each page, fragments of fewer than 4
+    bytes and bytes after the last complete page; and the ``-wal`` (``view: current`` folds
+    it in). Deleted index keys are covered: an index is a b-tree whose interior cells are
+    index entries, and deleting one replaces it, so the old cell is free space. Table
+    interior pages keep the rowids of deleted rows as dividers (no text; ``secure_delete``
+    does not remove them). To assert "gone from the whole file" use text.occurrence_count
+    on dst with ``expected_count: 0`` (and on ``<dst>-wal`` when it exists).
+
     A corrupt header or a broken freelist / freeblock chain (a pointer out of range, a
     cycle, a freelist count that does not match the header) is an error: the free space
     could not be located.
