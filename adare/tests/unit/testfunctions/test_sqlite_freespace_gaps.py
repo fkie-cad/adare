@@ -1,10 +1,10 @@
-"""What ``sqlite.free_space_pattern_count`` does not see, and what shows it.
+"""What ``sqlite.free_space_pattern_count`` finds as free space, and what only ``whole_file`` finds.
 
-``expected_count: 0`` on the free space passes for text that is still in the file: the tail
-of an overflow page in use, a ``sqlite_stat4`` sample and a full-text index segment are not
-free space. ``text.occurrence_count`` over the whole file finds the text, and a query finds
-what is a live row. Databases are built with the stdlib sqlite3 module (``secure_delete``
-set explicitly).
+The tail of an overflow page in use (``region: overflow_tail``, part of ``all``) is free
+space: text of deleted rows there is found. A ``sqlite_stat4`` sample and a full-text index
+segment are live rows, not free space: ``expected_count: 0`` on the free space passes while
+the text is in the file, and ``region: whole_file`` (or a query) finds it. Databases are built
+with the stdlib sqlite3 module (``secure_delete`` set explicitly).
 Runs on the guests' Python 3.10 too (``make test-testfunctions-guest``).
 """
 
@@ -21,23 +21,16 @@ pytestmark = pytest.mark.unit
 
 COLLECTIONS = Path(__file__).resolve().parents[3] / 'appdata' / 'testfunctions'
 sqlite_module = import_module_from_pyfile(COLLECTIONS / 'sqlite' / 'sqlite.py')
-text_module = import_module_from_pyfile(COLLECTIONS / 'text' / 'text.py')
 FreeSpaceCount = sqlite_module.free_space_pattern_count._test_class
 FreeSpaceCountParameter = sqlite_module.free_space_pattern_count._parameter_class
 RowCount = sqlite_module.row_count._test_class
 RowCountParameter = sqlite_module.row_count._parameter_class
-OccurrenceCount = text_module.occurrence_count._test_class
-OccurrenceCountParameter = text_module.occurrence_count._parameter_class
 
 PAGE = 1024
 
 
 def _free(dst, **params):
     return FreeSpaceCount(name='t', parameter=FreeSpaceCountParameter(dst=str(dst), **params)).test()
-
-
-def _whole_file(dst, **params):
-    return OccurrenceCount(name='t', parameter=OccurrenceCountParameter(dst=str(dst), **params)).test()
 
 
 def _query(dst, **params):
@@ -60,9 +53,9 @@ def _options():
         conn.close()
 
 
-def test_overflow_page_tail_passes_as_deleted_but_the_whole_file_finds_it(tmp_path):
-    db = tmp_path / 'state.db'
-    conn = _connect(db, 'OFF')
+def _overflow_slack_database(path, secure_delete):
+    """notes rows freed, one of their pages reused as the last overflow page of a big key, one transaction."""
+    conn = _connect(path, secure_delete)
     conn.execute('CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)')
     conn.execute('CREATE TABLE keys (k TEXT PRIMARY KEY) WITHOUT ROWID')
     conn.execute('BEGIN')
@@ -74,26 +67,54 @@ def test_overflow_page_tail_passes_as_deleted_but_the_whole_file_finds_it(tmp_pa
     conn.execute('INSERT INTO keys VALUES (?)', ('Z' * 600,))
     conn.execute('COMMIT')
     conn.close()
-    # some rows sit only in the page SQLite reused as the tail of the overflow chain (page 5)
+    return path
+
+
+def _tail_secret(db):
+    """A secret that is in the file once, on the overflow page (page 5), in its tail region."""
     data = db.read_bytes()
-    regions = parse_free_space(data).regions
+    tail = next(r for r in parse_free_space(data).regions if r.kind == 'overflow_tail')
+    assert tail.page == 5
+    for i in range(1, 200):
+        secret = f'SECRET-{i:04d}-'
+        if data.count(secret.encode()) == 1 and tail.start <= data.index(secret.encode()) < tail.end:
+            return secret
+    raise AssertionError('no secret left only in the overflow tail')  # pragma: no cover
 
-    def only_outside(secret):
-        offsets = [at for at in range(len(data)) if data.startswith(secret, at)]
-        return bool(offsets) and not any(r.start <= at < r.end for at in offsets for r in regions)
 
-    secret = next(f'SECRET-{i:04d}-' for i in range(1, 200) if only_outside(f'SECRET-{i:04d}-'.encode()))
-    gone = _free(db, pattern=secret, expected_count=0)
-    anywhere = _whole_file(db, content=secret, expected_count=1)
+def test_overflow_page_tail_is_found_as_free_space_and_in_the_whole_file(tmp_path):
+    db = _overflow_slack_database(tmp_path / 'state.db', 'OFF')
+    secret = _tail_secret(db)
+
+    in_tail = _free(db, pattern=secret, region='overflow_tail', expected_count=1)
+    in_all = _free(db, pattern=secret, expected_count=1)
+    elsewhere = [
+        _free(db, pattern=secret, region=r, expected_count=0) for r in ('freelist', 'freeblocks', 'unallocated')
+    ]
+    anywhere = _free(db, pattern=secret, region='whole_file', expected_count=1)
     queryable = _query(db, query=f"SELECT id FROM notes WHERE body LIKE '{secret}%'", expected_count=0)
 
-    assert gone.status == StatusEnum.SUCCESS, gone.details  # "not in the free space"
-    assert anywhere.status == StatusEnum.SUCCESS, anywhere.details  # still in the file
+    assert in_tail.status == StatusEnum.SUCCESS, in_tail.details
+    assert in_all.status == StatusEnum.SUCCESS, in_all.details  # exactly the one copy, not two
+    assert all(r.status == StatusEnum.SUCCESS for r in elsewhere), [r.details for r in elsewhere]
+    assert anywhere.status == StatusEnum.SUCCESS, anywhere.details
     assert queryable.status == StatusEnum.SUCCESS, queryable.details  # and no query returns it
+    assert any('overflow tail' in d for d in in_all.details)
+    assert any('page 5 overflow_tail' in d for d in in_tail.details)
+
+
+def test_secure_delete_leaves_nothing_in_the_overflow_tail_or_the_file(tmp_path):
+    db = _overflow_slack_database(tmp_path / 'state.db', 'ON')
+
+    in_free_space = _free(db, pattern='SECRET-', region='all', expected_count=0)
+    in_file = _free(db, pattern='SECRET-', region='whole_file', expected_count=0)
+
+    assert in_free_space.status == StatusEnum.SUCCESS, in_free_space.details
+    assert in_file.status == StatusEnum.SUCCESS, in_file.details
 
 
 @pytest.mark.skipif('ENABLE_STAT4' not in _options(), reason='SQLite built without STAT4')
-def test_stat4_sample_passes_as_deleted_but_a_query_finds_it(tmp_path):
+def test_stat4_sample_passes_as_deleted_but_whole_file_and_a_query_find_it(tmp_path):
     db = tmp_path / 'state.db'
     conn = _connect(db, 'ON')
     conn.execute('CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT)')
@@ -109,7 +130,7 @@ def test_stat4_sample_passes_as_deleted_but_a_query_finds_it(tmp_path):
     conn.close()
 
     gone = _free(db, pattern=key, expected_count=0)
-    anywhere = _whole_file(db, content=key, expected_count=1)
+    anywhere = _free(db, pattern=key, region='whole_file', expected_count=1)
     in_statistics = _query(
         db, query=f"SELECT 1 FROM sqlite_stat4 WHERE instr(sample, CAST('{key}' AS BLOB)) > 0", expected_count=1
     )
@@ -120,7 +141,7 @@ def test_stat4_sample_passes_as_deleted_but_a_query_finds_it(tmp_path):
 
 
 @pytest.mark.skipif('ENABLE_FTS5' not in _options(), reason='SQLite built without FTS5')
-def test_fts5_segment_passes_as_deleted_but_the_whole_file_finds_it(tmp_path):
+def test_fts5_segment_passes_as_deleted_but_whole_file_finds_it(tmp_path):
     db = tmp_path / 'state.db'
     conn = _connect(db, 'ON')
     conn.execute('CREATE VIRTUAL TABLE f USING fts5(body)')
@@ -133,7 +154,9 @@ def test_fts5_segment_passes_as_deleted_but_the_whole_file_finds_it(tmp_path):
     conn.close()
 
     gone = _free(db, pattern='zebrafishsecret', expected_count=0)
-    anywhere = _whole_file(db, content='zebrafishsecret', expected_count=1, comparison_type='greater_equal')
+    anywhere = _free(
+        db, pattern='zebrafishsecret', region='whole_file', expected_count=1, comparison_type='greater_equal'
+    )
     matching = _query(db, query="SELECT rowid FROM f WHERE f MATCH 'zebrafishsecret'", expected_count=0)
 
     assert gone.status == StatusEnum.SUCCESS, gone.details
@@ -155,7 +178,9 @@ def test_default_delete_is_found_in_free_space_and_in_the_whole_file(tmp_path):
     conn.close()
 
     in_free = _free(db, pattern='title-0152-secret', comparison_type='greater_equal')
-    in_file = _whole_file(db, content='title-0152-secret', expected_count=1, comparison_type='greater_equal')
+    in_file = _free(
+        db, pattern='title-0152-secret', region='whole_file', expected_count=1, comparison_type='greater_equal'
+    )
 
     assert in_free.status == StatusEnum.SUCCESS, in_free.details
     assert in_file.status == StatusEnum.SUCCESS, in_file.details
