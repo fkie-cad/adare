@@ -213,3 +213,42 @@ class TestTimestampResolution:
         var.structured_metadata = TimestampMetadata(timezone="UTC", format_str=5)  # not a str
         with pytest.raises(ValidationError, match="format.*'ts'|'ts'.*format"):
             _resolved(var)
+
+
+# ---------------------------------------------------------------------------
+# Jinja timezone / format filters
+# ---------------------------------------------------------------------------
+
+
+class TestTimestampFilters:
+    def _filters(self, var: Variable):
+        registry = VariableRegistry()
+        registry.add("ts", var)
+        return registry, TimestampMetadata().get_jinja_filters(registry)
+
+    def test_good_zone_is_captured(self):
+        var = _ts("2024-06-01T12:00:00+00:00")
+        _registry, filters = self._filters(var)
+        assert filters["timezone"](var.value, "Europe/Berlin") == var.value
+        assert var.metadata["timezone"] == "Europe/Berlin"
+
+    def test_bad_zone_raises_and_leaves_the_variable_alone(self):
+        var = _ts("2024-06-01T12:00:00+00:00")
+        registry, filters = self._filters(var)
+        with pytest.raises(ValidationError, match="Mars/Olympus"):
+            filters["timezone"](var.value, "Mars/Olympus")
+        assert "timezone" not in var.metadata
+        assert registry.to_execution_context()["ts"] == NOON_UTC  # later resolutions still work
+
+    def test_non_string_format_raises_and_leaves_the_variable_alone(self):
+        var = _ts("2024-06-01T12:00:00+00:00")
+        _registry, filters = self._filters(var)
+        with pytest.raises(ValidationError, match="format must be a string"):
+            filters["format"](var.value, 5)
+        assert "format" not in var.metadata
+
+    def test_names_stay_importable_from_variables(self):
+        from adarelib.common import timezones, variables
+
+        assert variables.ValidationError is timezones.ValidationError
+        assert variables._apply_timezone is timezones._apply_timezone
