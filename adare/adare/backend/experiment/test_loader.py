@@ -13,6 +13,7 @@ from typing import Any
 import jinja2
 import yaml
 
+from adare.exceptions import TestfunctionUploadError
 from adarelib.testset.renames import rename_problems
 
 log = logging.getLogger(__name__)
@@ -108,11 +109,14 @@ class TestLoader:
                         f"Uploading {len(required_files)} testfunction files for functions: {sorted(used_function_names)}"
                     )
                     try:
-                        await websocket_client.upload_testfunctions(global_testfunctions_path, required_files)
-                    except OSError as e:
-                        log.error(f"Failed to upload testfunctions due to file system error: {e}")
-                    except (ValueError, TypeError) as e:
-                        log.error(f"Failed to upload testfunctions due to invalid data: {e}")
+                        result = await websocket_client.upload_testfunctions(global_testfunctions_path, required_files)
+                    except (OSError, ValueError, TypeError) as e:
+                        # A failed upload must stop the run: the guest would report every test as "not found".
+                        raise TestfunctionUploadError(log, f"Failed to upload testfunctions to the guest: {e}") from e
+                    if isinstance(result, dict) and result.get("status") == "error":
+                        raise TestfunctionUploadError(
+                            log, f"The guest rejected the testfunction upload: {result.get('message', 'unknown error')}"
+                        )
                 else:
                     log.warning("No testfunction files found for the used functions - uploading nothing")
             else:
