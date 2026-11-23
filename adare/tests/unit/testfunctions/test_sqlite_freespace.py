@@ -133,17 +133,31 @@ def test_pattern_types(tmp_path, pattern, pattern_type):
 
 
 def test_utf16_text(tmp_path):
+    """The deleted row is in the file twice, and both copies are free space.
+
+    20 rows of about 82 bytes (UTF-16) do not fit on one 1024-byte page, so SQLite splits the
+    root leaf: its cells move to new leaf pages, but the old cells stay behind in the unallocated
+    space of the root, which is now an interior page. The deleted row is a freeblock on the leaf
+    that took it over and a stale cell in the root's unallocated space. (The UTF-8 rows of the
+    other tests fit on one page, hence a single copy there.)
+    """
     db = tmp_path / 'state.db'
     with _connect(db) as conn:
         conn.execute("PRAGMA encoding='UTF-16le'")
         _fill(conn)
         conn.execute('DELETE FROM notes WHERE id = 8')
+    needle = SECRET.encode('utf-16-le')
 
     utf8 = _free(db, pattern=SECRET, expected_count=0)
-    utf16 = _free(db, pattern=SECRET, encoding='utf-16-le', comparison_type='greater_equal')
+    utf16 = _free(db, pattern=SECRET, encoding='utf-16-le', expected_count=2)
+    in_freeblock = _free(db, pattern=SECRET, encoding='utf-16-le', region='freeblocks', expected_count=1)
+    in_unallocated = _free(db, pattern=SECRET, encoding='utf-16-le', region='unallocated', expected_count=1)
 
     assert utf8.status == StatusEnum.SUCCESS, utf8.details
     assert utf16.status == StatusEnum.SUCCESS, utf16.details
+    assert in_freeblock.status == StatusEnum.SUCCESS, in_freeblock.details
+    assert in_unallocated.status == StatusEnum.SUCCESS, in_unallocated.details
+    assert db.read_bytes().count(needle) == 2  # no third copy anywhere: both are the free ones
 
 
 def test_view_current_checkpoints_a_copy(tmp_path):
