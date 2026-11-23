@@ -85,7 +85,7 @@ functions:
         - an invalid regex or an unknown placeholder in ``expected_result``
     limits:
       - '``expected_result`` is compared as a whole: every row, in query order, with every selected column. Add ``ORDER BY`` for a stable order.'
-      - '``!re``, ``!timestamp`` and placeholders in ``expected_result`` compare the result as text (``[{''col'': ''value''}]``): a placeholder stands for a quoted text value, so an INTEGER column fails against it. Select the column as text: ``CAST(visited AS TEXT) AS visited``.'
+      - '``!re`` and ``!timestamp`` cells in ``expected_result`` are compared with the typed value of that cell, so an INTEGER column needs no ``CAST``: ``!timestamp`` with ``epoch`` / ``unit`` reads the number, ``!re`` matches its text (``str(value)``, the digits of an INTEGER). A NULL never matches a placeholder. The rest of the row (other columns, row count and order) must still equal the result.'
       - Differences (``wal_added`` / ``wal_removed``) compare whole rows; select identifying columns, a changed row appears in both.
       - '``dst`` inside an archive (``backup.zip!/app/data.db``) also extracts the ``-wal`` / ``-journal`` members next to it, so the views work there too.'
       - The rows read are reported in the details, cut after 2000 characters.
@@ -100,7 +100,7 @@ functions:
       - title: A change is still only in the write-ahead log
         text: '``view: wal_added`` shows rows committed to the ``-wal`` but not yet checkpointed into the main file; ``view: wal_removed`` rows deleted there that the main file still holds.'
       - title: A time stored as a number
-        text: '``!timestamp`` with ``epoch`` / ``unit`` and the times saved around the action, on a column selected as text.'
+        text: '``!timestamp`` with ``epoch`` / ``unit`` and the times saved around the action, directly on the INTEGER column (no ``CAST``).'
     examples:
       - title: a row with the expected values
         files:
@@ -170,14 +170,24 @@ functions:
           query: SELECT id, name FROM items ORDER BY id
           expected_result: [{id: 1, name: kept}, {id: 3, name: example}]
       - title: visit time between two saved timestamps
-        text: The INTEGER column is selected as text, so the placeholder matches it.
+        text: The INTEGER column is compared as the number it is; no ``CAST`` is needed.
         files:
           /home/user/app/data.db: *visits
         parameter:
           dst: /home/user/app/data.db
-          query: SELECT CAST(visited AS TEXT) AS visited FROM visits WHERE url = 'https://example.org/'
+          query: SELECT visited FROM visits WHERE url = 'https://example.org/'
           expected_result:
             - visited: !timestamp {after: '{{before_visit}}', before: '{{after_visit}}', epoch: 1970, unit: s}
+      - title: a visit time outside the saved interval fails
+        text: The boundary of the previous example. The stored number is read, found before the lower bound, and the test fails.
+        expect: failed
+        files:
+          /home/user/app/data.db: *visits
+        parameter:
+          dst: /home/user/app/data.db
+          query: SELECT visited FROM visits WHERE url = 'https://example.org/'
+          expected_result:
+            - visited: !timestamp {after: '2026-01-01T12:00:00Z', before: '2026-01-01T12:00:10Z', epoch: 1970, unit: s}
       - title: a URL by pattern
         files:
           /home/user/app/data.db: *visits

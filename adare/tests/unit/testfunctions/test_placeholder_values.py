@@ -225,3 +225,33 @@ def test_timestamp_placeholder_value(time_files, dotted, kind, params, field, me
     )
 
     _assert(result, status)
+
+
+# --- EXIF dates (YYYY:MM:DD HH:MM:SS) in a !timestamp without `format` ------------------------
+
+
+@pytest.fixture(scope='module')
+def exif_date_jpeg(tmp_path_factory):
+    path = tmp_path_factory.mktemp('exif_date') / 'photo.jpg'
+    exif = Image.Exif()
+    exif.get_ifd(0x8769)[0x9003] = '2024:01:02 03:04:06'  # DateTimeOriginal
+    Image.new('RGB', (4, 4), 'red').save(path, 'JPEG', exif=exif)
+    return str(path)
+
+
+@pytest.mark.parametrize(
+    ('expected', 'status'),
+    [
+        pytest.param('2024-01-02T03:04:05+00:00', StatusEnum.SUCCESS, id='same-date-within-tolerance'),
+        # before the fix the stored date was read as today 03:04:06, so a test for today passed and the real date failed
+        pytest.param('2024-06-02T03:04:05+00:00', StatusEnum.FAILED, id='other-date-fails'),
+    ],
+)
+@pytest.mark.parametrize('dotted', ['image.exif_value_matches', 'image.exif_value_count'])
+def test_exif_date_without_format_keeps_its_date(exif_date_jpeg, dotted, expected, status):
+    metadata = {'T': {'type': 'timestamp', 'raw_value': expected, 'resolved_value': expected, 'tolerance': [-2, 2]}}
+    count = {'expected_count': 1} if 'count' in dotted else {}
+
+    result = _run(dotted, metadata, dst=exif_date_jpeg, tag='DateTimeOriginal', expected_value='{{ T }}', **count)
+
+    _assert(result, status)

@@ -132,6 +132,40 @@ def _run_query(
     return rows, details + snapshot_details, None
 
 
+def _compare_rows_with_placeholders(
+    ctx: TestContext, result: list[dict], expected_result: list, expected_str: str
+) -> tuple[bool, str]:
+    """Compare ``result`` with ``expected_result`` whose cells hold ``!re`` / ``!timestamp`` placeholders.
+
+    Rows and columns are compared one by one. A cell holding a placeholder is compared with the
+    typed value read from the database: ``str(value)`` (so an INTEGER column is the digits, which a
+    ``!timestamp`` with ``epoch`` / ``unit`` converts and a ``!re`` matches), a NULL never matches.
+    Every other cell must equal the value. ``expected_result`` that is not a list of mappings is
+    compared as one text, like before.
+    """
+    if not all(isinstance(row, dict) for row in expected_result):
+        return ctx.handle_placeholders_comparison(str(result), expected_str)
+    if len(result) != len(expected_result):
+        return False, f'expected {len(expected_result)} rows, got {len(result)}'
+    notes = []
+    for index, (actual_row, expected_row) in enumerate(zip(result, expected_result, strict=True)):
+        if list(actual_row) != list(expected_row):
+            return False, f'row {index}: expected columns {list(expected_row)}, got {list(actual_row)}'
+        for column, expected in expected_row.items():
+            value = actual_row[column]
+            where = f'row {index}, column {column!r}'
+            if isinstance(expected, str) and ctx.has_placeholders(expected):
+                if value is None:
+                    return False, f'{where}: the value is NULL, a placeholder cannot match it'
+                ok, message = ctx.handle_placeholders_comparison(str(value), expected)
+                if not ok:
+                    return False, f'{where}: {message}'
+                notes.append(f'{where}: {message}')
+            elif value != expected:
+                return False, f'{where}: expected {expected!r}, got {value!r}'
+    return True, '; '.join(notes)
+
+
 @testfunction(
     name='query_result',
     description='executes SQL query against SQLite database and validates result',
@@ -173,7 +207,10 @@ def query_result(
             ``comparison_type``; ``None`` skips the check. Use ``0`` to assert a row is gone.
             A negative number or a non-integer is an error.
         expected_result: Exact expected rows as a list of ``{column: value}`` mappings, in
-            query order; ``None`` skips the check. Placeholders compare the stringified result.
+            query order; ``None`` skips the check. A ``!re`` / ``!timestamp`` cell is compared with the
+            typed value of that cell: ``!re`` with its text (``str(value)``, so an INTEGER column
+            matches digits), ``!timestamp`` with ``epoch`` / ``unit`` with the number. A NULL never
+            matches a placeholder; every other cell must equal the value.
         comparison_type: ``equals`` (default), ``greater``, ``less``, ``greater_equal`` or
             ``less_equal`` for ``expected_count``; other values are an error.
         view: Which state of the database the query sees, compared with
@@ -217,8 +254,7 @@ def query_result(
     if expected_result is not None:
         expected_str = str(expected_result)
         if ctx.has_placeholders(expected_str):
-            # For complex result comparison with placeholders, convert to string and use placeholder system
-            success, message = ctx.handle_placeholders_comparison(str(result), expected_str)
+            success, message = _compare_rows_with_placeholders(ctx, result, expected_result, expected_str)
             if not success:
                 return TestResult.failed(
                     [f'query result placeholder comparison failed: {message}', _result_detail(result)]

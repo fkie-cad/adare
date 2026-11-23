@@ -187,7 +187,7 @@ functions:
       - 'The user comment (0x9286) is compared without its 8-byte charset prefix; the UTF-16 title/comment/author/keywords/subject tags (0x9C9B-0x9C9F) decoded.'
       - A YAML number in ``expected_value`` is formatted the same way; write a sequence as text (``51, 30, 12.5``).
       - 'Main-table names are looked up in IFD0 and the Exif IFD, GPS names in the GPS IFD, numbers in all three.'
-      - 'EXIF dates (``2026:01:01 10:00:00``) need ``time_format: ''%Y:%m:%d %H:%M:%S''`` in ordered mode (without it they are an error), and ``format: ''%Y:%m:%d %H:%M:%S''`` in a ``!timestamp`` tag: without it only the time of day is read and the date becomes today, so the test fails.'
+      - 'EXIF dates (``2026:01:01 10:00:00``) need ``time_format: ''%Y:%m:%d %H:%M:%S''`` in ordered mode (without it they are an error). In a ``!timestamp`` tag the ``YYYY:MM:DD HH:MM:SS`` form is recognised without ``format`` (also with subseconds or a zone, ``2026:01:01 10:00:00.5``, ``2026:01:01 10:00:00+02:00``) and read with its real date; an invalid colon date (``2026:13:45 10:00:00``) is a failed comparison or an error, never a silent date of today. ``format`` stays useful for another layout.'
       - EXIF dates have no zone; ordered mode reads them as UTC unless ``utc_offset`` is set.
     choices:
       wildcard_mode: [any, all]
