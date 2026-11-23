@@ -617,8 +617,11 @@ def free_space_pattern_count(
     it (``expected_count: 0``, as with ``PRAGMA secure_delete``). The file is parsed per the
     SQLite file format, without SQLite: freelist pages (pages no longer in use, including the
     overflow pages of a deleted large row), freeblocks (freed cells inside a b-tree page)
-    and the unallocated space of each b-tree page. Occurrences are counted per region, so a
-    match never spans two regions. Details list which pages and regions matched (absolute
+    and the unallocated space of each b-tree page. Regions never overlap and occurrences
+    are counted per region, so a match never spans two regions. SQLite can leave a record in the file twice (the old cell in a
+    page it rewrote and a copy in the page that took over the rows), which is then counted
+    twice; and it overwrites freed data when it rewrites or merges pages, so a deleted record
+    is not always recoverable. Details list which pages and regions matched (absolute
     file offsets) and the size of each kind of free space. To search the whole file use
     binary.pattern_count; live rows are counted there too.
 

@@ -16,6 +16,10 @@ end of each page (header offset 20) are never part of a region.
 
 Regions are ``(page, start, end, kind)`` with ``start`` / ``end`` **absolute offsets in the
 file** (``end`` exclusive), ``page`` 1-based and ``kind`` one of :data:`REGION_KINDS`.
+Regions are sorted by offset and never overlap, so no byte of the file is counted twice. A text
+that SQLite left twice in the file (the old cell in a page it rewrote and a copy in the page that
+took over the rows) is found twice, once per copy; callers search each region on its own, so a
+match never spans two regions, even adjacent ones.
 
 Which pages are b-tree pages is decided by their page type byte (0x02, 0x05, 0x0a, 0x0d at
 offset 0, offset 100 on page 1), not by walking the b-trees from their roots; freelist
