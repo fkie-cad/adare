@@ -168,6 +168,7 @@ ELSEWHERE = {
     'jsonl.line_count': 'test_jsonl_regex.py',
     'jsonl.value_in_any_line': 'test_jsonl_regex.py',
     'jsonl.lines_in_order': 'test_jsonl_regex.py',
+    'sqlite.query_result': 'test_sqlite.py::test_query_result_invalid_regex_placeholder_is_error',
     'standard.file_content_contains': 'content is plain text; a placeholder is rejected before the file is read',
     'text.occurrence_count': 'content is plain text; a placeholder is rejected before the file is read',
 }

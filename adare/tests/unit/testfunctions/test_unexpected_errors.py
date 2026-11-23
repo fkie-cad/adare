@@ -45,6 +45,8 @@ VALID_PARAMS = {
     # round 2: lines_in_order
     'text.lines_in_order': {'patterns': ['x']},
     'jsonl.lines_in_order': {'conditions': [{'x': 1}]},
+    # optional in the signature, but required before the file is read
+    'xml.namespace_matches': {'expected_namespaces': {'': 'urn:x'}},
 }
 
 
@@ -65,6 +67,7 @@ def _file_testfunctions():
             # file tests resolve dst themselves or through adarelib.testset.structured
             markers = ('resolve_globfilepath', 'structured.', 'load_data(')
             markers += ('structured_values_compare(',)  # round 2: values_compare other_dst / value_decode
+            markers += ('_metadata_path(',)  # standard.file_timestamps / file_permissions
             if not any(marker in source for marker in markers):
                 continue
             yield pytest.param(obj, VALID_PARAMS.get(f'{collection}.{name}', {}), id=f'{collection}.{name}')

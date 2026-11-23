@@ -38,7 +38,7 @@
     "union-attr": 194,
     "unused-coroutine": 1,
     "valid-type": 36,
-    "var-annotated": 49
+    "var-annotated": 47
   },
   "oversized_files": {
     "adare-cv-server/adare_cv_server/feature_matching.py": 1147,

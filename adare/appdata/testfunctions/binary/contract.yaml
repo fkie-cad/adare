@@ -1,0 +1,269 @@
+# Contract of the binary collection: what each function can and cannot do, and runnable
+# examples. Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run
+# in the unit suite (test_contract_examples.py); `adare test info binary.<name>` shows all of it.
+
+collection:
+  title: Binary
+  summary: >-
+    Application-specific binary containers that no dedicated parser knows: entry files whose last
+    bytes point at a metadata block, index files of fixed-size records, tables of NUL-separated
+    key/value strings. The functions read values at offsets, count byte patterns in a region and
+    look up keys in string tables. No format is built in: the test says where to look.
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  # 12 bytes payload | metadata block at 12: u32be version, u32be hits=3,
+  # u32be time=2026-01-01T11:00:00Z, u32be 0, then a key/value string table | u32be pointer to 12
+  entry: &entry
+    concat:
+      - text: PAYLOAD-DATA
+      - u32be: 1
+      - u32be: 3
+      - u32be: 1767265200
+      - u32be: 0
+      - text: "content-type\0text/plain\0origin\0https://example.org\0origin\0https://www.example.org\0"
+      - u32be: 12
+
+functions:
+  struct_value_matches:
+    asserts: [value, order]
+    formats: [binary]
+    features: [archive_dst, glob_dst, offset_expression, ordered_comparison, regex_tag, placeholder, timestamp_tag, encoding]
+    not_for:
+      - goal: a value in a table of key/value strings
+        use: binary.pair_value_matches
+      - goal: how often a byte pattern or string occurs
+        use: binary.pattern_count
+      - goal: a string anywhere in the file, in several encodings
+        use: text.occurrence_count
+    outcomes:
+      passed: the value read at ``offset`` compares to ``expected_value``
+      failed: the file was read and the value does not match
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - a malformed offset expression or value format; an offset or value outside the file
+        - a ``find:`` pattern that does not occur; a ``cstring`` without terminator
+        - a string not valid in ``encoding``; a NaN or infinite float
+        - a value or ``expected_value`` that is no number or timestamp for an ordered comparison
+        - an invalid regex or placeholder, or other bad parameters
+    limits:
+      - Ordered comparisons need numbers or timestamps; text and ``bytes:<n>`` values support only ``equals`` / ``not_equals``.
+      - Encodings without a fixed byte order (``utf-16``) are an error; name the order (``utf-16-le``).
+      - At most 4 ``@`` pointer reads per offset expression.
+    choices:
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A counter or flag changed
+        text: A header or metadata field (hit count, state flag) after an action in the GUI.
+      - title: A timestamp field
+        text: Times stored as numbers (``timestamp_epoch`` / ``timestamp_unit``) compared with the time of an action.
+      - title: A string in a block a trailer points to
+        text: '``cstring`` at ``u32be@-4+N`` finds the field even when the payload before it changes size.'
+    examples:
+      - title: entry modified after a point in time
+        text: The last 4 bytes hold the offset of the metadata block; its third u32 is a Unix time.
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          offset: u32be@-4+8
+          value_format: u32be
+          timestamp_epoch: 1970
+          expected_value: '2026-01-01T10:00:00Z'
+          comparison_type: greater_equal
+      - title: hit count at least two
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          offset: u32be@-4+4
+          value_format: u32be
+          expected_value: 2
+          comparison_type: greater_equal
+      - title: a different count fails
+        expect: failed
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          offset: u32be@-4+4
+          value_format: u32be
+          expected_value: 5
+      - title: an offset outside the file is an error, not a failure
+        text: The test never looked at the claimed value, so it cannot fail; ``expect_to_fail`` cannot turn it into a pass.
+        expect: error
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          offset: 4096
+          value_format: u32be
+          expected_value: 3
+
+  pattern_count:
+    asserts: [count, absent]
+    formats: [binary]
+    features: [archive_dst, glob_dst, offset_expression, count_comparison, encoding, negative]
+    unsupported:
+      regex_tag: 'A ``!re`` or ``!timestamp`` tag as ``pattern`` is an error; write the regex as a plain string with ``pattern_type: regex``.'
+    not_for:
+      - goal: a string anywhere in the whole file, in several encodings at once
+        use: text.occurrence_count
+      - goal: one value at an offset
+        use: binary.struct_value_matches
+      - goal: how often a key occurs in a key/value string table
+        use: binary.pair_count
+    outcomes:
+      passed: the number of non-overlapping occurrences in ``[start, end)`` satisfies ``comparison_type``
+      failed: the region was read and the count comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - an empty or invalid pattern (escape, hex, regex, not encodable); an unknown ``pattern_type`` or encoding
+        - a ``!re`` / ``!timestamp`` placeholder as pattern
+        - a malformed offset expression, an offset outside the file, ``end`` before ``start``
+        - a region over the read cap; a negative ``expected_count`` or an unknown ``comparison_type``
+    limits:
+      - The region is read whole, up to the read cap (``ADARE_ARCHIVE_MAX_BYTES``).
+      - A ``regex`` pattern is an ASCII regular expression over raw bytes; empty matches are not counted.
+    choices:
+      pattern_type: [bytes, hex, regex, text]
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: Records in one part of a file
+        text: Count record markers after a header or inside a metadata block only.
+      - title: A value is gone from a block
+        text: '``expected_count: 0`` on the region that held it, so other copies elsewhere in the file do not count.'
+    examples:
+      - title: two origins in the metadata block
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          pattern: 'https://[a-z.]+\.org'
+          pattern_type: regex
+          start: u32be@-4
+          end: -4
+          expected_count: 2
+      - title: the payload marker is not in the metadata block
+        text: The marker occurs in the file, but before the region, so it does not count.
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          pattern: PAYLOAD
+          start: u32be@-4
+          end: -4
+          expected_count: 0
+      - title: end before start is an error
+        expect: error
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          pattern: origin
+          start: 20
+          end: 10
+          expected_count: 0
+
+  pair_value_matches:
+    asserts: [value]
+    formats: [binary]
+    features: [archive_dst, glob_dst, offset_expression, regex_tag, placeholder, encoding, wildcard_mode]
+    not_for:
+      - goal: a metadata element is absent
+        use: binary.pair_count
+      - goal: one value at an offset (numbers, timestamps, fixed-size strings)
+        use: binary.struct_value_matches
+    outcomes:
+      passed: 'the value of ``key`` (``any``: one of its values, ``all``: every value) matches'
+      failed: the table was read and ``key`` does not occur, or its value(s) do not match
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - a malformed offset expression, an offset outside the file, ``end`` before ``start``
+        - an odd number of strings in the region; an empty key
+        - an invalid separator (or one that is not a whole number of code units); an unknown encoding or a value not valid in it
+        - an invalid regex or placeholder, or an invalid ``wildcard_mode``
+    limits:
+      - The region must hold whole key/value pairs; one separator after the last value is allowed.
+      - Values compare as text (a number as its text); there is no ordered comparison.
+    choices:
+      wildcard_mode: [any, all]
+    use_cases:
+      - title: A metadata element has a value
+        text: Response headers, origins, titles or flags stored as key/value strings in a binary container.
+    examples:
+      - title: content type of a cache entry
+        text: The table starts 16 bytes after the offset stored in the last 4 bytes and ends before them.
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          start: u32be@-4+16
+          end: -4
+          key: content-type
+          expected_value: text/plain
+      - title: every origin on example.org
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          start: u32be@-4+16
+          end: -4
+          key: origin
+          expected_value: 'example\.org'
+          regex_match: true
+          wildcard_mode: all
+      - title: an absent key fails
+        text: To assert absence use binary.pair_count with ``expected_count`` 0, which passes.
+        expect: failed
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          start: u32be@-4+16
+          end: -4
+          key: referrer
+          expected_value: https://example.org/
+
+  pair_count:
+    asserts: [count, absent]
+    formats: [binary]
+    features: [archive_dst, glob_dst, offset_expression, count_comparison, encoding, negative]
+    not_for:
+      - goal: the value of a key
+        use: binary.pair_value_matches
+    outcomes:
+      passed: the count comparison holds
+      failed: the table was read and the count comparison does not hold
+      error:
+        - as for binary.pair_value_matches (file, offsets, table layout, encoding)
+        - a negative ``expected_count`` or an unknown ``comparison_type``
+    limits:
+      - The table is read as in binary.pair_value_matches; the region must hold whole key/value pairs.
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: A metadata element was removed
+        text: '``expected_count: 0`` after a clean-up action.'
+    examples:
+      - title: no alternative source
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          start: u32be@-4+16
+          end: -4
+          key: alt-source
+          expected_count: 0
+      - title: two origins
+        files:
+          /home/user/app/cache/entry.bin: *entry
+        parameter:
+          dst: /home/user/app/cache/entry.bin
+          start: u32be@-4+16
+          end: -4
+          key: origin
+          expected_count: 2

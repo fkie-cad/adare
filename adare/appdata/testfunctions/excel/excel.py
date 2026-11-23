@@ -7,6 +7,7 @@ from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
 from adarelib.testset.compare import (
+    compare_with_single_placeholder,
     regex_expected_problem,
     regex_pattern_problem,
     row_matches_pattern,
@@ -35,9 +36,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-# ============================================================================
-# TESTFUNCTION 1: sheet_exists
-# ============================================================================
+# --- TESTFUNCTION 1: sheet_exists ---
 
 
 @testfunction(
@@ -53,7 +52,9 @@ def sheet_exists(ctx: TestContext, dst: str, sheet: str, regex_match: bool = Fal
     Args:
         dst: Guest path to the .xlsx; a glob must match exactly one path. A missing or
             unreadable file is an error.
-        sheet: Exact, case-sensitive sheet name, or a regex if ``regex_match``.
+        sheet: Exact, case-sensitive sheet name, or a regex if ``regex_match``. A ``!re`` tag is
+            matched against each sheet name with ``re.match`` (anchored at the start; add ``$`` to
+            anchor the end); an invalid pattern is an error.
         regex_match: Treat ``sheet`` as a Python regex searched in each sheet name
             (``re.search``, unanchored; ``^...$`` for the whole name); an invalid regex is an error,
             even when the workbook has no sheet.
@@ -84,6 +85,13 @@ def sheet_exists(ctx: TestContext, dst: str, sheet: str, regex_match: bool = Fal
             return TestResult.failed(['Excel file contains no sheets'])
 
         # Check if sheet exists
+        if ctx.has_placeholders(sheet):
+            # A !re tag (or {{ variable }}) arrives as a placeholder: compare each sheet name with it
+            for name in sheet_names:
+                holds, _ = compare_with_single_placeholder(ctx, sheet, name)
+                if holds:
+                    return TestResult.success()
+            return TestResult.failed([f'no sheet matches placeholder: {sheet}', f'available sheets: {sheet_names}'])
         if regex_match:
             # Regex matching
             pattern = re.compile(sheet)
@@ -105,9 +113,7 @@ def sheet_exists(ctx: TestContext, dst: str, sheet: str, regex_match: bool = Fal
         return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
-# ============================================================================
-# TESTFUNCTION 2: cell_value_matches
-# ============================================================================
+# --- TESTFUNCTION 2: cell_value_matches ---
 
 
 @testfunction(
@@ -229,9 +235,7 @@ def cell_value_matches(
         return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
-# ============================================================================
-# TESTFUNCTION 3: contains_row
-# ============================================================================
+# --- TESTFUNCTION 3: contains_row ---
 
 
 @testfunction(
@@ -354,9 +358,7 @@ def row_count(
     return TestResult.success(details) if ok else TestResult.failed(details)
 
 
-# ============================================================================
-# TESTFUNCTION 4: validate_columns
-# ============================================================================
+# --- TESTFUNCTION 4: validate_columns ---
 
 
 @testfunction(
@@ -451,9 +453,7 @@ def validate_columns(
         return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
-# ============================================================================
-# TESTFUNCTION 5: compare_rows
-# ============================================================================
+# --- TESTFUNCTION 5: compare_rows ---
 
 
 def _embedded_rows_problem(ctx: TestContext, reference_rows) -> TestResult | None:
@@ -573,9 +573,7 @@ def compare_rows(
         return TestResult.execution_error(e, f"Cannot parse Excel file {dst_resolved}")
 
 
-# ============================================================================
-# TESTFUNCTION 6: compare_sheets
-# ============================================================================
+# --- TESTFUNCTION 6: compare_sheets ---
 
 
 @testfunction(
@@ -663,9 +661,7 @@ def compare_sheets(
         return TestResult.execution_error(e, "Cannot parse Excel files")
 
 
-# ============================================================================
-# TESTFUNCTION 7: compare_files
-# ============================================================================
+# --- TESTFUNCTION 7: compare_files ---
 
 
 @testfunction(

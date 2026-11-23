@@ -22,7 +22,7 @@ adare env extend <source> -n <new-name> [options]
 
 ```sh
 adare env extend ubuntu2404 -n ubuntu2404-libre \
-  --install "libreoffice:apt-get install -y libreoffice" \
+  --install "inkscape:apt-get install -y inkscape" \
   --install "gimp:apt-get install -y gimp" --shell
 ```
 

@@ -18,18 +18,28 @@ from __future__ import annotations
 import logging
 import shutil
 import tempfile
+import time
+from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import Any, cast
 
 from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
+from adare.backend.experiment.host_services.guest_command_proxy import GuestClock
 from adare.backend.hostside.guestfs import GuestFileNotFound, GuestFS, GuestFSError, GuestFSUnsupported, normalize
+from adare.backend.testfunction.catalog import OFFLINE_PROBES  # QGA probes a disk image can answer
 from adarelib.event.event import TestResult
 from adarelib.testset.basictest import BasicTest, HostModeCategory
+from adarelib.testset.testfunction import get_testclass_from_testfunction
 
 log = logging.getLogger(__name__)
 
-#: QGA-probe test functions a disk image can answer (the rest need live state)
-OFFLINE_PROBES = frozenset({'file_permissions', 'file_timestamps', 'user_exists'})
+
+def _is_screen_test(function: str, testfunction_collection: dict) -> bool:
+    """A ``visual.*`` function, or any function whose class runs against the live screen (HOST_NATIVE)."""
+    if function.split('.', 1)[0] == 'visual':
+        return True
+    cls = get_testclass_from_testfunction(function, testfunction_collection)
+    return bool(getattr(cls, 'host_mode_category', None) == HostModeCategory.HOST_NATIVE)
 
 
 class GuestFSFileProxy:
@@ -87,14 +97,15 @@ class GuestFSFileProxy:
 class GuestFSCommandProxy:
     """The ``GuestCommandProxy`` interface, restricted to what an image can answer."""
 
-    def __init__(self, fs: GuestFS):
+    def __init__(self, fs: GuestFS, tz: tzinfo | None = None):
         self.fs = fs
+        self.tz = tz
 
     async def get_file_permissions(self, guest_path: str) -> dict:
         try:
             st = self.fs.stat(guest_path)
-        except GuestFileNotFound:
-            return {}
+        except GuestFileNotFound as e:
+            raise FileNotFoundError(f'{guest_path} does not exist in {self.fs.origin}: {e}') from e
         return {
             'permissions': f'{st.permissions:o}',
             'owner': self.fs.name_of_uid(st.uid),
@@ -104,16 +115,30 @@ class GuestFSCommandProxy:
     async def get_file_timestamps(self, guest_path: str) -> dict:
         try:
             st = self.fs.stat(guest_path)
-        except GuestFileNotFound:
-            return {}
+        except GuestFileNotFound as e:
+            raise FileNotFoundError(f'{guest_path} does not exist in {self.fs.origin}: {e}') from e
         return {'mtime': st.mtime, 'atime': st.atime, 'ctime': st.ctime}
 
-    async def user_exists(self, username: str) -> bool:
+    async def get_guest_clock(self) -> GuestClock:
+        """No guest is running: the host clock (the guest RTC is seeded from it) in the image's time zone."""
+        now = time.time()
+        offset = datetime.fromtimestamp(now, self.tz).utcoffset() if self.tz is not None else None
+        return GuestClock(now, int(offset.total_seconds()) if offset is not None else None)
+
+    async def get_user_info(self, username: str) -> dict | None:
+        """The ``/etc/passwd`` entry of ``username`` as ``{'uid', 'home'}``, or ``None`` if there is none."""
         try:
             passwd = self.fs.read_text('/etc/passwd')
         except GuestFSError:
-            return False
-        return any(line.split(':', 1)[0] == username for line in passwd.splitlines())
+            return None
+        for line in passwd.splitlines():
+            fields = line.split(':')
+            if fields[0] == username and len(fields) >= 6 and fields[2].isdigit():
+                return {'uid': int(fields[2]), 'home': fields[5]}
+        return None
+
+    async def user_exists(self, username: str) -> bool:
+        return await self.get_user_info(username) is not None
 
     def __getattr__(self, name: str):
         async def unsupported(*args, **kwargs):
@@ -143,7 +168,7 @@ class HostsideTestExecutor(GuestToHostTestExecutor):
     def _bind(self, fs: GuestFS) -> None:
         proxies = self._proxies.get(id(fs))
         if proxies is None:
-            proxies = (GuestFSFileProxy(fs), GuestFSCommandProxy(fs))
+            proxies = (GuestFSFileProxy(fs), GuestFSCommandProxy(fs, getattr(self.session, 'guest_tz', None)))
             self._proxies[id(fs)] = proxies
         self.guest_file, self.guest_command = cast(Any, proxies)
 
@@ -177,18 +202,27 @@ class HostsideTestExecutor(GuestToHostTestExecutor):
     def validate_offline(playbook_tests: list, testfunction_collection: dict) -> list[str]:
         """Pre-flight: tests an offline image cannot evaluate (so the run fails before boot, not after)."""
         issues = []
-        ok, base_issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
+        # visual tests read the live screen; hostside tests run after the VM is shut down, with none.
+        # Recognised by name (a ``visual.exists`` does not resolve in the collection the way other
+        # functions do) so the message says why, not "unknown test type".
+        screen_tests = [
+            t for t in playbook_tests if _is_screen_test(getattr(t, 'function', ''), testfunction_collection)
+        ]
+        for test in screen_tests:
+            issues.append(
+                f"Test '{getattr(test, 'name', '?')}' ({getattr(test, 'function', '')}) reads the live screen; the "
+                f"hostside backend evaluates tests after shutdown, with no screen. Use --backend agent for visual tests."
+            )
+        others = [t for t in playbook_tests if t not in screen_tests]
+        ok, base_issues = GuestToHostTestExecutor.validate_playbook_tests(others, testfunction_collection)
         if not ok:
             issues.extend(base_issues)
-        for test in playbook_tests:
+        for test in others:
             full = getattr(test, 'function', '')
             short = full.split('.', 1)[-1]
-            cls = None
-            for coll in testfunction_collection.values():
-                if isinstance(coll, dict) and short in coll:
-                    cls = coll[short]
-                    break
-            is_probe = cls is not None and getattr(cls, 'host_mode_category', None) == HostModeCategory.QGA_PROBE
+            # by collection.name: several collections share function names
+            cls = get_testclass_from_testfunction(full, testfunction_collection)
+            is_probe = getattr(cls, 'host_mode_category', None) == HostModeCategory.QGA_PROBE
             if is_probe and short not in OFFLINE_PROBES:
                 issues.append(f"Test '{getattr(test, 'name', '?')}' ({full}) needs live guest state")
         return issues

@@ -1,0 +1,365 @@
+# Contract of the yaml collection: what each function can and cannot do, and runnable
+# examples. Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run
+# in the unit suite (test_contract_examples.py); `adare test info yaml.<name>` shows all of it.
+
+collection:
+  title: YAML
+  summary: >-
+    YAML files read with PyYAML's safe loader: configuration and state files. The functions check
+    that a key path exists, what its value is (also as a number or point in time), how many values
+    a path selects (``0`` = absent) and how two values of one file relate. A file with several
+    documents (``---``) is a top-level list, one entry per document. Values keep their YAML 1.1
+    types; dates and timestamps become ISO 8601 strings, ``!!binary`` a lowercase hex string.
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  # A configuration file: nested mappings, a sequence of mappings, a sequence of strings, a YAML 1.1
+  # boolean (yes), timestamps, a null value and a key with a dot.
+  config: &config
+    text: |
+      display:
+        font:
+          size: 12
+        theme: dark
+      servers:
+        - {name: primary, port: 8080}
+        - {name: backup, port: 8080}
+      recent: [/home/user/a.txt, /home/user/b.txt, /home/user/c.txt]
+      autosave: yes
+      proxy: null
+      session:
+        opened: 2026-01-01T10:00:00Z
+        closed: 2026-01-01T10:30:00Z
+      counters: {last: 41, next: 42}
+      app.window: {width: 800}
+  # Three documents in one file.
+  profiles: &profiles
+    text: |
+      kind: Profile
+      name: work
+      ---
+      kind: Profile
+      name: home
+      ---
+      kind: Settings
+  broken: &broken
+    text: |
+      display:
+        theme: [dark
+  unsafe: &unsafe
+    text: |
+      display: !!python/object/apply:os.getcwd []
+  empty: &empty
+    text: ''
+
+functions:
+  contains_key:
+    asserts: [exists]
+    formats: [yaml]
+    features: [archive_dst, glob_dst, key_path]
+    unsupported:
+      encoding: There is no ``encoding`` parameter; files are read as UTF-8, or UTF-16 with a BOM.
+    not_for:
+      - goal: the value of a key
+        use: yaml.value_matches
+      - goal: a key or value is absent
+        use: yaml.value_count
+    outcomes:
+      passed: '``key_path`` selects at least one value (a ``null`` value counts)'
+      failed: the file was read and ``key_path`` selects nothing (an empty file has no keys)
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is not valid YAML (syntax error, unknown or unsafe tag, impossible date, undecodable bytes)
+    limits:
+      - 'With ``expect_to_fail: true`` a missing key passes, but a missing file stays an error; yaml.value_count with ``expected_count: 0`` says the same more clearly.'
+    use_cases:
+      - title: A setting was written
+        text: The key exists after the action, whatever its value.
+    examples:
+      - title: nested key exists
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: display.font.size
+      - title: a key in the second document
+        files:
+          /home/user/.config/app/profiles.yaml: *profiles
+        parameter:
+          dst: /home/user/.config/app/profiles.yaml
+          key_path: '[1].name'
+      - title: a key that contains a dot
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: "['app.window'].width"
+      - title: an absent key fails
+        text: To assert absence use yaml.value_count with ``expected_count`` 0, which passes.
+        expect: failed
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: display.language
+      - title: invalid YAML is an error, not a failure
+        expect: error
+        files:
+          /home/user/.config/app/config.yaml: *broken
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: display.theme
+      - title: an unsafe tag is an error
+        text: The safe loader does not construct application objects.
+        expect: error
+        files:
+          /home/user/.config/app/config.yaml: *unsafe
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: display
+
+  value_matches:
+    asserts: [value, order]
+    formats: [yaml]
+    features: [archive_dst, glob_dst, key_path, wildcard_mode, regex_tag, placeholder, timestamp_tag, ordered_comparison, value_decode]
+    unsupported:
+      encoding: There is no ``encoding`` parameter; files are read as UTF-8, or UTF-16 with a BOM.
+    not_for:
+      - goal: no value matches, a key is absent
+        use: yaml.value_count
+      - goal: two values of one file relate (earlier, within seconds, one above)
+        use: yaml.values_compare
+    outcomes:
+      passed: 'the value at ``key_path`` (``any``: one of the values, ``all``: every value) matches ``expected_value``'
+      failed: the file was read and ``key_path`` selects nothing or an empty sequence, or the value(s) do not match
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is not valid YAML (syntax error, unknown or unsafe tag, impossible date, undecodable bytes)
+        - an invalid ``wildcard_mode``; an invalid regex or unknown placeholder
+        - in ordered mode, a ``!re`` tag or ``regex_match``, text around a ``{{ name }}`` or a saved variable that is no number or time, bad ordered parameters, or a value that is no number or timestamp
+    limits:
+      - 'Equality is Python ``==`` and type-sensitive (``5`` is not ``"5"``; ``null`` needs ``expected_value: null``).'
+      - YAML 1.1 types apply (``yes`` / ``on`` are ``true``); dates and timestamps compare as ISO 8601 strings (``Z`` becomes ``+00:00``).
+      - A path that selects a sequence compares its elements one by one; a whole sequence cannot be compared.
+      - '``regex_match`` searches (``re.search``, unanchored); a ``!re`` tag matches from the start (``re.match``).'
+    choices:
+      wildcard_mode: [any, all]
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A setting has a value
+        text: A setting changed in the GUI is stored in a YAML configuration.
+      - title: Every entry of a list has a property
+        text: '``servers[*].port`` with ``wildcard_mode: all``.'
+    examples:
+      - title: every server uses one port
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: servers[*].port
+          expected_value: 8080
+          wildcard_mode: all
+      - title: a YAML 1.1 boolean
+        text: '``autosave: yes`` is the boolean ``true``.'
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: autosave
+          expected_value: true
+      - title: a timestamp as ISO 8601 text
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: session.opened
+          expected_value: '2026-01-01T10:00:00+00:00'
+      - title: closed after a point in time
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: session.closed
+          expected_value: '2026-01-01T10:15:00Z'
+          comparison_type: greater
+      - title: one document is a settings document
+        files:
+          /home/user/.config/app/profiles.yaml: *profiles
+        parameter:
+          dst: /home/user/.config/app/profiles.yaml
+          key_path: '[*].kind'
+          expected_value: Settings
+      - title: equality is type-sensitive
+        text: The file holds the number 12; the string ``"12"`` does not match.
+        expect: failed
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: display.font.size
+          expected_value: '12'
+      - title: a value from the run
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: recent[*]
+          expected_value: '{{ saved_file }}'
+      - title: an invalid regex is an error
+        expect: error
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: display.theme
+          expected_value: '[unclosed'
+          regex_match: true
+
+  value_count:
+    asserts: [count, absent]
+    formats: [yaml]
+    features: [archive_dst, glob_dst, key_path, count_comparison, negative, regex_tag, placeholder, timestamp_tag]
+    unsupported:
+      encoding: There is no ``encoding`` parameter; files are read as UTF-8, or UTF-16 with a BOM.
+    not_for:
+      - goal: what one value is
+        use: yaml.value_matches
+    outcomes:
+      passed: the number of values at ``key_path`` (only those matching ``expected_value``, if given) satisfies ``comparison_type``
+      failed: the file was read and the count comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is not valid YAML (syntax error, unknown or unsafe tag, impossible date, undecodable bytes)
+        - a negative or non-integer ``expected_count``; an unknown ``comparison_type``
+        - an invalid regex or unknown placeholder
+    limits:
+      - Without ``expected_value`` every selected value counts once (a sequence is one value, ``list[*]`` counts its elements).
+      - With ``expected_value`` a path that selects exactly one sequence counts its matching elements.
+      - An empty file has no values.
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: A key or value is absent
+        text: '``expected_count: 0``.'
+      - title: How many entries a list holds
+        text: Accounts, profiles, documents or recent items.
+    examples:
+      - title: at least three recent items
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: recent[*]
+          expected_count: 3
+          comparison_type: greater_equal
+      - title: two profile documents
+        files:
+          /home/user/.config/app/profiles.yaml: *profiles
+        parameter:
+          dst: /home/user/.config/app/profiles.yaml
+          key_path: '[*].kind'
+          expected_value: Profile
+          expected_count: 2
+      - title: a recent item was removed
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: recent
+          expected_value: /home/user/d.txt
+          expected_count: 0
+      - title: an empty file has no values
+        files:
+          /home/user/.config/app/config.yaml: *empty
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: display.theme
+          expected_count: 0
+      - title: a different count fails
+        expect: failed
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/config.yaml
+          key_path: servers[*]
+          expected_count: 3
+      - title: a missing file is an error, never a pass
+        expect: error
+        files:
+          /home/user/.config/app/config.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/other.yaml
+          key_path: display.language
+          expected_count: 0
+
+  values_compare:
+    asserts: [order, compare]
+    formats: [yaml]
+    features: [archive_dst, glob_dst, key_path, ordered_comparison, value_decode, other_dst]
+    unsupported:
+      encoding: There is no ``encoding`` parameter; files are read as UTF-8, or UTF-16 with a BOM.
+    not_for:
+      - goal: one value against a constant
+        use: yaml.value_matches
+      - goal: two text values are equal
+        use: yaml.value_matches
+    outcomes:
+      passed: '``first <comparison_type> second + offset`` holds'
+      failed: the file was read and a side selects nothing, or the comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the content is not valid YAML
+        - a side selects several values
+        - a value that is no number or timestamp, or a number compared with a timestamp
+        - invalid parameters (``comparison_type``, ``value_type``, ``tolerance`` with an order comparison, ``timestamp_epoch``, ...)
+    limits:
+      - Each side must select exactly one value (a one-element sequence counts as its element).
+      - Numbers and times only; two text values cannot be compared.
+    choices:
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A is earlier than B
+        text: A last-saved value later than the first-opened one, an end after a start (``comparison_type`` ``less`` / ``greater``).
+      - title: A within a few seconds of B
+        text: 'Two timestamps written by one action (``tolerance: 5``).'
+      - title: A = B + n
+        text: 'A counter one above another (``offset: 1``), or a time a fixed interval after another (``offset`` in seconds).'
+    examples:
+      - title: closed after opened
+        files:
+          /home/user/.config/app/state.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/state.yaml
+          key_path: session.closed
+          other_key_path: session.opened
+          comparison_type: greater
+      - title: closed within an hour of opening
+        files:
+          /home/user/.config/app/state.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/state.yaml
+          key_path: session.closed
+          other_key_path: session.opened
+          tolerance: 3600
+      - title: a counter one above another
+        files:
+          /home/user/.config/app/state.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/state.yaml
+          key_path: counters.next
+          other_key_path: counters.last
+          offset: 1
+      - title: a text value is an error
+        expect: error
+        files:
+          /home/user/.config/app/state.yaml: *config
+        parameter:
+          dst: /home/user/.config/app/state.yaml
+          key_path: display.theme
+          other_key_path: session.opened

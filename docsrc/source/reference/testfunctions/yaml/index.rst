@@ -8,7 +8,7 @@ YAML
 :Functions: 4
 :Category: YAML Data
 
-The **YAML** testset reads YAML files with PyYAML's safe loader and checks keys, values and counts by key path.
+.. adare-testfunction-collection:: yaml
 
 Overview
 --------

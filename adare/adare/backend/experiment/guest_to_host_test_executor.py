@@ -18,9 +18,9 @@ import logging
 import os
 import shutil
 import tempfile
-from datetime import datetime
 from pathlib import Path
 
+from adare.backend.experiment.guest_probe_tests import QgaProbeTests
 from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
 from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
 from adarelib.event.event import TestResult
@@ -40,7 +40,7 @@ def _replace_paths(detail, display: dict[str, str]):
     return detail
 
 
-class GuestToHostTestExecutor:
+class GuestToHostTestExecutor(QgaProbeTests):
     """
     Executes tests on the host machine using QGA for guest file/command access.
 
@@ -497,6 +497,18 @@ class GuestToHostTestExecutor:
             [f"could not pull {', '.join(missing)} from guest; testing without it would read stale data"]
         )
 
+    def _guest_os_error(self, test_function: str) -> TestResult | None:
+        """The agent refuses linux.* off Linux and windows.* off Windows; host mode does the same."""
+        collection = test_function.split('.')[0] if '.' in test_function else ''
+        is_windows = getattr(self.guest_command, 'is_windows', None)
+        if not isinstance(is_windows, bool):  # a hostside image proxy does not know the OS
+            return None
+        if collection == 'linux' and is_windows:
+            return TestResult.error([f'{test_function} only runs on Linux guests, this guest is Windows'])
+        if collection == 'windows' and not is_windows:
+            return TestResult.error([f'{test_function} only runs on Windows guests'])
+        return None
+
     async def _execute_qga_probe_test(
         self,
         test_name: str,
@@ -510,6 +522,9 @@ class GuestToHostTestExecutor:
         QGA and interpret the results on the host.
         """
         func_name = test_function.split('.')[-1] if '.' in test_function else test_function
+        os_error = self._guest_os_error(test_function)
+        if os_error is not None:
+            return os_error
 
         if func_name == 'process_running':
             return await self._test_process_running(test_instance)
@@ -522,345 +537,10 @@ class GuestToHostTestExecutor:
         if func_name == 'registry_value_matches':
             return await self._test_registry_value_matches(test_instance)
         if func_name == 'file_permissions':
-            return await self._test_file_permissions(test_instance)
+            return await self._test_file_permissions(test_name, test_instance)
         if func_name == 'file_timestamps':
-            return await self._test_file_timestamps(test_instance)
+            return await self._test_file_timestamps(test_name, test_instance)
         return TestResult.error([f"Unknown QGA probe test: {func_name}"])
-
-    async def _test_process_running(self, test_instance: BasicTest) -> TestResult:
-        """Check if process is running via QGA."""
-        process_name = test_instance.parameter.process_name
-        if hasattr(test_instance, 'has_placeholders') and test_instance.has_placeholders(process_name):
-            process_name = test_instance.resolve_variables(process_name)
-
-        is_running = await self.guest_command.is_process_running(process_name)
-
-        if is_running:
-            return TestResult.success([f'process {process_name} is running'])
-        return TestResult.failed([f'process {process_name} is not running'])
-
-    async def _test_service_status(self, test_instance: BasicTest) -> TestResult:
-        """Check service status via QGA."""
-        service_name = test_instance.parameter.service_name
-        expected_status = test_instance.parameter.expected_status
-
-        if hasattr(test_instance, 'has_placeholders'):
-            if test_instance.has_placeholders(service_name):
-                service_name = test_instance.resolve_variables(service_name)
-            if test_instance.has_placeholders(expected_status):
-                expected_status = test_instance.resolve_variables(expected_status)
-
-        actual_status = await self.guest_command.get_service_status(service_name)
-
-        if actual_status == expected_status:
-            return TestResult.success([f'service {service_name} is {actual_status}'])
-        return TestResult.failed(
-            [f'service {service_name} status mismatch. Expected: {expected_status}, Got: {actual_status}']
-        )
-
-    async def _test_user_exists(self, test_instance: BasicTest) -> TestResult:
-        """Check if user exists via QGA."""
-        username = test_instance.parameter.username
-        if hasattr(test_instance, 'has_placeholders') and test_instance.has_placeholders(username):
-            username = test_instance.resolve_variables(username)
-
-        exists = await self.guest_command.user_exists(username)
-
-        if exists:
-            return TestResult.success([f'user {username} exists'])
-        return TestResult.failed([f'user {username} does not exist'])
-
-    async def _test_registry_key_exists(self, test_instance: BasicTest) -> TestResult:
-        """Check if a Windows registry key exists via QGA PowerShell."""
-        key_path = test_instance.parameter.key_path
-        if hasattr(test_instance, 'has_placeholders') and test_instance.has_placeholders(key_path):
-            key_path = test_instance.resolve_variables(key_path)
-
-        exists = await self.guest_command.registry_key_exists(key_path)
-
-        if exists:
-            return TestResult.success([f'registry key exists: {key_path}'])
-        return TestResult.failed([f'registry key does not exist: {key_path}'])
-
-    async def _test_registry_value_matches(self, test_instance: BasicTest) -> TestResult:
-        """Check if a Windows registry value matches expected value via QGA PowerShell."""
-        key_path = test_instance.parameter.key_path
-        value_name = test_instance.parameter.value_name
-        expected_value = test_instance.parameter.expected_value
-        expected_type = getattr(test_instance.parameter, 'value_type', None)
-
-        if hasattr(test_instance, 'has_placeholders'):
-            if test_instance.has_placeholders(key_path):
-                key_path = test_instance.resolve_variables(key_path)
-            if test_instance.has_placeholders(value_name):
-                value_name = test_instance.resolve_variables(value_name)
-            if isinstance(expected_value, str) and test_instance.has_placeholders(expected_value):
-                expected_value = test_instance.resolve_variables(expected_value)
-
-        found, actual_value, actual_type = await self.guest_command.registry_value_get(key_path, value_name)
-
-        if not found:
-            return TestResult.failed([f'registry key or value does not exist: {key_path}\\{value_name}'])
-
-        # Type check if requested
-        if expected_type:
-            expected_type_upper = expected_type.upper()
-            # PowerShell type names: String, DWord, Binary, etc. Map to REG_ names
-            ps_to_reg = {
-                'STRING': 'REG_SZ',
-                'EXPANDSTRING': 'REG_EXPAND_SZ',
-                'BINARY': 'REG_BINARY',
-                'DWORD': 'REG_DWORD',
-                'MULTISTRING': 'REG_MULTI_SZ',
-                'QWORD': 'REG_QWORD',
-            }
-            actual_type_mapped = ps_to_reg.get(actual_type.upper(), actual_type.upper()) if actual_type else 'UNKNOWN'
-            if expected_type_upper != actual_type_mapped:
-                return TestResult.failed(
-                    [f'registry value type mismatch. Expected: {expected_type_upper}, Got: {actual_type_mapped}']
-                )
-
-        # Value comparison (compare as strings since QGA returns strings)
-        if str(actual_value) == str(expected_value):
-            return TestResult.success([f'registry value matches: {actual_value}'])
-        return TestResult.failed([f'registry value mismatch. Expected: {expected_value}, Got: {actual_value}'])
-
-    async def _test_file_permissions(self, test_instance: BasicTest) -> TestResult:
-        """Check file permissions, owner, and group via QGA stat."""
-        dst = test_instance.parameter.dst
-        expected_permissions = test_instance.parameter.expected_permissions
-        check_owner = getattr(test_instance.parameter, 'check_owner', None)
-        check_group = getattr(test_instance.parameter, 'check_group', None)
-
-        if hasattr(test_instance, 'has_placeholders') and test_instance.has_placeholders(dst):
-            dst = test_instance.resolve_variables(dst)
-
-        perm_info = await self.guest_command.get_file_permissions(dst)
-
-        if not perm_info:
-            return TestResult.failed([f'could not get permissions for {dst} (file may not exist)'])
-
-        results = []
-        success = True
-
-        # Check permissions (octal comparison)
-        actual_perms = perm_info.get('permissions', '')
-        if actual_perms:
-            # Normalize: both as 3-digit octal strings
-            try:
-                actual_octal = actual_perms.lstrip('0') or '0'
-                if expected_permissions.isdigit():
-                    expected_octal = expected_permissions.lstrip('0') or '0'
-                    if actual_octal == expected_octal:
-                        results.append(f'permissions match: {actual_perms}')
-                    else:
-                        results.append(f'permission mismatch. Expected: {expected_permissions}, Got: {actual_perms}')
-                        success = False
-                else:
-                    # Symbolic notation — convert actual octal to int for comparison
-                    actual_int = int(actual_perms, 8)
-                    expected_int = self._parse_symbolic_permissions(expected_permissions)
-                    if actual_int == expected_int:
-                        results.append(f'permissions match: {actual_perms}')
-                    else:
-                        results.append(f'permission mismatch. Expected: {expected_permissions}, Got: {actual_perms}')
-                        success = False
-            except ValueError as e:
-                results.append(f'permission comparison error: {e}')
-                success = False
-        else:
-            results.append(f'could not determine permissions for {dst}')
-            success = False
-
-        # Check owner
-        if check_owner:
-            actual_owner = perm_info.get('owner', '')
-            if actual_owner == check_owner:
-                results.append(f'owner matches: {actual_owner}')
-            else:
-                results.append(f'owner mismatch. Expected: {check_owner}, Got: {actual_owner}')
-                success = False
-
-        # Check group
-        if check_group:
-            actual_group = perm_info.get('group', '')
-            if actual_group == check_group:
-                results.append(f'group matches: {actual_group}')
-            else:
-                results.append(f'group mismatch. Expected: {check_group}, Got: {actual_group}')
-                success = False
-
-        if success:
-            return TestResult.success(results)
-        return TestResult.failed(results)
-
-    @staticmethod
-    def _parse_symbolic_permissions(perm_str: str) -> int:
-        """Parse symbolic permission string like 'rwxr-xr-x' to integer."""
-        import stat
-
-        if len(perm_str) != 9:
-            raise ValueError(f"Invalid symbolic permission format: {perm_str}")
-        perms = 0
-        if perm_str[0] == 'r':
-            perms |= stat.S_IRUSR
-        if perm_str[1] == 'w':
-            perms |= stat.S_IWUSR
-        if perm_str[2] == 'x':
-            perms |= stat.S_IXUSR
-        if perm_str[3] == 'r':
-            perms |= stat.S_IRGRP
-        if perm_str[4] == 'w':
-            perms |= stat.S_IWGRP
-        if perm_str[5] == 'x':
-            perms |= stat.S_IXGRP
-        if perm_str[6] == 'r':
-            perms |= stat.S_IROTH
-        if perm_str[7] == 'w':
-            perms |= stat.S_IWOTH
-        if perm_str[8] == 'x':
-            perms |= stat.S_IXOTH
-        return perms
-
-    async def _test_file_timestamps(self, test_instance: BasicTest) -> TestResult:
-        """Check file timestamps via QGA stat."""
-        dst = test_instance.parameter.dst
-        timestamp_type = getattr(test_instance.parameter, 'timestamp_type', 'modified')
-        comparison_type = getattr(test_instance.parameter, 'comparison_type', 'equals')
-
-        if hasattr(test_instance, 'has_placeholders') and test_instance.has_placeholders(dst):
-            dst = test_instance.resolve_variables(dst)
-
-        timestamps = await self.guest_command.get_file_timestamps(dst)
-
-        if not timestamps:
-            return TestResult.failed([f'could not get timestamps for {dst} (file may not exist)'])
-
-        # Map timestamp_type to stat key
-        type_to_key = {'modified': 'mtime', 'accessed': 'atime', 'created': 'ctime'}
-        stat_key = type_to_key.get(timestamp_type)
-        if not stat_key or stat_key not in timestamps:
-            return TestResult.error([f'timestamp type {timestamp_type} not available for {dst}'])
-
-        actual_time = timestamps[stat_key]
-
-        if comparison_type == 'equals':
-            expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
-            )
-            tolerance = getattr(test_instance.parameter, 'tolerance_seconds', 0) or 0
-            if abs(actual_time - expected_time) <= tolerance:
-                return TestResult.success(
-                    [f'{timestamp_type} timestamp matches (±{tolerance}s): {datetime.fromtimestamp(actual_time)}']
-                )
-            return TestResult.failed(
-                [
-                    f'{timestamp_type} timestamp mismatch. '
-                    f'Expected: {datetime.fromtimestamp(expected_time)}, Got: {datetime.fromtimestamp(actual_time)}'
-                ]
-            )
-
-        if comparison_type == 'before':
-            expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
-            )
-            if actual_time < expected_time:
-                return TestResult.success(
-                    [f'{timestamp_type} timestamp is before {datetime.fromtimestamp(expected_time)}']
-                )
-            return TestResult.failed(
-                [f'{timestamp_type} timestamp is not before {datetime.fromtimestamp(expected_time)}']
-            )
-
-        if comparison_type == 'after':
-            expected_time = self._parse_test_timestamp(
-                test_instance.parameter.expected_time, getattr(test_instance.parameter, 'time_format', None)
-            )
-            if actual_time > expected_time:
-                return TestResult.success(
-                    [f'{timestamp_type} timestamp is after {datetime.fromtimestamp(expected_time)}']
-                )
-            return TestResult.failed(
-                [f'{timestamp_type} timestamp is not after {datetime.fromtimestamp(expected_time)}']
-            )
-
-        if comparison_type == 'between':
-            start_time = self._parse_test_timestamp(
-                test_instance.parameter.start_time, getattr(test_instance.parameter, 'time_format', None)
-            )
-            end_time = self._parse_test_timestamp(
-                test_instance.parameter.end_time, getattr(test_instance.parameter, 'time_format', None)
-            )
-            if start_time <= actual_time <= end_time:
-                return TestResult.success(
-                    [
-                        f'{timestamp_type} timestamp is between '
-                        f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
-                    ]
-                )
-            return TestResult.failed(
-                [
-                    f'{timestamp_type} timestamp is not between '
-                    f'{datetime.fromtimestamp(start_time)} and {datetime.fromtimestamp(end_time)}'
-                ]
-            )
-
-        if comparison_type == 'within_last':
-            within_duration = test_instance.parameter.within_duration
-            duration_seconds = self._parse_duration(within_duration)
-            current_time = datetime.now().timestamp()
-            threshold_time = current_time - duration_seconds
-            if actual_time >= threshold_time:
-                return TestResult.success([f'{timestamp_type} timestamp is within last {within_duration}'])
-            return TestResult.failed([f'{timestamp_type} timestamp is not within last {within_duration}'])
-
-        return TestResult.error([f'Unsupported comparison type: {comparison_type}'])
-
-    @staticmethod
-    def _parse_test_timestamp(timestamp, time_format=None) -> float:
-        """Parse a timestamp value to Unix epoch seconds."""
-        if isinstance(timestamp, (int, float)):
-            return float(timestamp)
-
-        timestamp = str(timestamp)
-        try:
-            return float(timestamp)
-        except (ValueError, TypeError):
-            pass
-
-        if time_format:
-            try:
-                return datetime.strptime(timestamp, time_format).timestamp()
-            except ValueError:
-                pass
-
-        common_formats = [
-            '%Y-%m-%d %H:%M:%S',
-            '%Y-%m-%dT%H:%M:%S',
-            '%Y-%m-%dT%H:%M:%SZ',
-            '%Y-%m-%d',
-            '%m/%d/%Y %H:%M:%S',
-            '%m/%d/%Y',
-        ]
-        for fmt in common_formats:
-            try:
-                return datetime.strptime(timestamp, fmt).timestamp()
-            except ValueError:
-                continue
-
-        raise ValueError(f"Cannot parse timestamp: {timestamp}")
-
-    @staticmethod
-    def _parse_duration(duration_str: str) -> float:
-        """Parse duration string like '1h', '30m', '2d' to seconds."""
-        units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
-        if not duration_str or duration_str[-1] not in units:
-            raise ValueError(f"Invalid duration format: {duration_str}")
-        try:
-            value = int(duration_str[:-1])
-            return value * units[duration_str[-1]]
-        except ValueError as e:
-            raise ValueError(f"Invalid duration format: {duration_str}") from e
 
     async def _run_test(self, test_instance) -> TestResult:
         """Run a test method, handling both sync and async test() methods."""

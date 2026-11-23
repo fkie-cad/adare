@@ -48,7 +48,7 @@ Visual diff mode for **manual comparison between OS/software versions**.
 
 ```sh
 adare exp diff test_csv -e ubuntu24
-adare exp diff firefox_test -e windows11 --project myproject
+adare exp diff notes_test -e windows11 --project myproject
 ```
 
 Use it to eyeball how the same playbook renders across, e.g., ubuntu24 vs windows11,

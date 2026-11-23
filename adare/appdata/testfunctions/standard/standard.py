@@ -495,6 +495,24 @@ def file_hash_matches(ctx, dst: str = '', expected_hash: str = '', hash_type: st
         return TestResult.execution_error(e, "Hash calculation error")
 
 
+def _metadata_path(ctx, dst) -> tuple[str, TestResult | None]:
+    """The one path ``dst`` names, or an ERROR: no unambiguous file, or an archive member (its
+    metadata would be that of a temporary extracted copy)."""
+    if isinstance(dst, str) and has_archive_separator(dst):
+        return '', TestResult.error(
+            [
+                f'{dst} names an archive member: its times, mode and owner would be those of a temporary '
+                'extracted copy, not of the member; test the archive file itself'
+            ]
+        )
+    path, status = ctx.resolve_globfilepath(dst)
+    if not path:
+        return '', TestResult.error(
+            [f"file {dst} can't be used, because no unambiguous file could be identified (because {status})"]
+        )
+    return path, None
+
+
 @testfunction(
     name='file_timestamps',
     description='tests file timestamps with various comparison types and formats',
@@ -518,7 +536,8 @@ def file_timestamps(
 
     Args:
         dst: Guest path to the file. A glob must match exactly one path, otherwise the test
-            errors. A missing file is an error.
+            errors. A missing file is an error, and so is an archive member (``a.zip!/x``):
+            its times would be those of a temporary extracted copy.
         timestamp_type: ``modified`` (mtime, default), ``accessed`` (atime) or ``created``:
             creation time on Windows; elsewhere ``st_birthtime`` if Python exposes it, else
             ``st_ctime`` (inode change time on Linux). Other values error.
@@ -543,12 +562,9 @@ def file_timestamps(
           comparison_type: within_last
           within_duration: 10m
     """
-    dst_param = dst
-    dst, status = ctx.resolve_globfilepath(dst)
-    if not dst:
-        return TestResult.error(
-            [f'file {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})']
-        )
+    dst, error = _metadata_path(ctx, dst)
+    if error is not None:
+        return error
 
     log.debug(f'dst file {dst} will be used for test')
 
@@ -628,7 +644,8 @@ def file_permissions(
 
     Args:
         dst: Guest path to the file or directory. A glob must match exactly one path,
-            otherwise the test errors. A missing path is an error.
+            otherwise the test errors. A missing path is an error, and so is an archive member
+            (its mode and owner would be those of a temporary extracted copy).
         expected_permissions: Octal digits (``'644'``, ``'0755'``) or 9-char symbolic
             (``rwxr-xr-x``), compared with ``st_mode & 0o777`` (no setuid/sticky). Quote it in
             YAML (unquoted ``0644`` is read as decimal 420). Empty/invalid values error.
@@ -642,12 +659,9 @@ def file_permissions(
           expected_permissions: '600'
           check_owner: user
     """
-    dst_param = dst
-    dst, status = ctx.resolve_globfilepath(dst)
-    if not dst:
-        return TestResult.error(
-            [f'file {dst_param} can\'t be used, because no unambiguous file could be identified (because {status})']
-        )
+    dst, error = _metadata_path(ctx, dst)
+    if error is not None:
+        return error
 
     log.debug(f'dst file {dst} will be used for test')
 

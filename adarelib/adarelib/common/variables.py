@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Any
 
 import attrs
-import dateutil.parser
 import dateutil.tz
+
+from adarelib.testset.timeinterval import parse_timestamp_text
 
 log = logging.getLogger(__name__)
 
@@ -346,9 +347,9 @@ class Variable:
             return False
 
         try:
-            dateutil.parser.parse(value)
+            parse_timestamp_text(value)
             return True
-        except (dateutil.parser.ParserError, ValueError, TypeError):
+        except (ValueError, TypeError):  # dateutil ParserError is a ValueError
             return False
 
     @staticmethod
@@ -424,7 +425,7 @@ class Variable:
                     return value
                 timestamp_str = str(value)
                 try:
-                    parsed_dt = dateutil.parser.parse(timestamp_str)
+                    parsed_dt = parse_timestamp_text(timestamp_str)
 
                     # Apply timezone metadata if available and datetime is naive
                     log.info(
@@ -464,10 +465,9 @@ class Variable:
                         log.info(f"CLAUDE: Converted timezone-aware timestamp to Unix timestamp: {unix_timestamp}")
                         return unix_timestamp
                     # Keep naive datetime as-is for backward compatibility
-                    log.info(f"CLAUDE: Keeping naive datetime (no timezone): {parsed_dt}")
                     return parsed_dt
 
-                except (dateutil.parser.ParserError, ValueError) as e:
+                except ValueError as e:  # dateutil ParserError included
                     raise ValidationError(f"Invalid timestamp '{timestamp_str}': {e}")
 
             elif var_type == VariableType.LIST:
@@ -1013,7 +1013,7 @@ class VariableRegistry:
             else:
                 # String timestamp - parse and apply timezone if available
                 try:
-                    result = dateutil.parser.parse(str(var.value))
+                    result = parse_timestamp_text(str(var.value))
                     log.debug(f"Parsed timestamp string: {result}")
 
                     # Apply timezone conversion if timezone metadata is available

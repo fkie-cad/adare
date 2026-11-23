@@ -47,8 +47,9 @@ def test_use_for_joins_the_paragraph_and_ignores_args():
 
 def test_plain_info_prints_use_for_under_the_summary(capsys):
     render.render_entry(ENTRY, _formatter('plain'))
-    lines = capsys.readouterr().out.splitlines()
-    assert lines[1:3] == ['tests the size of a file', 'Use for: checking a file is empty (``expected_size: 0``).']
+    lines = [line for line in capsys.readouterr().out.splitlines() if line]
+    summary = lines.index('tests the size of a file')
+    assert "**Use for:** checking a file is empty (`expected_size: 0`)." in lines[summary + 1 :]
 
 
 def test_plain_info_without_use_for_has_no_empty_label(capsys):

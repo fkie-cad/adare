@@ -8,7 +8,7 @@ Property list (plist)
 :Functions: 4
 :Category: Property List Data
 
-The **plist** testset reads property lists, XML or binary (detected from the content), and checks keys, values and counts by key path.
+.. adare-testfunction-collection:: plist
 
 Overview
 --------

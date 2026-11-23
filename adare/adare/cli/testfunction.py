@@ -285,6 +285,10 @@ def exec_validate_testfunction(arguments):
     from adare.backend.testfunction.catalog import docstring_warnings
 
     doc_warnings = docstring_warnings(py_file) if py_file is not None else []
+    if py_file is not None:
+        from adare.backend.testfunction.contract_checks import collection_problems
+
+        doc_warnings += [f'contract: {problem}' for problem in collection_problems(py_file)]
 
     from adare.console import console
 

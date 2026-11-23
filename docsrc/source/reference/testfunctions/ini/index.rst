@@ -8,7 +8,7 @@ INI
 :Functions: 4
 :Category: INI Configuration
 
-The **INI** testset checks sections, keys and values of INI-style configuration files with a tolerant line parser.
+.. adare-testfunction-collection:: ini
 
 Overview
 --------

@@ -393,9 +393,7 @@ class BasicTest:
         """
         import datetime
 
-        from dateutil import parser as _parser
-
-        from adarelib.testset.timeinterval import parse_utc_offset
+        from adarelib.testset.timeinterval import parse_timestamp_text, parse_utc_offset
 
         # "Local" means the guest's local time. The host records the guest's UTC
         # offset (guest_utc_offset); without it, fall back to the timezone of the
@@ -498,7 +496,7 @@ class BasicTest:
                 pass
 
         # Flexible parsing fallback
-        dt = _parser.parse(timestamp_str)
+        dt = parse_timestamp_text(timestamp_str)
         return _finalize(dt)
 
     def _handle_placeholders_comparison(self, actual_content: str, expected_template: str) -> tuple[bool, str]:
@@ -614,11 +612,11 @@ def _parse_bound(value: str) -> 'datetime.datetime':
     """Parse an interval bound: Unix seconds or ISO 8601, naive meaning UTC (save_timestamp values)."""
     import datetime
 
-    from dateutil import parser as _parser
+    from adarelib.testset.timeinterval import parse_timestamp_text
 
     try:
         return datetime.datetime.fromtimestamp(float(value), datetime.timezone.utc)
     except ValueError:
         pass
-    dt = _parser.parse(value)
+    dt = parse_timestamp_text(value)
     return dt if dt.tzinfo else dt.replace(tzinfo=datetime.timezone.utc)

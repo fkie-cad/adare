@@ -75,6 +75,20 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   compared against an empty string.
 
 ### Added
+- Testfunction contracts: each collection has a `contract.yaml` saying per function what it
+  asserts and reads, which shared features it supports or refuses, goals it is not for (with
+  the function to use instead), when it passes / fails / errors, its limits, allowed parameter
+  values, use cases and examples; `appdata/testfunctions/library.yaml` holds the shared
+  vocabulary, features and known gaps. One source renders `adare test info`, the agent skill's
+  references and the reference pages of the docs (Sphinx directive `adare-testfunction`).
+  The examples run in the unit suite (`scripts/check_contract.py`).
+- `adare test search` returns short cards (why it matched, supports / does not support, not
+  for, required parameters), filters `--asserts`, `--reads`, `--feature`, follows "not for -> use
+  X" redirects and answers `match: weak` with the matching known gaps when nothing fits.
+- `adare test feature [<id>]`, the chat tool `testfunction_feature`, and `adare test catalog
+  --markdown-dir` for the split skill references (`catalog/index.md`, `catalog/<collection>.md`,
+  `features.md`); `make testfunction-tables` regenerates them with the docs tables.
+- `adare exp playbook validate` warns about parameter values outside a function's allowed list.
 - CI: release tags `<package>-v<version>` get checked (version, CHANGELOG section, commit
   on `main`), tested and turned into a GitHub Release with the package's sdist + wheel
   (`release.yml`, `make release-check`, `make build`; no PyPI).
@@ -222,6 +236,8 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   A pattern that is missing or only occurs earlier is FAILED and named in the details.
 
 ### Changed
+- The `testfunction_search` chat tool returns `{match, results: [cards], known_gaps}` instead
+  of a list of full entries; `adare test search` defaults to 5 results.
 - `adare experiment run` exit codes (adare): `0` only when every run passed, `1` when any
   run did not pass (FAILED, ERROR, INCONCLUSIVE), `130` when a run was interrupted or Ctrl-C
   ended the command. Before, a single-environment run (`-e env`) exited `0` even when it
@@ -285,6 +301,40 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   paths (browser profiles, office suites, registry keys); a unit test keeps it that way.
 
 ### Fixed
+- `xml.element_text_matches` / `attribute_matches`: an unquoted number (`expected_value: 41`)
+  equals the text `41` (it never matched); an invalid `wildcard_mode` is an ERROR even when one
+  element matches. `xml.xpath_result_matches` with `text`/`number` FAILS on a missing element
+  (it read as `''` / `0.0`, so `expected_value: 0` passed on absence), and an empty element is
+  no number. `xml.namespace_matches` finds every `xmlns:prefix` declaration, not only the
+  root's namespace, and a missing `expected_namespaces` is an ERROR instead of a crash.
+- `excel.sheet_exists`: a `!re` tag in `sheet` is matched against the sheet names; it was
+  compared as plain text and failed silently.
+- `sqlite.query_result`: `!re` / `!timestamp` cells in `expected_result` are compared with the
+  typed cell value, so they match INTEGER columns without `CAST(... AS TEXT)`; a NULL never
+  matches a placeholder.
+- `!timestamp` without `format` (adarelib, additive): an EXIF date `2024:01:02 03:04:06` is
+  read with its date; it was read as today at 03:04:06. A malformed colon date is an ERROR.
+- `windows.registry_value_matches`: type names are canonical (`REG_DWORD`, `REG_QWORD`; they
+  were reported as `REG_DWORD_LITTLE_ENDIAN` / `UNKNOWN_TYPE_11`, so `value_type: REG_DWORD`
+  never matched); the old names are still accepted in `value_type`.
+- `visual.count_equals` with `n: 0` is a negative test (INCONCLUSIVE without proof of the act).
+- Host test mode (QGA) gives the agent's results: `file_permissions` / `file_timestamps` are
+  an ERROR for a missing file (were FAILED), resolve globs, refuse archive members, and use
+  the guest clock for `within_last` and zone-less dates; `process_running` matches the full
+  command line (`pgrep -f`) and honours `min_instances`; `user_exists` checks `uid` and
+  `home_dir`; `registry_value_matches` compares typed values with canonical type names.
+- `--backend hostside`: `user_exists` checks `uid` / `home_dir`, metadata of a missing file is
+  an ERROR, and `visual.*` tests are refused before the run (no screen after shutdown).
+- `standard.file_timestamps` / `file_permissions`: an archive member (`a.zip!/x`) is an ERROR;
+  the agent read the temporary extracted copy, so `within_last` passed on the extraction time.
+- Playbook timestamp variables (adarelib): an EXIF-form value `2024:01:02 03:04:06` keeps its
+  date; it was read as today at that time.
+- Host test mode: `linux.*` probes on a Windows guest (and `windows.*` elsewhere) are an ERROR,
+  as in the guest agent; they ran the PowerShell equivalents.
+- `adare test info` / `test search` show the bundled contract of a collection whose installed
+  code differs from it, with a note to run `adare test sync` (they showed none).
+- Playbook test checks also run for playbooks with `!re` / `!timestamp` values (they were
+  skipped because the YAML was read without the playbook's tags).
 - An invalid regular expression (`regex_match`, a `!re` tag or a regex placeholder) is an
   ERROR in every collection, checked before the file is read. Before, a key, element, row or
   line that was not found gave FAILED first and hid it (structured formats, json, ini, xml,

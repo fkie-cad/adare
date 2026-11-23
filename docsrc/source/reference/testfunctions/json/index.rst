@@ -8,12 +8,10 @@ JSON
 :Functions: 5
 :Category: JSON Data Validation
 
-The **JSON** testset provides comprehensive JSON file testing capabilities for ADARE experiments. This testset focuses on JSON structure validation, key existence checking, value comparison, and array element verification.
+.. adare-testfunction-collection:: json
 
 Overview
 --------
-
-The JSON testset enables detailed validation of JSON files and data structures. It includes functions to check for key existence using dot notation paths, validate values with support for wildcards and regular expressions, and verify array contents with flexible matching options.
 
 Key paths are dot paths from the root: ``*`` expands all values of an object, ``name[*]`` all elements of an array, ``name[0]`` / ``name[-1]`` one element; a leading ``[0]`` / ``[*]`` addresses a top-level array and ``['a.b']`` a key that contains dots. LZ4-compressed JSON is read through the archive separator (``dst: /home/user/data/store.jsonlz4!``), a file inside an archive with ``archive.zip!/member``.
 

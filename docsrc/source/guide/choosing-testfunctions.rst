@@ -6,8 +6,10 @@ them, and several look alike: three ways to count lines, two to find a string, a
 and a count test for every structured format. This page picks the right one for a goal
 and says which neighbour *not* to use.
 
-To search from the command line, describe the goal; ``adare test info`` then shows the
-function's "Use for" line, its parameters and an example:
+To search from the command line, describe the goal. The results say what each function
+supports and does not, and which goals it is not for; ``adare test info`` then shows the
+whole contract (parameters, allowed values, outcomes, limits, examples). Shared syntax such
+as archives in ``dst`` is in :doc:`/reference/testfunctions/features`:
 
 .. code-block:: bash
 

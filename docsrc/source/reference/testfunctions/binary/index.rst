@@ -8,10 +8,7 @@ Binary
 :Functions: 4
 :Category: Binary Containers
 
-The **Binary** testset reads application-specific binary containers that no dedicated parser
-knows: entry files whose last bytes point at a metadata block, index files of fixed-size records,
-tables of NUL-separated key/value strings. It reads values at offsets, counts byte patterns in a
-region and looks up keys in string tables. No format is built in: the test says where to look.
+.. adare-testfunction-collection:: binary
 
 Offset Expressions
 ------------------

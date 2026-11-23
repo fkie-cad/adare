@@ -1101,8 +1101,8 @@ class TestXPathResultMatches:
 
         assert_test_success(result)
 
-    def test_xpath_result_matches_missing_element_returns_zero(self, create_xml_file):
-        """Test XPath result with missing element for number type returns 0."""
+    def test_xpath_result_matches_missing_element_never_equals_zero(self, create_xml_file):
+        """A missing element has no value: expected_value 0 must not pass on absence."""
         xml_file = create_xml_file(
             "test.xml",
             """<?xml version="1.0"?>
@@ -1119,7 +1119,7 @@ class TestXPathResultMatches:
         )
         result = test.test()
 
-        assert_test_success(result)
+        assert_test_failed(result)
 
 
 # ============================================================================

@@ -346,3 +346,114 @@ def test_values_compare_leaves_the_evidence_untouched(three_commits):
 def test_host_mode_pulls_other_dst_and_sidecars():
     assert ValuesCompare.host_mode_sidecars == ('-wal', '-journal')
     assert ValuesCompare.host_mode_path_params == ('other_dst',)
+
+
+# --- !timestamp / !re placeholders in expected_result compare the typed cell -----------------
+
+VISITED_S = 1767265200  # 2026-01-01 11:00:00 UTC, stored as an INTEGER column
+
+
+@pytest.fixture
+def visits(tmp_path):
+    db = tmp_path / 'visits.db'
+    conn = sqlite3.connect(str(db))
+    conn.execute('CREATE TABLE visits (id INTEGER, url TEXT, visited INTEGER, note TEXT)')
+    conn.execute('INSERT INTO visits VALUES (1, ?, ?, NULL)', ('https://example.org/a', VISITED_S))
+    conn.commit()
+    conn.close()
+    return db
+
+
+def _placeholder_query(dst, expected_result, metadata, query='SELECT id, url, visited FROM visits'):
+    return QueryResult(
+        name='t',
+        parameter=QueryResultParameter(dst=str(dst), query=query, expected_result=expected_result),
+        variable_metadata=metadata,
+    ).test()
+
+
+def _ts(**extra):
+    return {'T': {'type': 'timestamp', 'raw_value': str(VISITED_S), 'resolved_value': str(VISITED_S), **extra}}
+
+
+def _re(pattern):
+    return {'R': {'type': 'regex', 'raw_value': pattern, 'resolved_value': pattern}}
+
+
+def test_timestamp_placeholder_matches_an_integer_column(visits):
+    result = _placeholder_query(
+        visits,
+        [{'id': 1, 'url': 'https://example.org/a', 'visited': '{{ T }}'}],
+        _ts(epoch=1970, unit='s', tolerance=[-2, 2]),
+    )
+
+    assert result.status == StatusEnum.SUCCESS, result.details
+
+
+def test_timestamp_placeholder_outside_tolerance_fails(visits):
+    metadata = _ts(epoch=1970, unit='s', tolerance=[-2, 2])
+    metadata['T']['resolved_value'] = str(VISITED_S + 3600)
+
+    result = _placeholder_query(visits, [{'id': 1, 'url': 'https://example.org/a', 'visited': '{{ T }}'}], metadata)
+
+    assert result.status == StatusEnum.FAILED, result.details
+    assert 'placeholder comparison failed' in result.details[0]
+
+
+def test_timestamp_interval_placeholder_matches_an_integer_column(visits):
+    metadata = _ts(epoch=1970, unit='s', interval=[VISITED_S - 5, VISITED_S + 5])
+
+    result = _placeholder_query(visits, [{'visited': '{{ T }}'}], metadata, query='SELECT visited FROM visits')
+
+    assert result.status == StatusEnum.SUCCESS, result.details
+
+
+def test_regex_placeholder_matches_an_integer_column_as_text(visits):
+    result = _placeholder_query(visits, [{'visited': '{{ R }}'}], _re(r'17672\d+'), query='SELECT visited FROM visits')
+
+    assert result.status == StatusEnum.SUCCESS, result.details
+
+
+def test_regex_placeholder_that_does_not_match_an_integer_column_fails(visits):
+    result = _placeholder_query(visits, [{'visited': '{{ R }}'}], _re(r'9\d+'), query='SELECT visited FROM visits')
+
+    assert result.status == StatusEnum.FAILED, result.details
+
+
+def test_regex_placeholder_on_a_text_column_still_works(visits):
+    result = _placeholder_query(
+        visits, [{'id': 1, 'url': '{{ R }}'}], _re(r'https://example\.org/.*'), query='SELECT id, url FROM visits'
+    )
+
+    assert result.status == StatusEnum.SUCCESS, result.details
+
+
+def test_plain_cells_beside_a_placeholder_are_compared_exactly(visits):
+    result = _placeholder_query(
+        visits, [{'id': 2, 'url': '{{ R }}'}], _re(r'https://.*'), query='SELECT id, url FROM visits'
+    )
+
+    assert result.status == StatusEnum.FAILED, result.details
+
+
+def test_placeholder_on_a_null_cell_fails(visits):
+    result = _placeholder_query(visits, [{'note': '{{ R }}'}], _re('None'), query='SELECT note FROM visits')
+
+    assert result.status == StatusEnum.FAILED, result.details
+
+
+@pytest.mark.parametrize(
+    'expected',
+    [[], [{'visited': '{{ R }}'}, {'visited': '{{ R }}'}], [{'other': '{{ R }}'}]],
+    ids=['fewer-rows', 'more-rows', 'other-column'],
+)
+def test_placeholder_row_shape_mismatch_fails(visits, expected):
+    result = _placeholder_query(visits, expected, _re(r'\d+'), query='SELECT visited FROM visits')
+
+    assert result.status == StatusEnum.FAILED, result.details
+
+
+def test_invalid_regex_in_a_cell_is_an_error(visits):
+    result = _placeholder_query(visits, [{'visited': '{{ R }}'}], _re('[unclosed'), query='SELECT visited FROM visits')
+
+    assert result.status == StatusEnum.ERROR, result.details

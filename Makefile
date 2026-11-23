@@ -21,7 +21,7 @@ help:
 	@echo "  install-skills  Symlink the workflow skills in skills/ into Claude Code's skill dirs (project + global)."
 	@echo "  docs            Build HTML documentation with Sphinx (warnings are errors)."
 	@echo "  docs-sphinx     Build HTML documentation with Sphinx (warnings are errors)."
-	@echo "  testfunction-tables  Regenerate the testfunction tables of the docs from the catalog."
+	@echo "  testfunction-tables  Regenerate the docs tables and the agent skill references from the catalog + contracts."
 	@echo "  test            Run the client unit suite (extra pytest flags: PYTEST_ARGS=...)."
 	@echo "  test-cov        Run the unit suite with coverage; fails below the floor (COV_MIN)."
 	@echo "  test-testfunctions  Run only the testfunction tests on the host Python (no libvirt needed)."
@@ -107,6 +107,8 @@ docs-sphinx:
 testfunction-tables:
 	$(SYNC) --package adare
 	$(RUN) python scripts/gen_testfunction_tables.py
+	$(RUN) adare test catalog --markdown-dir skills/adare-testfunction/references
+	$(RUN) python scripts/check_contract.py --all
 
 # --- Tests -------------------------------------------------------------------
 # `--package adare` keeps adare-cv-server (paddle) out; the unit suite never imports

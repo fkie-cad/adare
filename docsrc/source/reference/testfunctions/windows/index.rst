@@ -8,12 +8,7 @@ Windows
 :Functions: 2
 :Category: Windows System Validation
 
-The **Windows** testset provides Windows-specific system testing capabilities for ADARE experiments. This testset focuses on Windows Registry operations, including key existence validation and registry value verification.
-
-Overview
---------
-
-The Windows testset enables validation of Windows system state and configuration through Registry access. It includes functions to check for registry key existence and validate registry values with support for different data types (strings, DWORD, etc.).
+.. adare-testfunction-collection:: windows
 
 Test Functions
 --------------

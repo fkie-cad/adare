@@ -1,0 +1,363 @@
+# Contract of the text collection: what each function can and cannot do, and runnable
+# examples. Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run
+# in the unit suite (test_contract_examples.py); `adare test info text.<name>` shows all of it.
+
+collection:
+  title: Text
+  summary: >-
+    Counts content in any file: occurrences of a string or byte sequence in the raw bytes (binary
+    files included, in one or several encodings at once), lines of a text file that contain a
+    string or match a regex, and the order of such lines. Absence is ``expected_count: 0``; a missing, unreadable or undecodable
+    file is an error, never a pass.
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  log: &log
+    text: "2026-01-01 deleted: report-2025.pdf\n2026-01-02 opened: notes.txt\n2026-01-03 deleted: old-report.odt\n2026-01-04 ERROR disk full\n"
+  # binary cache: a UTF-16-LE value between NUL padding
+  cache: &cache
+    concat:
+      - hex: 00 01 02 03
+      - text: user=analyst
+        encoding: utf-16-le
+      - hex: 00 00 ff fe
+
+functions:
+  occurrence_count:
+    asserts: [count, absent, content]
+    formats: [text, binary]
+    features: [archive_dst, glob_dst, count_comparison, encoding, negative, placeholder]
+    unsupported:
+      regex_tag: 'A ``!re`` in ``content`` is an error (it would be searched literally); for patterns use text.line_count with ``regex_match`` or standard.file_content_matches_regex.'
+      timestamp_tag: A ``!timestamp`` in ``content`` is an error.
+    not_for:
+      - goal: whether a string is in a text file, without counting
+        use: standard.file_content_contains
+      - goal: lines of a text file that contain a string or match a regex
+        use: text.line_count
+      - goal: a regular expression in the content
+        use: standard.file_content_matches_regex
+      - goal: rows of a SQLite database (the ``.db`` alone misses the ``-wal``)
+        use: sqlite.row_count
+      - goal: a byte pattern in one region of a binary file
+        use: binary.pattern_count
+    outcomes:
+      passed: the number of non-overlapping occurrences of ``content`` (summed over the encoded forms) satisfies ``comparison_type``
+      failed: the file was read and the count comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read or is larger than the read cap (``ADARE_ARCHIVE_MAX_BYTES``)
+        - empty ``content``; a ``!re`` / ``!timestamp`` tag or unknown placeholder in ``content``
+        - an unknown ``content_type`` or encoding; ``content`` not encodable in a listed encoding; an invalid escape or hex string
+        - '``case_sensitive: false`` outside ``content_type: string``'
+        - a negative or non-integer ``expected_count``; an unknown ``comparison_type``
+    limits:
+      - The raw bytes are searched, nothing is decoded; forms match at any byte offset, not aligned to characters.
+      - The same text stored once in each of two encodings counts twice; a match on bytes already counted for an earlier encoding is skipped.
+      - '``utf-16`` / ``utf-32`` search both byte orders without BOM.'
+      - '``case_sensitive: false`` matches one-character case forms only (``ä`` / ``Ä``, not sharp s / ``SS``).'
+      - 'In YAML, ``"\x00ab"`` (double quotes) is decoded by YAML; in single quotes the escape reaches ``content_type: bytes`` and is decoded there. Both give the same bytes.'
+    choices:
+      content_type: [string, bytes, hex]
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: A value was wiped
+        text: '``expected_count: 0`` on a cache, database or memory dump, in every encoding the application may use (``encoding: [utf-8, utf-16-le]``).'
+      - title: A value was written n times
+        text: Exact counts in binary files that no structured function can parse.
+      - title: A file signature or marker
+        text: '``content_type: hex`` for byte sequences such as a magic number.'
+    examples:
+      - title: a token wiped in UTF-8 and UTF-16
+        files:
+          /home/user/app/cache.bin: *cache
+        parameter:
+          dst: /home/user/app/cache.bin
+          content: secret-token
+          encoding: [utf-8, utf-16-le]
+          expected_count: 0
+      - title: a UTF-16 string is found with its encoding
+        files:
+          /home/user/app/cache.bin: *cache
+        parameter:
+          dst: /home/user/app/cache.bin
+          content: analyst
+          encoding: [utf-8, utf-16-le]
+          expected_count: 1
+      - title: but not in the default UTF-8
+        text: Without ``encoding`` only the UTF-8 form is searched, so a value stored as UTF-16 counts 0.
+        expect: failed
+        files:
+          /home/user/app/cache.bin: *cache
+        parameter:
+          dst: /home/user/app/cache.bin
+          content: analyst
+          expected_count: 1
+      - title: the same text in two encodings counts twice
+        files:
+          /home/user/app/store.dat:
+            concat:
+              - text: token
+              - hex: '00'
+              - text: token
+                encoding: utf-16-le
+        parameter:
+          dst: /home/user/app/store.dat
+          content: token
+          encoding: [utf-8, utf-16-le]
+          expected_count: 2
+      - title: overlapping forms count once
+        text: The UTF-8 ``a`` is the first byte of the UTF-16-LE ``a``; the bytes are counted once.
+        files:
+          /home/user/app/one.dat:
+            text: a
+            encoding: utf-16-le
+        parameter:
+          dst: /home/user/app/one.dat
+          content: a
+          encoding: [utf-8, utf-16-le]
+          expected_count: 1
+      - title: header bytes once
+        files:
+          /home/user/app/blob.dat:
+            hex: 4d 5a 90 00 03 00 00 00
+        parameter:
+          dst: /home/user/app/blob.dat
+          content: 4d 5a 90 00
+          content_type: hex
+          expected_count: 1
+      - title: in any case, at least once
+        files:
+          /home/user/app/app.log: *log
+        parameter:
+          dst: /home/user/app/app.log
+          content: Error
+          case_sensitive: false
+          expected_count: 1
+          comparison_type: greater_equal
+      - title: inside a compressed file
+        files:
+          /home/user/app/app.log.gz:
+            gzip: *log
+        parameter:
+          dst: /home/user/app/app.log.gz!
+          content: report
+          expected_count: 2
+      - title: a missing file is an error, not an absence
+        expect: error
+        files:
+          /home/user/app/cache.bin: *cache
+        parameter:
+          dst: /home/user/app/cache2.bin
+          content: secret-token
+          expected_count: 0
+      - title: case-insensitive hex is an error
+        expect: error
+        files:
+          /home/user/app/blob.dat:
+            hex: 4d 5a 90 00
+        parameter:
+          dst: /home/user/app/blob.dat
+          content: 4d 5a
+          content_type: hex
+          case_sensitive: false
+          expected_count: 1
+      - title: a regex tag in content is an error
+        text: Use text.line_count with ``regex_match`` for patterns.
+        expect: error
+        files:
+          /home/user/app/app.log: *log
+        parameter:
+          dst: /home/user/app/app.log
+          content: !re 'report-\d+'
+          expected_count: 1
+
+  line_count:
+    asserts: [count, absent, content]
+    formats: [text]
+    features: [archive_dst, glob_dst, count_comparison, encoding, negative, placeholder]
+    unsupported:
+      regex_tag: 'A ``!re`` in ``content`` is an error; write the pattern as a plain string with ``regex_match: true``.'
+      timestamp_tag: A ``!timestamp`` in ``content`` is an error.
+    not_for:
+      - goal: occurrences in a binary file or in several encodings at once
+        use: text.occurrence_count
+      - goal: CSV records (a quoted field with a line break is one record)
+        use: csv.row_count
+      - goal: JSON Lines records that meet conditions
+        use: jsonl.line_count
+      - goal: a trace in the last lines of a plain-text log
+        use: linux.log_entry_exists
+    outcomes:
+      passed: the number of lines that contain (or match) ``content`` satisfies ``comparison_type``
+      failed: the file was read and the count comparison does not hold
+      error:
+        - the file does not exist or is a directory; a glob matches no file or more than one
+        - the file cannot be read, is larger than the read cap or is not valid in the encoding
+        - an unknown encoding; an invalid regex; a ``!re`` / ``!timestamp`` tag or unknown placeholder in ``content``
+        - a negative or non-integer ``expected_count``; an unknown ``comparison_type``; a non-boolean ``case_sensitive``
+    limits:
+      - Lines end at ``\n``, ``\r\n`` or ``\r``; an empty file has 0 lines; an empty ``content`` counts every line.
+      - Without ``encoding`` a BOM selects UTF-8/16/32, BOM-less UTF-16 is detected from its zero bytes, else UTF-8. A BOM always wins.
+      - A line with several matches counts once.
+      - '``case_sensitive: false`` casefolds line and ``content`` (sharp s = ``ss``), or compiles the regex with ``re.IGNORECASE``.'
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: Log or history entries
+        text: Exactly two lines that record a deletion.
+      - title: A line is gone
+        text: '``expected_count: 0`` after a clean-up action.'
+    examples:
+      - title: two deletions logged
+        files:
+          /home/user/app/app.log: *log
+        parameter:
+          dst: /home/user/app/app.log
+          content: 'deleted: .*report'
+          regex_match: true
+          expected_count: 2
+      - title: entry removed from the history
+        files:
+          /home/user/app/app.log: *log
+        parameter:
+          dst: /home/user/app/app.log
+          content: secret-project
+          expected_count: 0
+      - title: errors in any case
+        files:
+          /home/user/app/app.log: *log
+        parameter:
+          dst: /home/user/app/app.log
+          content: error
+          case_sensitive: false
+          expected_count: 1
+      - title: a case-sensitive search misses other cases
+        expect: failed
+        files:
+          /home/user/app/app.log: *log
+        parameter:
+          dst: /home/user/app/app.log
+          content: error
+          expected_count: 1
+      - title: a UTF-16 file with BOM is detected
+        files:
+          /home/user/app/history.txt:
+            text: "opened notes.txt\r\nopened report.odt\r\n"
+            encoding: utf-16
+        parameter:
+          dst: /home/user/app/history.txt
+          content: opened
+          expected_count: 2
+      - title: a log member of a compressed archive
+        files:
+          /home/user/backup/logs.tar.gz:
+            tar.gz:
+              var/log/app.log: *log
+        parameter:
+          dst: /home/user/backup/logs.tar.gz!/var/log/app.log
+          content: opened
+          expected_count: 1
+      - title: content not valid UTF-8 is an error
+        expect: error
+        files:
+          /home/user/app/app.log:
+            hex: 6f 6b c3 28 0a
+        parameter:
+          dst: /home/user/app/app.log
+          content: ok
+          expected_count: 1
+      - title: an invalid regex is an error
+        expect: error
+        files:
+          /home/user/app/app.log: *log
+        parameter:
+          dst: /home/user/app/app.log
+          content: 'deleted: ('
+          regex_match: true
+          expected_count: 0
+
+  lines_in_order:
+    asserts: [sequence, content]
+    formats: [text]
+    features: [archive_dst, glob_dst, encoding, placeholder]
+    unsupported:
+      regex_tag: 'A ``!re`` pattern is an error; write the regex as a plain string with ``regex: true``.'
+      timestamp_tag: A ``!timestamp`` pattern is an error.
+    not_for:
+      - goal: how often one pattern occurs, or that it is absent
+        use: text.line_count
+      - goal: the order of JSON Lines records by their fields
+        use: jsonl.lines_in_order
+      - goal: a pattern anywhere in the content, across lines
+        use: standard.file_content_matches_regex
+    related:
+      - use: text.line_count
+        why: the same line matching (substring or ``re.search``), but counts one pattern
+    outcomes:
+      passed: each pattern matches a line after the line the pattern before it matched (other lines in between are ignored)
+      failed: the file was read and a pattern matches no line after the previous match; the details name it and the earlier lines it matches, if any
+      error:
+        - the file does not exist; a glob matches no file or more than one
+        - the content is not valid in ``encoding``; an unknown ``encoding``
+        - '``patterns`` empty, not a list, or holding an empty or non-string entry; an invalid regex'
+        - a ``!re`` or ``!timestamp`` pattern
+    limits:
+      - Each pattern takes the earliest line after the previous match, so two patterns never share a line; when that fails no other choice of lines passes either.
+      - 'Lines end at ``\n``, ``\r\n`` or ``\r``; a pattern never spans two lines.'
+      - 'With ``regex: true`` every pattern is a regex searched in the line (``re.search``, unanchored); without it a pattern is a substring.'
+    use_cases:
+      - title: Events in a log, in order
+        text: A service started, then a file was opened, then it was deleted; other log lines between them do not matter.
+      - title: Steps of a history or journal file
+        text: An action sequence in a shell history or an application journal, each step after the one before.
+    examples:
+      - title: a delete before an open before an error
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: ['deleted: report-2025.pdf', 'opened: notes.txt', 'ERROR']
+      - title: regex patterns
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: ['deleted: .*\.pdf$', 'deleted: .*\.odt$']
+          regex: true
+      - title: ignoring case
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: [OPENED, error disk]
+          case_sensitive: false
+      - title: the right lines in the wrong order fail
+        text: '``opened`` is in line 2, but no ``report-2025.pdf`` line follows it; the details name line 1 as the earlier match.'
+        expect: failed
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: ['opened: notes.txt', 'deleted: report-2025.pdf']
+      - title: one line cannot match two patterns
+        expect: failed
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: [disk, full]
+      - title: a !re pattern is an error
+        expect: error
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/service.log
+          patterns: [!re 'deleted: .*']
+      - title: a missing file is an error
+        expect: error
+        files:
+          /var/log/app/service.log: *log
+        parameter:
+          dst: /var/log/app/other.log
+          patterns: [deleted]

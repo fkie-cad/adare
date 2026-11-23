@@ -5,14 +5,13 @@ import re
 from typing import TYPE_CHECKING
 
 import attr
-import dateutil.parser
-import dateutil.relativedelta
 import yaml
+
+from adarelib.testset.timeinterval import parse_timestamp_text
 
 if TYPE_CHECKING:
     from adarelib.common.variables import VariableRegistry
 
-# internal imports
 # configure logging
 import logging
 
@@ -239,8 +238,8 @@ class YamlTimestamp(YamlCustomTag):
                 return ComparisonResult(False, 'data timestamp couldn\'t be parsed', exception=e)
         elif not self.timestamp_format_in_entry:
             try:
-                data_timestamp = dateutil.parser.parse(entry)
-            except (dateutil.parser.ParserError, OverflowError) as e:
+                data_timestamp = parse_timestamp_text(entry)
+            except (ValueError, OverflowError) as e:
                 return ComparisonResult(False, 'data timestamp couldn\'t be parsed', exception=e)
         else:
             try:
@@ -249,8 +248,8 @@ class YamlTimestamp(YamlCustomTag):
                 return ComparisonResult(False, 'data timestamp couldn\'t be parsed', exception=e)
         if not self.timestamp_format_comparison:
             try:
-                timestamp = dateutil.parser.parse(self.string)
-            except (dateutil.parser.ParserError, OverflowError) as e:
+                timestamp = parse_timestamp_text(self.string)
+            except (ValueError, OverflowError) as e:
                 return ComparisonResult(False, 'comparison timestamp couldn\'t be parsed', exception=e)
         else:
             try:

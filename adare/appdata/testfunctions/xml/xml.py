@@ -122,6 +122,16 @@ def _find_elements(root, xpath, namespaces=None):
         raise ValueError(f"Invalid XPath expression '{xpath}': {e}") from e
 
 
+def _text_form(expected):
+    """An unquoted YAML number (``41``) is compared as its text (``'41'``); bool and strings stay as they are."""
+    if isinstance(expected, (int, float)) and not isinstance(expected, bool):
+        return str(expected)
+    return expected
+
+
+_WILDCARD_MODES = ('any', 'all')
+
+
 def _compare_values(
     ctx, actual_text, expected_text, regex_match=False, case_sensitive=True, ordered=None, what='text', decoder=None
 ):
@@ -175,7 +185,7 @@ def _handle_wildcard_matching(
         return TestResult.failed([f'no elements found at XPath "{xpath}"'])
 
     # Validate wildcard_mode
-    if wildcard_mode not in ['any', 'all']:
+    if wildcard_mode not in _WILDCARD_MODES:
         return TestResult.execution_error(None, f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'")
 
     matches = []
@@ -232,19 +242,23 @@ def _handle_wildcard_matching(
 
 
 def _evaluate_xpath(root, xpath, result_type, namespaces=None):
-    """Evaluate XPath and convert result based on type"""
+    """Evaluate XPath and convert result based on type.
+
+    ``None`` for ``text`` / ``number`` when no element is selected ("no value"); ``boolean``
+    is never ``None``.
+    """
     try:
         if result_type == 'text':
             elements = _xpath(root, xpath, namespaces)
             if elements:
                 return elements[0].text or ""
-            return ""
+            return None  # no element: no value, which must never equal an expected value
         if result_type == 'number':
             elements = _xpath(root, xpath, namespaces)
             if elements:
-                text = elements[0].text or "0"
-                return float(text)
-            return 0.0
+                # an empty element is no number (float('') raises): it must not read as 0
+                return float(elements[0].text or "")
+            return None
         if result_type == 'boolean':
             elements = _xpath(root, xpath, namespaces)
             return len(elements) > 0
@@ -255,33 +269,25 @@ def _evaluate_xpath(root, xpath, result_type, namespaces=None):
 
 
 def _parse_xml_with_namespaces(filepath):
-    """Parse XML and extract namespace information"""
+    """Parse XML and return ``(root, namespaces)``: every ``xmlns[:prefix]`` declaration in the file.
+
+    ElementTree drops the declarations from the tree, so they are collected from the parser's
+    ``start-ns`` events: the default namespace under prefix ``''``, others under their prefix,
+    wherever in the document they are declared. When a prefix is declared several times with
+    different URIs, the first declaration wins.
+    """
+    namespaces = {}
+    root = None
     try:
-        # Parse the file and get namespace info
-        tree = ET.parse(filepath)
-        root = tree.getroot()
-
-        # Extract namespaces from the root element
-        # Note: ElementTree doesn't have great namespace introspection
-        # This is a basic implementation
-        namespaces = {}
-
-        # Check for default namespace
-        if root.tag.startswith('{'):
-            default_ns = root.tag[1 : root.tag.find('}')]
-            namespaces[''] = default_ns
-
-        # Extract namespace prefixes from attributes
-        for attr_name in root.attrib:
-            if attr_name.startswith('xmlns:'):
-                prefix = attr_name[6:]  # Remove 'xmlns:' prefix
-                namespaces[prefix] = root.attrib[attr_name]
-            elif attr_name == 'xmlns':
-                namespaces[''] = root.attrib[attr_name]
-
-        return root, namespaces
+        for event, node in ET.iterparse(filepath, events=('start-ns', 'start')):
+            if event == 'start-ns':
+                prefix, uri = node
+                namespaces.setdefault(prefix, uri)
+            elif root is None:
+                root = node
     except ET.ParseError as e:
         raise ValueError(f"Invalid XML format: {e}") from e
+    return root, namespaces
 
 
 # =============================================================================
@@ -383,13 +389,14 @@ def element_text_matches(
             ``child/grandchild``, predicates ``[@attr='v']``, ``[tag='v']``, ``[@attr]``.
             Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
             error, so no functions such as ``text()``. No match fails.
-        expected_value: Required. Exact expected text (``''`` for an empty element), or a regex
+        expected_value: Required. Exact expected text (``''`` for an empty element; an unquoted
+            number such as ``41`` is compared as its text ``'41'``), or a regex
             with ``regex_match``. A single ``!re``/``!timestamp`` tag is matched by type
             (``case_sensitive`` then ignored); an invalid regex is an error.
         regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
         case_sensitive: ``False`` compares lower-cased / uses ``re.IGNORECASE``.
         wildcard_mode: For several matched elements: ``any`` (default) or ``all`` must match;
-            other values are an execution error (only checked when several elements match).
+            any other value is an error, whatever number of elements match.
         namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
             ``//ns:item``); ``{uri}tag`` also works without it.
         comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
@@ -437,10 +444,13 @@ def element_text_matches(
     )
     if problem is not None:
         return problem
+    if wildcard_mode not in _WILDCARD_MODES:
+        return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode!r}. Must be 'any' or 'all'"])
     if ordered is None:
         problem = regex_expected_problem(ctx, [expected_value], regex_match)
         if problem is not None:
             return problem
+        expected_value = _text_form(expected_value)
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
         return TestResult.error([f'XML file {dst} not found ({status})'])
@@ -520,7 +530,8 @@ def attribute_matches(
             Any ``(``, ``::``, ``..`` or ``|`` (even inside a quoted value) is an execution
             error, so no functions such as ``text()``.
         attribute: Attribute name; namespaced attributes need the ``{uri}name`` form.
-        expected_value: Exact expected value, or a regex with ``regex_match``; a single
+        expected_value: Exact expected value (an unquoted number such as ``3`` is compared as
+            its text ``'3'``), or a regex with ``regex_match``; a single
             ``!re``/``!timestamp`` tag is matched by type.
         regex_match: Search ``expected_value`` as a Python regex (``re.search``, unanchored).
         case_sensitive: ``False`` compares lower-cased / uses ``re.IGNORECASE``.
@@ -576,6 +587,7 @@ def attribute_matches(
         problem = regex_expected_problem(ctx, [expected_value], regex_match)
         if problem is not None:
             return problem
+        expected_value = _text_form(expected_value)
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
         return TestResult.error([f'XML file {dst} not found ({status})'])
@@ -707,9 +719,11 @@ def xpath_result_matches(
             error, so no functions such as ``text()``.
         expected_value: Required. Converted per ``result_type``: ``str()``, ``float()`` or ``bool()``.
             Note ``bool('false')`` is True -- use unquoted YAML ``true``/``false``.
-        result_type: ``text`` (default; first element's ``.text``, ``''`` if none), ``number``
-            (``float`` of that text; no match -> 0.0, non-numeric -> execution error) or
+        result_type: ``text`` (default; first element's ``.text``, ``''`` if empty), ``number``
+            (``float`` of that text; non-numeric or empty -> execution error) or
             ``boolean`` (whether anything matched). Other values are an execution error.
+            With ``text`` or ``number`` an xpath that selects no element fails (it never equals
+            any ``expected_value``); ``boolean`` tests that.
         namespaces: Prefix -> URI map for prefixed names in ``xpath`` (``{ns: 'http://...'}`` +
             ``//ns:item``); ``{uri}tag`` also works without it.
 
@@ -730,6 +744,8 @@ def xpath_result_matches(
     try:
         root = _parse_xml(dst_resolved)
         actual_result = _evaluate_xpath(root, xpath, result_type, namespaces)
+        if actual_result is None:
+            return TestResult.failed([f'no element found at XPath "{xpath}"'])
 
         # Type conversion for comparison
         if result_type == 'number':
@@ -761,9 +777,10 @@ def namespace_matches(
 ):
     """Pass when the namespaces detected in ``dst`` contain (or equal) ``expected_namespaces``.
 
-    Use for: checking which XML dialect/schema version a file uses. Only the root element's
-    own namespace is detected, under prefix ``''``: ElementTree drops ``xmlns:*`` attributes,
-    so other declared prefixes are never seen and expecting them fails.
+    Use for: checking which XML dialect/schema version a file uses. Every
+    ``xmlns`` / ``xmlns:prefix`` declaration in the file is detected (default namespace under
+    prefix ``''``), also on nested elements; a prefix declared twice with different URIs
+    keeps its first URI.
 
     Args:
         dst: Guest path to the XML file; a glob must match exactly one path. A missing file
@@ -779,6 +796,8 @@ def namespace_matches(
           dst: /home/user/Pictures/logo.svg
           expected_namespaces: {'': 'http://www.w3.org/2000/svg'}
     """
+    if expected_namespaces is None:
+        return TestResult.error(['parameter expected_namespaces is required (map of prefix -> URI)'])
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
         return TestResult.error([f'XML file {dst} not found ({status})'])

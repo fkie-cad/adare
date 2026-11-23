@@ -307,6 +307,52 @@ hash, so documenting never creates a new version.
 Do not add new ``@testfunction(...)`` keyword arguments for metadata. Guests may
 run an older ``adarelib`` that rejects them.
 
+Contract: what it can and cannot do
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Next to ``<name>.py``, a ``contract.yaml`` states per function what it asserts, which formats
+it reads, which shared features it supports (and which it refuses, with what to do instead),
+goals it is *not* for (with the function to use), when it passes, fails or errors, its
+limits, the allowed values of enumerated parameters, use cases and examples. The vocabulary
+(assertion kinds, formats, feature ids) and the known gaps are in
+``appdata/testfunctions/library.yaml``; ``adare test feature`` lists them.
+
+.. code-block:: yaml
+
+   collection:
+     title: My app files
+     summary: What the collection reads and how.
+   functions:
+     my_test:
+       asserts: [count]
+       formats: [text]
+       features: [archive_dst, glob_dst, count_comparison]
+       not_for:
+         - goal: one exact line
+           use: standard.file_content_contains
+       outcomes:
+         passed: at least ``count`` lines match
+         failed: the file was read and fewer lines match
+         error: [the file does not exist, an invalid regex]
+       limits: [Reads the whole file into memory.]
+       examples:
+         - title: two log entries
+           files:
+             /home/user/app.log: {text: "login ok\nlogin ok\n"}
+           parameter: {path: /home/user/app.log, count: 2}
+
+The same source is rendered everywhere: ``adare test search`` (short cards with the
+features, refusals and redirects), ``adare test info`` (the whole contract), the agent tools,
+the agent skill's references and, for the bundled collections, the reference pages of these
+docs (``.. adare-testfunction:: <collection>.<function>``). ``adare test validate`` reports a
+contract that disagrees with the code or the vocabulary, and the examples run offline with
+``python scripts/check_contract.py <collection>``: ``files:`` builds the example's files from
+a short spec (text, hex, JSON, SQLite statements, zip/tar members, workbooks, images, ...),
+and the outcome must be the example's ``expect`` (``passed``, ``failed`` or ``error``). The
+full field list is in ``skills/adare-testfunction/references/authoring-contract.md``.
+
+A contract changes no version: like the docstring, it is not part of the function's hash.
+
 Category
 --------
 

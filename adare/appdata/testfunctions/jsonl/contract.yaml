@@ -1,0 +1,398 @@
+# Contract of the jsonl collection: what each function can and cannot do, and runnable
+# examples. Schema and rendering: adare/adare/backend/testfunction/contract.py. The examples run
+# in the unit suite (test_contract_examples.py); `adare test info jsonl.<name>` shows all of it.
+
+collection:
+  title: JSONL
+  summary: >-
+    JSON Lines files (also called NDJSON): one JSON document per line, as written by event logs,
+    history files and line-oriented exports. Every line is parsed on its own; blank lines are
+    skipped and, by default, lines that are not valid JSON are ignored. ``value_in_any_line``
+    checks one field, ``line_matches`` several fields of the same line (in one line or in all of
+    them), ``line_count`` counts the lines that meet the conditions (``0`` = absent) and
+    ``lines_in_order`` checks that records meeting several condition sets occur in a given order.
+
+# Anchors for the example files (not read by the parser).
+fixtures:
+  # An event log: four valid records, one malformed line and one blank line.
+  events: &events
+    text: |
+      {"event": "login", "user": {"name": "alice"}, "time": "2026-01-01T10:00:00Z", "tags": ["web", "sso"]}
+      {"event": "file_deleted", "user": {"name": "alice"}, "path": "/home/alice/a.txt", "time": "2026-01-01T10:05:00Z"}
+      not json
+      {"event": "file_deleted", "user": {"name": "bob"}, "path": "/home/bob/b.txt", "time": "2026-01-01T10:06:00Z"}
+
+      {"event": "logout", "user": {"name": "alice"}, "time": "2026-01-01T10:10:00Z"}
+  empty: &empty
+    text: ''
+
+functions:
+  line_matches:
+    asserts: [exists, value]
+    formats: [jsonl]
+    features: [archive_dst, glob_dst, key_path, wildcard_mode, regex_tag, placeholder, timestamp_tag, encoding]
+    unsupported:
+      ordered_comparison: Conditions compare by equality, regex or tag; for a number or time threshold use jsonl.value_in_any_line with ``comparison_type``.
+    not_for:
+      - goal: how many lines meet the conditions, or none does
+        use: jsonl.line_count
+      - goal: one field in any line
+        use: jsonl.value_in_any_line
+      - goal: a value in a single JSON document
+        use: json.value_matches
+    outcomes:
+      passed: 'one line (``any``) or every valid line (``all``) meets all ``conditions``'
+      failed:
+        - the file was read and no line (``any``) or not every valid line (``all``) meets the conditions
+        - the file is empty (0 bytes), or (``all``) it has no valid JSON line
+      error:
+        - the file does not exist; a glob matches no file or more than one
+        - the file cannot be read or decoded; an unknown ``encoding``
+        - a malformed line with ``skip_malformed`` false
+        - an invalid ``wildcard_mode``; ``conditions`` missing, empty or no mapping
+        - an invalid regex or unknown placeholder
+    limits:
+      - A missing key fails the line. When a path selects several values (a wildcard or an array), one matching value is enough.
+      - '``wildcard_mode`` is about lines: ``all`` means every valid line; malformed lines are skipped, not counted.'
+      - 'With ``regex_match`` string values are regexes searched (``re.search``) in ``str(value)`` and ``"*"`` means "key exists"; without it values compare with type-sensitive ``==``.'
+    choices:
+      wildcard_mode: [any, all]
+    use_cases:
+      - title: An event with several fields
+        text: A line with ``event`` login and ``user.name`` alice proves the login was recorded as one event, not as two unrelated fields in different lines.
+      - title: Uniform exports
+        text: '``wildcard_mode: all`` checks that every record of an export has a field or a value format.'
+    examples:
+      - title: a login event of one user
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            event: login
+            user.name: alice
+      - title: one element of an array matches
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            tags[*]: sso
+      - title: every record has a time
+        text: The malformed line is skipped; ``"*"`` with ``regex_match`` means "key exists".
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            time: '*'
+          regex_match: true
+          wildcard_mode: all
+      - title: the fields in different lines do not match
+        text: Bob has a deletion and alice a login, but no single line has both.
+        expect: failed
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            event: login
+            user.name: bob
+      - title: an empty file fails
+        expect: failed
+        files:
+          /var/log/app/events.jsonl: *empty
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            event: login
+      - title: a malformed line is an error with skip_malformed false
+        expect: error
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            event: logout
+          skip_malformed: false
+      - title: an invalid regex is an error
+        expect: error
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            event: '[unclosed'
+          regex_match: true
+
+  line_count:
+    asserts: [count, absent]
+    formats: [jsonl]
+    features: [archive_dst, glob_dst, key_path, count_comparison, negative, regex_tag, placeholder, timestamp_tag, encoding]
+    not_for:
+      - goal: lines of a plain text file that contain a string
+        use: text.line_count
+      - goal: records of a CSV file
+        use: csv.row_count
+      - goal: values in a single JSON document
+        use: json.value_count
+    outcomes:
+      passed: the number of valid lines meeting all ``conditions`` satisfies ``expected_count``
+      failed: the file was read and the count does not satisfy ``expected_count``
+      error:
+        - the file does not exist; a glob matches no file or more than one
+        - the file cannot be read or decoded; an unknown ``encoding``
+        - a malformed line with ``skip_malformed`` false
+        - 'an invalid ``expected_count`` (negative, boolean, other keys than ``min`` / ``max``, ``min`` > ``max``)'
+        - an unknown ``comparison_type``, or one other than ``equals`` with a range or no ``expected_count``
+        - an invalid regex or unknown placeholder
+    limits:
+      - '``expected_count`` is an int (with ``comparison_type``), a range ``{min: N, max: M}`` (either bound optional) or omitted for "at least 1".'
+      - Without ``conditions`` every valid JSON line counts; malformed lines never count.
+      - A 0-byte file has 0 lines and passes ``expected_count`` 0.
+    choices:
+      comparison_type: [equals, greater, less, greater_equal, less_equal]
+    use_cases:
+      - title: How often an action was recorded
+        text: Exactly one ``file_deleted`` event per deletion the playbook performed.
+      - title: Absence of a record
+        text: '``expected_count: 0`` shows that a visit or a cleared entry left no line.'
+    examples:
+      - title: two deletions recorded
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions: {event: file_deleted}
+          expected_count: 2
+      - title: deletions within a range
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions: {event: file_deleted}
+          expected_count: {min: 1, max: 5}
+      - title: no line for another user
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions: {user.name: carol}
+          expected_count: 0
+      - title: all valid lines without conditions
+        text: Four records; the malformed line and the blank line do not count.
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          expected_count: 4
+      - title: more than one event of a user
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions: {user.name: alice}
+          expected_count: 1
+          comparison_type: greater
+      - title: a compressed log
+        text: '``events.jsonl.gz!`` reads the decompressed content.'
+        files:
+          /var/log/app/events.jsonl.gz: {gzip: *events}
+        parameter:
+          dst: /var/log/app/events.jsonl.gz!
+          conditions: {event: logout}
+          expected_count: 1
+      - title: an empty file has no lines
+        files:
+          /var/log/app/events.jsonl: *empty
+        parameter:
+          dst: /var/log/app/events.jsonl
+          expected_count: 0
+      - title: a different count fails
+        expect: failed
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions: {event: file_deleted}
+          expected_count: 1
+      - title: comparison_type with a range is an error
+        expect: error
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions: {event: file_deleted}
+          expected_count: {min: 1}
+          comparison_type: greater
+      - title: a missing file is an error, never a pass
+        expect: error
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/other.jsonl
+          expected_count: 0
+
+  value_in_any_line:
+    asserts: [exists, value, order]
+    formats: [jsonl]
+    features: [archive_dst, glob_dst, key_path, regex_tag, placeholder, timestamp_tag, ordered_comparison, encoding, value_decode]
+    not_for:
+      - goal: several fields of the same line
+        use: jsonl.line_matches
+      - goal: how many lines have the value, or none has it
+        use: jsonl.line_count
+      - goal: a string anywhere in the raw file
+        use: text.occurrence_count
+    outcomes:
+      passed: at least one valid line has a value at ``key_path`` that matches ``expected_value``
+      failed: the file was read and no line has a matching value (or the key at all), or the file is empty (0 bytes)
+      error:
+        - the file does not exist; a glob matches no file or more than one
+        - the file cannot be read or decoded; an unknown ``encoding``
+        - a malformed line with ``skip_malformed`` false
+        - an invalid regex or unknown placeholder
+        - in ordered mode, a ``!re`` tag or ``regex_match``, text around a ``{{ name }}`` or a saved variable that is no number or time, bad ordered parameters, or a value in a line that is no number or timestamp
+    limits:
+      - When a path selects several values (a wildcard or an array), one matching value is enough.
+      - 'With ``regex_match`` a string ``expected_value`` is a regex searched (``re.search``) in ``str(value)`` and ``"*"`` means "key exists"; without it values compare with type-sensitive ``==``.'
+      - In ordered mode every line that has the key must hold a number or timestamp there.
+    choices:
+      comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
+      value_type: [auto, number, timestamp]
+      timestamp_epoch: [1970, 1601, 2001]
+      timestamp_unit: [s, ms, us, ns, 100ns]
+    use_cases:
+      - title: A value was logged
+        text: A file name, URL or search term shows up in a history or event log.
+      - title: A field exists somewhere
+        text: '``expected_value: "*"`` with ``regex_match: true`` passes when any line has the key.'
+      - title: An event after a point in time
+        text: '``comparison_type: greater`` on a time field.'
+    examples:
+      - title: a deleted path was logged
+        files:
+          /home/user/data/events.jsonl: *events
+        parameter:
+          dst: /home/user/data/events.jsonl
+          key_path: path
+          expected_value: '^/home/bob/'
+          regex_match: true
+      - title: a nested field
+        files:
+          /home/user/data/events.jsonl: *events
+        parameter:
+          dst: /home/user/data/events.jsonl
+          key_path: user.name
+          expected_value: bob
+      - title: an array element by index
+        files:
+          /home/user/data/events.jsonl: *events
+        parameter:
+          dst: /home/user/data/events.jsonl
+          key_path: tags[1]
+          expected_value: sso
+      - title: an event after a point in time
+        files:
+          /home/user/data/events.jsonl: *events
+        parameter:
+          dst: /home/user/data/events.jsonl
+          key_path: time
+          expected_value: '2026-01-01T10:08:00Z'
+          comparison_type: greater
+      - title: a value no line has fails
+        expect: failed
+        files:
+          /home/user/data/events.jsonl: *events
+        parameter:
+          dst: /home/user/data/events.jsonl
+          key_path: user.name
+          expected_value: carol
+      - title: an ordered comparison of text is an error
+        expect: error
+        files:
+          /home/user/data/events.jsonl: *events
+        parameter:
+          dst: /home/user/data/events.jsonl
+          key_path: event
+          expected_value: 5
+          comparison_type: greater
+
+  lines_in_order:
+    asserts: [sequence, value]
+    formats: [jsonl]
+    features: [archive_dst, glob_dst, key_path, regex_tag, placeholder, timestamp_tag, encoding]
+    unsupported:
+      ordered_comparison: Conditions compare by equality, regex or tag; for a number or time threshold use jsonl.value_in_any_line with ``comparison_type``.
+    not_for:
+      - goal: one record with several fields, in any position
+        use: jsonl.line_matches
+      - goal: how many records meet the conditions, or none does
+        use: jsonl.line_count
+      - goal: the order of plain text lines
+        use: text.lines_in_order
+    related:
+      - use: jsonl.line_matches
+        why: a record meets a condition set exactly as it meets ``conditions`` there
+    outcomes:
+      passed: each condition set is met by a record after the record that met the one before it (other records in between are ignored)
+      failed: the file was read and a condition set is met by no later record; the details name it and the earlier lines that meet it, if any
+      error:
+        - the file does not exist; a glob matches no file or more than one
+        - the file cannot be read or decoded; an unknown ``encoding``
+        - a malformed line with ``skip_malformed`` false
+        - '``conditions`` empty, not a list, or holding an entry that is no non-empty mapping'
+        - an invalid regex or unknown placeholder
+    limits:
+      - Each condition set takes the earliest record after the previous match, so two sets never share a record; when that fails no other choice of records passes either.
+      - Line numbers in the details count from 1 and include blank and malformed lines.
+      - A missing key fails the record. When a path selects several values (a wildcard or an array), one matching value is enough.
+      - 'With ``regex_match`` string values are regexes searched (``re.search``) in ``str(value)`` and ``"*"`` means "key exists"; without it values compare with type-sensitive ``==``.'
+    use_cases:
+      - title: A sequence of events
+        text: A login, then a download, then a deletion of the same file, in an event log or NDJSON export, whatever else was logged in between.
+    examples:
+      - title: a login, then a delete, then a logout
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            - {event: login, user.name: alice}
+            - {event: file_deleted, user.name: bob}
+            - {event: logout}
+      - title: a regex on a field
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            - {event: file_deleted, path: '/home/alice/.*'}
+            - {event: file_deleted, path: '/home/bob/.*'}
+          regex_match: true
+      - title: a later record that only occurs earlier fails
+        text: The logout in line 6 comes after both deletes, so no delete follows it.
+        expect: failed
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            - {event: logout}
+            - {event: file_deleted}
+      - title: a malformed line is an error when not skipped
+        expect: error
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions:
+            - {event: login}
+          skip_malformed: false
+      - title: an empty list of conditions is an error
+        expect: error
+        files:
+          /var/log/app/events.jsonl: *events
+        parameter:
+          dst: /var/log/app/events.jsonl
+          conditions: []
