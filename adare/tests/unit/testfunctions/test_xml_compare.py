@@ -328,3 +328,140 @@ def test_value_decode(r2_files):
         ),
         ERROR,
     )
+
+
+# --- bug fixes: numeric expected_value, parameter validation, absence, prefixed namespaces -------
+
+XpathResultMatches = xml_tf.xpath_result_matches._test_class
+NamespaceMatches = xml_tf.namespace_matches._test_class
+
+PREFIXED = """<?xml version="1.0"?>
+<cp:core xmlns:cp="urn:example:cp" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <dc:creator xmlns:extra="urn:example:extra">Alice</dc:creator>
+</cp:core>
+"""
+
+
+@pytest.fixture
+def prefixed(tmp_path):
+    path = tmp_path / 'core.xml'
+    path.write_text(PREFIXED, encoding='utf-8')
+    return str(path)
+
+
+def _xpath_result(dst, xpath, expected_value, **params):
+    return _run(
+        XpathResultMatches,
+        xml_tf.xpath_result_matches,
+        dst=dst,
+        xpath=xpath,
+        expected_value=expected_value,
+        **params,
+    )
+
+
+def _namespaces(dst, **params):
+    return _run(NamespaceMatches, xml_tf.namespace_matches, dst=dst, **params)
+
+
+def test_unquoted_number_equals_element_text(dst):
+    _assert(_text(dst, './stats/opened', 41), SUCCESS)
+    _assert(_text(dst, './stats/opened', '41'), SUCCESS)
+    _assert(_text(dst, './stats/opened', 42), FAILED)
+    _assert(_text(dst, './stats/opened', 41.0), FAILED)  # text form of 41.0 is '41.0'
+    _assert(_text(dst, './stats/stamp', 1772359200), SUCCESS)
+    _assert(_text(dst, './stats/opened', 41, case_sensitive=False), SUCCESS)
+    _assert(_text(dst, './stats/*', 41, wildcard_mode='any'), SUCCESS)
+
+
+def test_unquoted_number_equals_attribute_text(dst):
+    _assert(_attribute(dst, "//entry[@ref='item-1']", 'visits', 3), SUCCESS)
+    _assert(_attribute(dst, "//entry[@ref='item-1']", 'visits', 4), FAILED)
+
+
+def test_bool_expected_value_is_not_treated_as_number(dst):
+    _assert(_text(dst, './stats/opened', True), FAILED)
+
+
+@pytest.mark.parametrize('xpath', ['./stats/opened', './stats/*', './stats/missing'])
+def test_invalid_wildcard_mode_is_an_error_for_any_match_count(dst, xpath):
+    result = _text(dst, xpath, '41', wildcard_mode='some')
+    _assert(result, ERROR)
+    assert 'wildcard_mode' in ' '.join(result.details)
+
+
+def test_valid_wildcard_modes_unaffected(dst):
+    _assert(_text(dst, './stats/opened', '41', wildcard_mode='all'), SUCCESS)
+    _assert(_text(dst, './stats/opened', '41', wildcard_mode='any'), SUCCESS)
+
+
+def test_missing_expected_namespaces_is_an_error(dst):
+    for mode in ('contains', 'exact'):
+        result = _namespaces(dst, check_mode=mode)
+        _assert(result, ERROR)
+        assert 'expected_namespaces' in ' '.join(result.details)
+        assert 'AttributeError' not in ' '.join(result.details)
+
+
+def test_missing_element_never_passes_number_or_text(dst):
+    for expected in (0, 0.0, '0'):
+        result = _xpath_result(dst, './stats/printed', expected, result_type='number')
+        _assert(result, FAILED)
+        assert 'no element' in ' '.join(result.details)
+    _assert(_xpath_result(dst, './stats/printed', '', result_type='text'), FAILED)
+    _assert(_xpath_result(dst, './stats/printed', False, result_type='boolean'), SUCCESS)  # absence stays testable
+
+
+def test_xpath_result_real_values_still_pass(tmp_path):
+    path = tmp_path / 'v.xml'
+    path.write_text('<r><zero>0</zero><empty></empty><n>42</n></r>', encoding='utf-8')
+    _assert(_xpath_result(str(path), './zero', 0, result_type='number'), SUCCESS)
+    _assert(_xpath_result(str(path), './n', 42, result_type='number'), SUCCESS)
+    _assert(_xpath_result(str(path), './empty', '', result_type='text'), SUCCESS)
+    _assert(_xpath_result(str(path), './empty', 0, result_type='number'), ERROR)  # empty text is no number
+
+
+def test_prefixed_namespace_declarations_are_found(prefixed):
+    _assert(_namespaces(prefixed, expected_namespaces={'dc': 'http://purl.org/dc/elements/1.1/'}), SUCCESS)
+    _assert(
+        _namespaces(prefixed, expected_namespaces={'cp': 'urn:example:cp', 'dc': 'http://purl.org/dc/elements/1.1/'}),
+        SUCCESS,
+    )
+    # a declaration on a nested element is found as well
+    _assert(_namespaces(prefixed, expected_namespaces={'extra': 'urn:example:extra'}), SUCCESS)
+    _assert(_namespaces(prefixed, expected_namespaces={'dc': 'urn:wrong'}), FAILED)
+    _assert(_namespaces(prefixed, expected_namespaces={'nope': 'urn:x'}), FAILED)
+
+
+def test_prefixed_namespaces_exact_mode(prefixed):
+    everything = {
+        'cp': 'urn:example:cp',
+        'dc': 'http://purl.org/dc/elements/1.1/',
+        'extra': 'urn:example:extra',
+    }
+    _assert(_namespaces(prefixed, expected_namespaces=everything, check_mode='exact'), SUCCESS)
+    _assert(_namespaces(prefixed, expected_namespaces={'cp': 'urn:example:cp'}, check_mode='exact'), FAILED)
+
+
+def test_default_namespace_still_found_with_prefixed_ones(tmp_path):
+    path = tmp_path / 's.xml'
+    path.write_text('<svg xmlns="urn:svg" xmlns:xlink="urn:xlink"><a/></svg>', encoding='utf-8')
+    _assert(_namespaces(str(path), expected_namespaces={'': 'urn:svg', 'xlink': 'urn:xlink'}), SUCCESS)
+
+
+def test_namespaces_read_through_archive_dst(tmp_path):
+    import zipfile
+
+    archive_path = tmp_path / 'report.docx'
+    with zipfile.ZipFile(archive_path, 'w') as zf:
+        zf.writestr('docProps/core.xml', PREFIXED)
+    result = _namespaces(
+        f'{archive_path}!/docProps/core.xml', expected_namespaces={'dc': 'http://purl.org/dc/elements/1.1/'}
+    )
+    _assert(result, SUCCESS)
+
+
+def test_malformed_xml_is_an_error_for_namespaces(tmp_path):
+    path = tmp_path / 'bad.xml'
+    path.write_text('<a xmlns:x="urn:x"><b></a>', encoding='utf-8')
+    _assert(_namespaces(str(path), expected_namespaces={'x': 'urn:x'}), ERROR)

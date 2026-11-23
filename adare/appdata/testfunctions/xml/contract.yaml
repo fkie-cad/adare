@@ -7,7 +7,7 @@ collection:
   summary: >-
     XML files, also XML inside office documents (``report.docx!/docProps/core.xml``): whether an
     element exists, how many there are, the text or an attribute of an element, two values of one
-    file compared as numbers or times, and the namespace of the root element. Elements are selected
+    file compared as numbers or times, and the namespace declarations of a file. Elements are selected
     with the ElementTree ``ElementPath`` subset of XPath, the same parser on every guest.
 
 # Anchors for the example files (not read by the parser).
@@ -128,14 +128,14 @@ functions:
       error:
         - the file does not exist or is a directory; a glob matches no file or more than one
         - the file is no well-formed XML; an XPath outside the ElementPath subset
-        - an invalid regex or placeholder; an invalid ``wildcard_mode`` when several elements match
+        - an invalid regex or placeholder; an invalid ``wildcard_mode`` (also when one or no element matches)
         - in ordered mode, a text that is no number or timestamp, or a ``!re`` or ``regex_match`` with it, text around a ``{{ name }}`` or a saved variable that is no number or time
         - bad ordered parameters (``comparison_type``, ``value_type``, ``timestamp_epoch``, ...)
     limits:
       - The text is ``element.text``, the text before the first child element, not stripped; an element with no text gives ``''``.
-      - 'Without ordered mode an unquoted YAML number (``41``) is not converted to text and never equals the element text: quote it (``''41''``), or set ``value_type: number``.'
+      - 'Without ordered mode an unquoted YAML number (``41``) is compared as its text (``''41''``); ``41.0`` is ``''41.0''``, so it does not equal the text ``41``. Use ``value_type: number`` to compare by value.'
       - '``regex_match`` uses ``re.search`` (unanchored); a ``!re`` tag uses ``re.match`` (anchored at the start).'
-      - '``wildcard_mode`` is only checked when several elements match.'
+      - '``wildcard_mode`` is validated before the file is read, but only used when several elements match.'
       - XPath rules as in xml.element_exists.
     choices:
       wildcard_mode: [any, all]
@@ -202,9 +202,8 @@ functions:
           expected_value: !timestamp {after: '{{before_save}}', before: '{{after_save}}'}
           namespaces:
             dcterms: http://purl.org/dc/terms/
-      - title: an unquoted number never equals the text
-        text: 'The element text is ``41``, but ``expected_value: 41`` is a number. Quote it, or set ``value_type: number``.'
-        expect: failed
+      - title: an unquoted number equals the text
+        text: 'The element text is ``41``; ``expected_value: 41`` is compared as the text ``41``, so quoting is not needed.'
         files:
           /home/user/.config/app/settings.xml: *settings
         parameter:
@@ -219,6 +218,16 @@ functions:
           dst: /home/user/.config/app/settings.xml
           xpath: ./general/font
           expected_value: Sans
+      - title: an invalid wildcard_mode is an error
+        text: 'Only one element matches, and the invalid mode is an error all the same.'
+        expect: error
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./general/language
+          expected_value: de_DE
+          wildcard_mode: some
       - title: a text that is no number is an error in ordered mode
         expect: error
         files:
@@ -254,7 +263,7 @@ functions:
     limits:
       - Only the first selected element is checked.
       - A namespaced attribute needs the ``{uri}name`` form; ``namespaces`` applies to ``xpath`` only.
-      - 'Without ordered mode an unquoted YAML number (``3``) never equals the attribute text: quote it (``''3''``), or set ``value_type: number``.'
+      - 'Without ordered mode an unquoted YAML number (``3``) is compared as its text (``''3''``); use ``value_type: number`` to compare by value.'
       - XPath rules as in xml.element_exists.
     choices:
       comparison_type: [equals, not_equals, greater, less, greater_equal, less_equal]
@@ -268,13 +277,14 @@ functions:
         text: '``comparison_type: greater`` against a point in time, or ``tolerance`` around one.'
     examples:
       - title: visit count of an entry
+        text: The unquoted number ``3`` is compared as the text ``3``.
         files:
           /home/user/.config/app/settings.xml: *settings
         parameter:
           dst: /home/user/.config/app/settings.xml
           xpath: //entry[@ref='item-1']
           attribute: visits
-          expected_value: '3'
+          expected_value: 3
       - title: entry modified after a point in time
         files:
           /home/user/.config/app/settings.xml: *settings
@@ -373,13 +383,13 @@ functions:
         use: xml.element_count
     outcomes:
       passed: the result of ``xpath`` as ``result_type`` equals ``expected_value``
-      failed: the file was read and the result differs
+      failed: the file was read and the result differs, or (``text`` / ``number``) ``xpath`` selects no element
       error:
         - the file does not exist or is a directory; a glob matches no file or more than one
         - the file is no well-formed XML; an XPath outside the ElementPath subset
-        - '``result_type: number`` and the first element''s text is no number; an unknown ``result_type``'
+        - '``result_type: number`` and the first element''s text is no number (an empty element too); an unknown ``result_type``'
     limits:
-      - '``text`` and ``number`` use the first selected element only; with no match ``text`` is ``''''`` and ``number`` is ``0.0`` (so ``expected_value: 0`` passes on a missing element).'
+      - '``text`` and ``number`` use the first selected element only. With no match there is no value and the test fails, whatever ``expected_value`` is (``0`` and ``''''`` included); an element that exists with empty text is ``''''`` for ``text`` and an error for ``number``.'
       - '``boolean`` is whether ``xpath`` selects anything. ``expected_value`` is converted with ``bool()``: a quoted ``''false''`` is true, write unquoted ``false``.'
       - XPath rules as in xml.element_exists.
     choices:
@@ -395,6 +405,16 @@ functions:
           dst: /home/user/.config/app/settings.xml
           xpath: ./counters/opened
           expected_value: 41
+          result_type: number
+      - title: a missing element never equals 0
+        text: 'No element is selected, so there is no value: ``expected_value: 0`` fails instead of passing on absence.'
+        expect: failed
+        files:
+          /home/user/.config/app/settings.xml: *settings
+        parameter:
+          dst: /home/user/.config/app/settings.xml
+          xpath: ./counters/printed
+          expected_value: 0
           result_type: number
       - title: whether a recent entry exists
         files:
@@ -441,13 +461,14 @@ functions:
         - the file is no well-formed XML
         - '``expected_namespaces`` missing; an unknown ``check_mode``'
     limits:
-      - 'Only the namespace of the root element is detected, under prefix ``''''``, even when the root is written with a prefix. Other ``xmlns:prefix`` declarations are never seen: expecting them fails.'
+      - 'Every ``xmlns`` / ``xmlns:prefix`` declaration in the file is detected, also on nested elements; the default namespace is under prefix ``''''``. A root element written with a prefix does not create a ``''''`` entry.'
+      - A prefix declared several times with different URIs keeps its first URI. Declarations are what is detected, not whether any element uses them.
       - Prefixes and URIs compare exactly (case-sensitive).
     choices:
       check_mode: [contains, exact]
     use_cases:
       - title: Which dialect or schema version a file uses
-        text: The root namespace of an SVG, an office part or a settings file written by a newer version.
+        text: The namespaces of an SVG, an office part or a settings file written by a newer version.
     examples:
       - title: an SVG file
         files:
@@ -456,8 +477,19 @@ functions:
           dst: /home/user/Pictures/logo.svg
           expected_namespaces:
             '': http://www.w3.org/2000/svg
-      - title: exact also passes with other declared prefixes
-        text: '``xmlns:xlink`` is declared, but only the root namespace is detected.'
+      - title: a prefixed declaration is found
+        text: '``dc`` is declared on the root of an office ``core.xml``, next to ``cp``, ``dcterms`` and ``xsi``.'
+        files:
+          /home/user/Documents/report.docx:
+            zip:
+              docProps/core.xml: *core
+        parameter:
+          dst: /home/user/Documents/report.docx!/docProps/core.xml
+          expected_namespaces:
+            dc: http://purl.org/dc/elements/1.1/
+      - title: exact needs every declared namespace
+        text: '``xmlns:xlink`` is declared as well, so the default namespace alone is not equal.'
+        expect: failed
         files:
           /home/user/Pictures/logo.svg: *svg
         parameter:
@@ -465,15 +497,12 @@ functions:
           expected_namespaces:
             '': http://www.w3.org/2000/svg
           check_mode: exact
-      - title: a declared prefix is not detected
-        text: The file declares ``xmlns:xlink``; the test fails anyway.
-        expect: failed
+      - title: a missing expected_namespaces is an error
+        expect: error
         files:
           /home/user/Pictures/logo.svg: *svg
         parameter:
           dst: /home/user/Pictures/logo.svg
-          expected_namespaces:
-            xlink: http://www.w3.org/1999/xlink
 
   values_compare:
     asserts: [compare, order]
