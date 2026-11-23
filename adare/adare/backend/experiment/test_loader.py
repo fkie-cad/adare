@@ -118,6 +118,8 @@ class TestLoader:
                             log, f"The guest rejected the testfunction upload: {result.get('message', 'unknown error')}"
                         )
                 else:
+                    # legitimate when every used function runs on the host (visual.*); an unknown
+                    # function is reported per test by the guest
                     log.warning("No testfunction files found for the used functions - uploading nothing")
             else:
                 log.info("No testfunctions used in playbook - skipping testfunction upload")
@@ -495,15 +497,11 @@ class TestLoader:
             )
             return testfunction_files
 
-        except (ImportError, AttributeError) as e:
-            log.error(f"Failed to import or access testfunction database API: {e}")
-            return set()
-        except (KeyError, ValueError) as e:
-            log.error(f"Database query or data processing error: {e}")
-            return set()
-        except OSError as e:
-            log.error(f"File system error while mapping testfunction files: {e}")
-            return set()
+        except (ImportError, AttributeError, KeyError, ValueError, OSError) as e:
+            # an empty set would upload nothing and turn every test into "not found"
+            raise TestfunctionUploadError(
+                log, f"Cannot map the playbook's testfunctions to their files ({type(e).__name__}: {e})"
+            ) from e
 
     def _replace_variables_for_tests(self, text: str) -> str:
         """Replace variables in test content using test-aware context with smart resolution."""

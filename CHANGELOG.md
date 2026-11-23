@@ -301,6 +301,18 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   paths (browser profiles, office suites, registry keys); a unit test keeps it that way.
 
 ### Fixed
+- `adare experiment create` wrote a `metadata.yml` whose `environments:` held only comments
+  (null), so `experiment run` and `experiment add-env` rejected the new experiment. The
+  skeleton now writes `environments: []`, and a null list in an existing `metadata.yml` loads as
+  empty. `experiment run -e <env>` on an experiment that lists no environments says how to add one.
+- The testfunction upload to the guest skipped files whose stored path did not match the state
+  directory (e.g. an `ADARE_HOME` reached through a symlink) with only a warning; the guest then
+  reported every test as "not found" with an empty list. Paths are compared resolved, a missing
+  or misplaced file (or a failed lookup) fails the run before the playbook starts, and the guest
+  says when no testfunctions were uploaded.
+- A QEMU run whose QMP/QGA socket path exceeds the OS limit (103 characters on macOS, 107 on
+  Linux) failed late in setup with a traceback; it now fails at run preparation, before the VM
+  starts, naming the path, its length and the fix (a shorter `ADARE_HOME`).
 - `xml.element_text_matches` / `attribute_matches`: an unquoted number (`expected_value: 41`)
   equals the text `41` (it never matched); an invalid `wildcard_mode` is an ERROR even when one
   element matches. `xml.xpath_result_matches` with `text`/`number` FAILS on a missing element
