@@ -172,6 +172,8 @@ def card(hit: Hit, redirects: dict[str, str] | None = None) -> dict:
         data['matched'] = f'{", ".join(hit.matched)} (in {", ".join(why)})'
     if redirects and entry.dotnotation in redirects:
         data['redirected'] = redirects[entry.dotnotation]
+    if entry.contract_note:
+        data['note'] = entry.contract_note
     if contract:
         data['asserts'] = list(contract.asserts)
         data['formats'] = list(contract.formats)

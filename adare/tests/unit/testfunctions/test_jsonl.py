@@ -583,6 +583,20 @@ class TestValueInAnyLine:
 
         assert_test_success(result)
 
+    def test_value_in_any_line_numeric_index(self, create_jsonl_file):
+        """A numeric index (``tags[1]``, ``tags[-1]``) selects one array element."""
+        jsonl_file = create_jsonl_file("test.jsonl", [{"tags": ["python", "java", "go"]}])
+
+        def run(key_path, expected):
+            return ValueInAnyLine(
+                name="test_index",
+                parameter=ValueInAnyLineParameter(dst=str(jsonl_file), key_path=key_path, expected_value=expected),
+            ).test()
+
+        assert_test_success(run("tags[1]", "java"))
+        assert_test_success(run("tags[-1]", "go"))
+        assert_test_failed(run("tags[1]", "python"))
+
     def test_value_in_any_line_wildcard_objects(self, create_jsonl_file):
         """Test with wildcard object key access."""
         jsonl_file = create_jsonl_file(

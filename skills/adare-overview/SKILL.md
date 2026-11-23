@@ -1,6 +1,6 @@
 ---
 name: adare-overview
-description: "Start here for any ADARE task when it is unclear which ADARE skill applies, or the task spans several steps (e.g. 'build an experiment that checks whether deleting a file in Firefox leaves artifacts on Ubuntu and Windows'). Gives the mental model (project → environment → experiment → playbook → tests → run → compare), routes to the right adare-* skill, and sets the agent rules for driving the adare CLI (machine-readable output, one live VM, never --force without asking). Not this → a single well-scoped step that clearly matches one adare-* skill."
+description: "Start here for any ADARE task when it is unclear which ADARE skill applies, or the task spans several steps (e.g. 'build an experiment that checks whether deleting a file in a text editor leaves artifacts on Ubuntu and Windows'). Gives the mental model (project → environment → experiment → playbook → tests → run → compare), routes to the right adare-* skill, and sets the agent rules for driving the adare CLI (machine-readable output, one live VM, never --force without asking). Not this → a single well-scoped step that clearly matches one adare-* skill."
 ---
 
 # ADARE for agents — overview & router

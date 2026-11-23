@@ -16,8 +16,9 @@ pytestmark = pytest.mark.unit
 
 COLLECTIONS = Path(__file__).resolve().parents[3] / 'appdata' / 'testfunctions'
 REPO = Path(__file__).resolve().parents[4]
-# Pages built from or alongside the docstrings, read by agents the same way.
-DOC_PAGES = [REPO / 'docsrc' / 'source' / 'reference' / 'testfunctions', REPO / 'skills' / 'adare-testfunction']
+# Pages built from or alongside the docstrings, and every skill (hand-written or generated),
+# read by agents the same way.
+DOC_PAGES = [REPO / 'docsrc' / 'source' / 'reference' / 'testfunctions', REPO / 'skills']
 
 # Application or trace names that once appeared in examples. Extend it when you find one.
 APP_HINTS = re.compile(

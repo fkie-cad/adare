@@ -239,3 +239,17 @@ actions:
     errors, warnings = check_playbook_tests(playbook, entries)
     assert errors == []
     assert any("mode='some' is not allowed" in w for w in warnings)
+
+
+def test_plist_fixture_accepts_timezone_aware_datetimes():
+    """plistlib refuses an aware datetime in a binary plist; the builder writes it as naive UTC."""
+    import datetime
+    import plistlib
+
+    when = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=2)))
+    value = {'when': when, 'nested': [{'at': when}]}
+    expected = datetime.datetime(2026, 1, 1, 10, 0)
+    for kind in ('plist_binary', 'plist'):
+        loaded = plistlib.loads(build_bytes({kind: value}))
+        assert loaded['when'] == expected
+        assert loaded['nested'][0]['at'] == expected

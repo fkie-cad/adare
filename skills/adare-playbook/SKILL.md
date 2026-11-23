@@ -79,7 +79,7 @@ backed up + DB-ingested).
 Assertions turn a replay into a forensic result. Find the function, don't guess it:
 
 ```sh
-adare test search "recently-used file entry was written"   # short cards + example; match: weak = no fit
+adare test search "saved-file index entry was written"   # short cards + example; match: weak = no fit
 adare test info standard.file_exists --example             # paste-ready tests: block
 ```
 

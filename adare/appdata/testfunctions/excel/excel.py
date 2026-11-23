@@ -7,7 +7,13 @@ from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
-from adarelib.testset.compare import compare_row_sequences, compare_row_sets, extract_columns, row_matches_pattern
+from adarelib.testset.compare import (
+    compare_row_sequences,
+    compare_row_sets,
+    compare_with_single_placeholder,
+    extract_columns,
+    row_matches_pattern,
+)
 from adarelib.testset.structured import compare_count, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.valuecompare import ordered_setup
@@ -68,7 +74,9 @@ def sheet_exists(ctx: TestContext, dst: str, sheet: str, regex_match: bool = Fal
     Args:
         dst: Guest path to the .xlsx; a glob must match exactly one path. A missing or
             unreadable file is an error.
-        sheet: Exact, case-sensitive sheet name, or a regex if ``regex_match``.
+        sheet: Exact, case-sensitive sheet name, or a regex if ``regex_match``. A ``!re`` tag is
+            matched against each sheet name with ``re.match`` (anchored at the start; add ``$`` to
+            anchor the end); an invalid pattern is an error.
         regex_match: Treat ``sheet`` as a Python regex searched in each sheet name
             (``re.search``, unanchored; ``^...$`` for the whole name); an invalid regex is an error.
 
@@ -94,6 +102,13 @@ def sheet_exists(ctx: TestContext, dst: str, sheet: str, regex_match: bool = Fal
             return TestResult.failed(['Excel file contains no sheets'])
 
         # Check if sheet exists
+        if ctx.has_placeholders(sheet):
+            # A !re tag (or {{ variable }}) arrives as a placeholder: compare each sheet name with it
+            for name in sheet_names:
+                holds, _ = compare_with_single_placeholder(ctx, sheet, name)
+                if holds:
+                    return TestResult.success()
+            return TestResult.failed([f'no sheet matches placeholder: {sheet}', f'available sheets: {sheet_names}'])
         if regex_match:
             # Regex matching
             pattern = re.compile(sheet)

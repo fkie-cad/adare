@@ -154,6 +154,8 @@ class CatalogEntry:
     # what it can / cannot do, from the collection's contract.yaml (None without one)
     contract: 'Contract | None' = field(default=None, compare=False, repr=False)
     collection_info: 'CollectionInfo | None' = field(default=None, compare=False, repr=False)
+    # set when the contract was borrowed from a bundled copy whose code differs from this one
+    contract_note: str = field(default='', compare=False, repr=False)
 
     @classmethod
     def from_dict(cls, data: dict) -> 'CatalogEntry':
@@ -241,8 +243,10 @@ class CatalogEntry:
                 data['formats'] = list(self.contract.formats)
             return data
         data = asdict(self)
-        for key in ('code_sha', 'contract', 'collection_info'):
+        for key in ('code_sha', 'contract', 'collection_info', 'contract_note'):
             data.pop(key)
+        if self.contract_note:
+            data['contract_note'] = self.contract_note
         data['signature'] = self.signature()
         data['example'] = self.example()
         data['use_for'] = use_for(self.doc)
@@ -511,16 +515,27 @@ def load_catalog(sources: list[tuple[Path, bool]] | None = None) -> list[Catalog
     return list(entries)
 
 
+CONTRACT_DIFFERS_NOTE = 'installed code differs from bundled; run `adare test sync`'
+
+
 def _borrow_docs(installed: CatalogEntry, bundled: CatalogEntry) -> CatalogEntry:
-    """Give an undocumented installed function the docs of its *identical* bundled copy.
+    """Give an undocumented installed function the docs and contract of its bundled copy.
 
     Docstrings don't change a function's version, so ``test sync`` is not needed
-    to see newly written docs; differing code keeps the installed entry as is.
+    to see newly written docs. When the code differs the docstring is not borrowed
+    (it may describe other behaviour), but the bundled contract still is, flagged by
+    ``contract_note`` so a reader knows it may not match the installed code.
     """
-    if installed.code_sha != bundled.code_sha:
-        return installed
+    same_code = installed.code_sha == bundled.code_sha
     if installed.contract is None and bundled.contract is not None:
-        installed = replace(installed, contract=bundled.contract, collection_info=bundled.collection_info)
+        installed = replace(
+            installed,
+            contract=bundled.contract,
+            collection_info=bundled.collection_info,
+            contract_note='' if same_code else CONTRACT_DIFFERS_NOTE,
+        )
+    if not same_code:
+        return installed
     if installed.doc or not bundled.doc:
         return installed
     docs = {p.name: p.doc for p in bundled.params}

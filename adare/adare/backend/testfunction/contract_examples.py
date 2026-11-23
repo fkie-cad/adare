@@ -18,6 +18,7 @@ File specs (one key each):
 
 import base64
 import bz2
+import datetime
 import gzip
 import io
 import json
@@ -76,8 +77,19 @@ def _tar_spec(kind: str, value: Any) -> bytes:
     return gzip.compress(data, mtime=0) if kind == 'tar.gz' else data
 
 
+def _naive_utc(value: Any) -> Any:
+    """``value`` with every timezone-aware datetime as naive UTC (plistlib's binary writer refuses aware ones)."""
+    if isinstance(value, datetime.datetime) and value.tzinfo is not None:
+        return value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    if isinstance(value, dict):
+        return {k: _naive_utc(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_naive_utc(v) for v in value]
+    return value
+
+
 def _plist(kind: str, value: Any) -> bytes:
-    return plistlib.dumps(value, fmt=plistlib.FMT_BINARY if kind == 'plist_binary' else plistlib.FMT_XML)
+    return plistlib.dumps(_naive_utc(value), fmt=plistlib.FMT_BINARY if kind == 'plist_binary' else plistlib.FMT_XML)
 
 
 _BUILDERS: dict[str, Any] = {

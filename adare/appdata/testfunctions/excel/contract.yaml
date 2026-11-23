@@ -60,9 +60,7 @@ functions:
   sheet_exists:
     asserts: [exists]
     formats: [excel]
-    features: [archive_dst, glob_dst]
-    unsupported:
-      regex_tag: 'A ``!re`` tag as ``sheet`` is compared as plain text and never matches; use ``regex_match: true`` with a plain pattern.'
+    features: [archive_dst, glob_dst, regex_tag]
     not_for:
       - goal: a value in a cell of the sheet
         use: excel.cell_value_matches
@@ -71,14 +69,14 @@ functions:
       - goal: all sheet names and contents of two workbooks
         use: excel.compare_files
     outcomes:
-      passed: a sheet is named ``sheet`` (exact, case-sensitive) or, with ``regex_match``, a sheet name matches the regex
-      failed: the workbook was read and no sheet has the name, or the workbook has no sheets
+      passed: a sheet is named ``sheet`` (exact, case-sensitive) or, with ``regex_match`` or a ``!re`` tag, a sheet name matches the regex
+      failed: the workbook was read and no sheet has the name (or matches the ``!re`` tag), or the workbook has no sheets
       error:
         - the file does not exist or is a directory; a glob matches no file or more than one
         - the file cannot be read or is no valid .xlsx workbook
-        - an invalid regex with ``regex_match``
+        - an invalid regex with ``regex_match`` or behind a ``!re`` tag; an unknown placeholder
     limits:
-      - '``regex_match`` uses ``re.search`` (unanchored); write ``^...$`` for the whole name.'
+      - '``regex_match`` uses ``re.search`` (unanchored); write ``^...$`` for the whole name. A ``!re`` tag uses ``re.match`` (anchored at the start only).'
       - 'A deleted or renamed sheet is asserted with ``expect_to_fail: true`` on the old name; there is no sheet count.'
     use_cases:
       - title: A GUI action added or renamed a sheet
@@ -120,6 +118,12 @@ functions:
         parameter:
           dst: /home/user/Documents/budget.xlsx
           sheet: Q3
+      - title: a !re tag matches the sheet names
+        files:
+          /home/user/Documents/budget.xlsx: *budget
+        parameter:
+          dst: /home/user/Documents/budget.xlsx
+          sheet: !re 'Q[0-9]$'
       - title: an invalid regex is an error
         expect: error
         files:

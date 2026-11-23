@@ -432,7 +432,7 @@ def value_in_any_line(
         dst: Guest path to the JSONL file (one JSON document per line; blank lines are
             skipped). A glob must match exactly one path; a missing file is an error, a 0-byte file fails.
         key_path: Dot path inside each line's object, e.g. ``event.type``; ``*`` expands
-            object values, ``name[*]`` array elements. No numeric indexes.
+            object values, ``name[*]`` array elements, ``name[n]`` one element (``-1`` = last).
             For multi-value paths one matching element suffices.
         expected_value: Value to find; see ``regex_match`` for how it is compared.
         regex_match: Treat string expected values as regexes searched (``re.search``) in

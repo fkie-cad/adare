@@ -89,6 +89,8 @@ def function_markdown(entry: CatalogEntry, library: Library, level: int = 3) -> 
     if entry.contract:
         facts[:0] = [f'asserts: {", ".join(c.asserts)}', f'formats: {", ".join(c.formats) or "-"}']
     out += [' · '.join(facts), '']
+    if entry.contract_note:
+        out += [f'**Note:** {entry.contract_note}', '']
     if c.features:
         out += [f'**Supports:** {", ".join(f"{_feature_title(f, library)} (`{f}`)" for f in c.features)}', '']
     out += _md_block(
