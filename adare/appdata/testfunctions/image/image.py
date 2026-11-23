@@ -27,6 +27,8 @@ from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.testset.content import read_bytes_capped
 from adarelib.testset.structured import WILDCARD_MODES, compare_count, compare_value, count_parameter_errors
+from adarelib.testset.ordering import OrderingError
+from adarelib.testset.valuecompare import ordered_setup
 
 # configure logging
 import logging
@@ -505,12 +507,22 @@ def exif_value_matches(
     expected_value: str | int | float | bool,
     regex_match: bool = False,
     wildcard_mode: str = 'any',
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
 ):
     """Pass when EXIF tag ``tag`` of the image ``dst`` equals (or matches) ``expected_value``.
 
     Use for: camera, time and location metadata written into photos (JPEG, PNG eXIf, TIFF,
     WebP). A tag present in several IFDs passes if one occurrence matches (``wildcard_mode:
     all``: every occurrence must match); a missing tag fails. For "absent" use image.exif_value_count with ``expected_count: 0``.
+
+    With ``comparison_type`` (``greater``, ``less``, ...), ``tolerance`` or the time
+    parameters the value is compared as a number or timestamp (EXIF dates need ``time_format: "%Y:%m:%d %H:%M:%S"``).
 
     Args:
         dst: Guest path to the image; a glob must match exactly one path. A missing file, a
@@ -531,6 +543,18 @@ def exif_value_matches(
             An invalid regex is an error.
         wildcard_mode: With the tag in several IFDs, ``any`` (default): one occurrence must
             match; ``all``: every one must match. Other values are an error.
+        comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
+            ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
+            below, compares the value with ``expected_value`` as a number or point in time
+            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
+            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+        value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
+            ``number`` or ``timestamp``.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
 
     Example:
         function: image.exif_value_matches
@@ -541,6 +565,20 @@ def exif_value_matches(
     """
     if wildcard_mode not in WILDCARD_MODES:
         return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
+    ordered, problem = ordered_setup(
+        ctx,
+        expected_value,
+        regex_match,
+        comparison_type,
+        value_type,
+        tolerance,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
+    )
+    if problem is not None:
+        return problem
     found, error = _exif_values(ctx.resolve_globfilepath(dst), dst, tag)
     if error is not None:
         return error
@@ -548,8 +586,11 @@ def exif_value_matches(
         return TestResult.failed([f'EXIF tag {tag} not present'])
     expected = _expected_exif(expected_value)
     try:
-        results = [(loc, value, *compare_value(ctx, value, expected, regex_match)) for loc, value in found]
-    except re.error as e:
+        if ordered is not None:
+            results = [(loc, value, *ordered.compare(value, expected)) for loc, value in found]
+        else:
+            results = [(loc, value, *compare_value(ctx, value, expected, regex_match)) for loc, value in found]
+    except (re.error, OrderingError) as e:
         return TestResult.error([str(e)])
     matching = [(loc, value) for loc, value, ok, _ in results if ok]
     if len(results) == 1:

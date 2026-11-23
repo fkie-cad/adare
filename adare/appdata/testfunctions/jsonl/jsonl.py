@@ -11,6 +11,8 @@ from adarelib.event.event import TestResult
 from adarelib.testset.compare import get_nested_value
 from adarelib.testset.content import open_text
 from adarelib.testset.structured import compare_count, compare_value, count_parameter_errors
+from adarelib.testset.ordering import OrderingError
+from adarelib.testset.valuecompare import ordered_setup
 
 # configure logging
 import logging
@@ -18,8 +20,13 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def _compare_values(test_instance, actual_value, expected_value, regex_match=False):
-    """Compare one value like structured.compare_value; with ``regex_match`` the value ``"*"`` means "key exists"."""
+def _compare_values(test_instance, actual_value, expected_value, regex_match=False, ordered=None):
+    """Compare one value like structured.compare_value; with ``regex_match`` the value ``"*"`` means "key exists".
+
+    ``ordered`` (an ordered comparison, see adarelib.testset.valuecompare) replaces both.
+    """
+    if ordered is not None:
+        return ordered.compare(actual_value, expected_value)
     if regex_match and expected_value == "*":
         return True, f'field exists with value "{actual_value}"'
     return compare_value(test_instance, actual_value, expected_value, regex_match=regex_match)
@@ -432,10 +439,20 @@ def value_in_any_line(
     regex_match: bool = False,
     skip_malformed: bool = True,
     encoding: str | None = None,
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
 ):
     """Pass when ``key_path`` has a value matching ``expected_value`` in at least one JSONL line.
 
     Use for: a single-field check across a log; for multi-field conditions use jsonl.line_matches.
+
+    With ``comparison_type`` (``greater``, ``less``, ...), ``tolerance`` or the time
+    parameters the value is compared as a number or timestamp.
 
     Args:
         dst: Guest path to the JSONL file (one JSON document per line; blank lines are
@@ -452,6 +469,18 @@ def value_in_any_line(
         encoding: ``None`` (default) detects a BOM (UTF-8/16/32) and BOM-less UTF-16, else
             reads UTF-8; a name reads BOM-less files with it. Unknown names or undecodable
             content are an error.
+        comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
+            ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
+            below, compares the value with ``expected_value`` as a number or point in time
+            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
+            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+        value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
+            ``number`` or ``timestamp``.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
 
     Example:
         function: jsonl.value_in_any_line
@@ -461,6 +490,20 @@ def value_in_any_line(
           expected_value: example
           regex_match: true
     """
+    ordered, problem = ordered_setup(
+        ctx,
+        expected_value,
+        regex_match,
+        comparison_type,
+        value_type,
+        tolerance,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
+    )
+    if problem is not None:
+        return problem
     dst_param = dst
     dst, status = ctx.resolve_globfilepath(dst)
     if not dst:
@@ -511,12 +554,12 @@ def value_in_any_line(
                 # Handle multiple values from wildcards
                 if isinstance(value, list):
                     for v in value:
-                        is_match, msg = _compare_values(ctx, v, expected_value, regex_match)
+                        is_match, msg = _compare_values(ctx, v, expected_value, regex_match, ordered)
                         if is_match:
                             matching_lines.append((line_num, v, msg))
                             break  # Only record once per line
                 else:
-                    is_match, msg = _compare_values(ctx, value, expected_value, regex_match)
+                    is_match, msg = _compare_values(ctx, value, expected_value, regex_match, ordered)
                     if is_match:
                         matching_lines.append((line_num, value, msg))
 
@@ -543,6 +586,8 @@ def value_in_any_line(
             messages.append(f'Key path "{key_path}" not found in any line')
         return TestResult.failed(messages)
 
+    except OrderingError as e:
+        return TestResult.error([f'line {line_num}: {e}'])
     except FileNotFoundError:
         return TestResult.error([f'JSONL file {dst} does not exist'])
     except _ENCODING_ERRORS as e:

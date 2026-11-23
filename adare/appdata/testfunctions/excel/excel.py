@@ -9,6 +9,8 @@ from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
 from adarelib.testset.compare import compare_row_sequences, compare_row_sets, extract_columns, row_matches_pattern
 from adarelib.testset.structured import compare_count, count_parameter_errors
+from adarelib.testset.ordering import OrderingError
+from adarelib.testset.valuecompare import ordered_setup
 from adarelib.testset.workbook import (
     UNREADABLE_WORKBOOK_ERRORS,
     SheetNotFoundError,
@@ -118,6 +120,55 @@ def sheet_exists(ctx: TestContext, dst: str, sheet: str, regex_match: bool = Fal
 # ============================================================================
 
 
+def _compare_cell(ctx, actual_value: str, expected_value, regex_match: bool, ordered, where: str) -> TestResult:
+    """The result of cell_value_matches for the cell text ``actual_value`` at ``where``."""
+    if ordered is not None:
+        try:
+            holds, message = ordered.compare(actual_value, expected_value)
+        except OrderingError as e:
+            return TestResult.error([f'cell at {where}: {e}'])
+        return (
+            TestResult.success([f'cell at {where}: {message}'])
+            if holds
+            else TestResult.failed([f'cell at {where}: {message}'])
+        )
+    expected_str = str(expected_value) if expected_value is not None else ""
+
+    # Check for placeholders in expected value
+    if ctx.has_placeholders(expected_str):
+        placeholder_names = ctx.get_placeholders(expected_str)
+        if len(placeholder_names) != 1:
+            return TestResult.error(
+                [f'expected exactly one placeholder in expected_value, got {len(placeholder_names)}']
+            )
+        success, message = ctx.compare_with_placeholder(placeholder_names[0], actual_value)
+        if success:
+            return TestResult.success()
+        return TestResult.failed(
+            [
+                f'cell value mismatch at {where}',
+                f'actual: "{actual_value}"',
+                f'placeholder: {{{{{placeholder_names[0]}}}}}',
+                f'comparison: {message}',
+            ]
+        )
+
+    # Regex matching
+    if regex_match:
+        if re.compile(expected_str).search(actual_value):
+            return TestResult.success()
+        return TestResult.failed(
+            [f'cell value does not match regex at {where}', f'actual: "{actual_value}"', f'regex: {expected_str}']
+        )
+
+    # Exact string comparison
+    if actual_value == expected_str:
+        return TestResult.success()
+    return TestResult.failed(
+        [f'cell value mismatch at {where}', f'actual: "{actual_value}"', f'expected: "{expected_str}"']
+    )
+
+
 @testfunction(
     name='cell_value_matches',
     description='validates specific cell value with placeholder support',
@@ -131,6 +182,13 @@ def cell_value_matches(
     expected_value: str | int | float | bool | None = None,
     sheet: str | int = 0,
     regex_match: bool = False,
+    comparison_type: str = 'equals',
+    value_type: str = 'auto',
+    tolerance: int | float | None = None,
+    time_format: str | None = None,
+    timestamp_epoch: int | None = None,
+    timestamp_unit: str | None = None,
+    utc_offset: str | None = None,
 ):
     """Pass when the cell at (``row``, ``column``) of a sheet equals ``expected_value``.
 
@@ -139,6 +197,9 @@ def cell_value_matches(
     may read as ``5.0`` if pandas upcasts the column/row to float); dates as
     ``2024-01-31 00:00:00`` or ``2024-01-31T00:00:00`` depending on the row's other cells --
     use ``!re`` for dates and numbers when unsure.
+
+    With ``comparison_type`` (``greater``, ``less``, ...), ``tolerance`` or the time
+    parameters the value is compared as a number or timestamp (cell text such as ``1500.0`` or ``2024-01-31 00:00:00`` reads as a number or an ISO timestamp).
 
     Args:
         dst: Guest path to the .xlsx; a glob must match exactly one path. A missing or unreadable file is an error.
@@ -149,6 +210,18 @@ def cell_value_matches(
         sheet: Sheet name (str) or 0-based sheet index (int); unknown sheets fail.
         regex_match: Treat ``expected_value`` as a regex searched in the cell value (``re.search``,
             unanchored; ``^...$`` for the whole value); an invalid regex is an error.
+        comparison_type: ``equals`` (default), ``not_equals``, ``greater``, ``less``,
+            ``greater_equal`` or ``less_equal``. Anything but ``equals``, or any parameter
+            below, compares the value with ``expected_value`` as a number or point in time
+            (ordered mode; ``less`` = earlier); a ``!re`` tag, ``{{placeholder}}`` or
+            ``regex_match`` is then an error, and so is a value that is no number or timestamp.
+        value_type: ``auto`` (default; numbers if both sides are numbers, else timestamps),
+            ``number`` or ``timestamp``.
+        tolerance: Allowed difference for ``equals``/``not_equals`` (seconds for timestamps).
+        time_format: ``strptime`` format of text timestamps on both sides; default ISO 8601 or RFC 2822.
+        timestamp_epoch: Read numbers as a count since 1 January of ``1970``, ``1601`` or ``2001``.
+        timestamp_unit: Unit of that count: ``s`` (default), ``ms``, ``us``, ``ns`` or ``100ns``.
+        utc_offset: Zone of timestamps without one (``+02:00``); default UTC.
 
     Example:
         function: excel.cell_value_matches
@@ -158,6 +231,20 @@ def cell_value_matches(
           column: 2
           expected_value: '1500'
     """
+    ordered, problem = ordered_setup(
+        ctx,
+        expected_value,
+        regex_match,
+        comparison_type,
+        value_type,
+        tolerance,
+        time_format,
+        timestamp_epoch,
+        timestamp_unit,
+        utc_offset,
+    )
+    if problem is not None:
+        return problem
     # Resolve file path
     dst_resolved, status = ctx.resolve_globfilepath(dst)
     if not dst_resolved:
@@ -185,53 +272,7 @@ def cell_value_matches(
                 ]
             )
 
-        # Get actual cell value
-        actual_value = row_data[column]
-        expected_str = str(expected_value) if expected_value is not None else ""
-
-        # Check for placeholders in expected value
-        if ctx.has_placeholders(expected_str):
-            placeholder_names = ctx.get_placeholders(expected_str)
-            if len(placeholder_names) == 1:
-                placeholder_name = placeholder_names[0]
-                success, message = ctx.compare_with_placeholder(placeholder_name, actual_value)
-                if success:
-                    return TestResult.success()
-                return TestResult.failed(
-                    [
-                        f'cell value mismatch at row {row}, column {column}',
-                        f'actual: "{actual_value}"',
-                        f'placeholder: {{{{{placeholder_name}}}}}',
-                        f'comparison: {message}',
-                    ]
-                )
-            return TestResult.error(
-                [f'expected exactly one placeholder in expected_value, got {len(placeholder_names)}']
-            )
-
-        # Regex matching
-        if regex_match:
-            pattern = re.compile(expected_str)
-            if pattern.search(actual_value):
-                return TestResult.success()
-            return TestResult.failed(
-                [
-                    f'cell value does not match regex at row {row}, column {column}',
-                    f'actual: "{actual_value}"',
-                    f'regex: {expected_str}',
-                ]
-            )
-
-        # Exact string comparison
-        if actual_value == expected_str:
-            return TestResult.success()
-        return TestResult.failed(
-            [
-                f'cell value mismatch at row {row}, column {column}',
-                f'actual: "{actual_value}"',
-                f'expected: "{expected_str}"',
-            ]
-        )
+        return _compare_cell(ctx, row_data[column], expected_value, regex_match, ordered, f'row {row}, column {column}')
 
     except FileNotFoundError:
         return TestResult.error([f'file with path {dst} does not exist'])

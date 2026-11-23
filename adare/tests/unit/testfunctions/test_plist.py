@@ -253,3 +253,34 @@ class TestValueCount:
         for name in ("a.plist", "b.plist"):
             (tmp_path / name).write_bytes(plistlib.dumps({"a": 1}))
         assert_test_error(value_count(tmp_path / "*.plist", "a", 0))
+
+
+# ============================================================================
+# ordered comparisons, values_compare
+# ============================================================================
+
+ValuesCompare = plist_tf.values_compare._test_class
+
+
+def values_compare(dst, key_path, other_key_path, **kwargs):
+    parameter = plist_tf.values_compare._parameter_class(
+        dst=str(dst), key_path=key_path, other_key_path=other_key_path, **kwargs
+    )
+    return ValuesCompare(name="t", parameter=parameter).test()
+
+
+class TestOrderedComparison:
+    def test_value_matches_date_after(self, plist_file):
+        assert_test_success(
+            value_matches(plist_file, "['com.example.lastLaunch']", "2024-01-01T00:00:00Z", comparison_type="greater")
+        )
+        assert_test_failed(
+            value_matches(plist_file, "['com.example.lastLaunch']", "2024-02-01T00:00:00Z", comparison_type="greater")
+        )
+
+    def test_values_compare(self, plist_file):
+        assert_test_success(values_compare(plist_file, "window.width", "window.height", comparison_type="greater"))
+        assert_test_success(values_compare(plist_file, "window.width", "window.height", offset=480))
+        assert_test_failed(values_compare(plist_file, "window.depth", "window.height"))
+        assert_test_error(values_compare(plist_file, "recent[*].name", "window.height"))
+        assert_test_error(values_compare(plist_file, "token", "window.height"))  # data is no number

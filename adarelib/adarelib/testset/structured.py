@@ -28,6 +28,7 @@ from typing import Any
 
 from adarelib.event.event import TestResult
 from adarelib.testset.compare import compare_with_single_placeholder, resolve_key_path
+from adarelib.testset.ordering import OrderingError
 
 log = logging.getLogger(__name__)
 
@@ -219,10 +220,20 @@ def value_matches(
     fmt: StructuredFormat,
     regex_match: bool = False,
     wildcard_mode: str = 'any',
+    **ordered_parameters: Any,
 ) -> TestResult:
-    """Pass when the value(s) at ``key_path`` match ``expected_value`` (``wildcard_mode``: any/all)."""
+    """Pass when the value(s) at ``key_path`` match ``expected_value`` (``wildcard_mode``: any/all).
+
+    ``ordered_parameters`` (``comparison_type``, ``value_type``, ``tolerance``, time parameters;
+    see :mod:`adarelib.testset.valuecompare`) switch to an ordered comparison when one is set.
+    """
     if wildcard_mode not in WILDCARD_MODES:
         return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
+    from adarelib.testset.valuecompare import ordered_setup  # imports this module
+
+    ordered, problem = ordered_setup(ctx, expected_value, regex_match, **ordered_parameters)
+    if problem is not None:
+        return problem
     data, error = load_data(ctx, dst, fmt)
     if error is not None:
         return error
@@ -232,8 +243,11 @@ def value_matches(
     candidates = _candidates(values)
     expected = normalize(expected_value)
     try:
-        results = [(v, *compare_value(ctx, v, expected, regex_match)) for v in candidates]
-    except re.error as e:
+        if ordered is not None:
+            results = [(v, *ordered.compare(v, expected)) for v in candidates]
+        else:
+            results = [(v, *compare_value(ctx, v, expected, regex_match)) for v in candidates]
+    except (re.error, OrderingError) as e:
         return TestResult.error([str(e)])
     if not results:
         return TestResult.failed([f'key path "{key_path}" selects an empty array'])

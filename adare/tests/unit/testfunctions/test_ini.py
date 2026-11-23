@@ -361,3 +361,19 @@ def test_missing_archive_member_is_error(tmp_path):
         zf.writestr('x.ini', '[General]\n')
 
     _assert(_run(SectionExists, dst=f'{archive}!/y.ini', section='General'), StatusEnum.ERROR)
+
+
+# --- ordered comparisons -------------------------------------------------------------------
+
+
+def test_value_matches_ordered(sample):
+    params = {'dst': sample, 'section': 'General', 'key': 'port'}
+    _assert(_run(ValueMatches, **params, expected_value=1024, comparison_type='greater'), StatusEnum.SUCCESS)
+    _assert(_run(ValueMatches, **params, expected_value=8080, comparison_type='less'), StatusEnum.FAILED)
+    _assert(_run(ValueMatches, **params, expected_value='8000', tolerance=100), StatusEnum.SUCCESS)
+    _assert(_run(ValueMatches, **params, expected_value='80', regex_match=True, value_type='number'), StatusEnum.ERROR)
+
+
+def test_value_matches_ordered_uninterpretable_is_error(sample):
+    params = {'dst': sample, 'section': 'General', 'key': 'language'}
+    _assert(_run(ValueMatches, **params, expected_value=1, comparison_type='greater'), StatusEnum.ERROR)
