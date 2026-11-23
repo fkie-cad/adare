@@ -7,7 +7,8 @@ length fields overwritten with zero / huge / sign-bit values) must either parse 
 those errors; any other exception is a parser bug. Seeds are fixed, so a failure reproduces;
 the crashing input is printed (pytest shows it with the failure).
 
-Bugs found here get a named regression test with the minimal input at the end of this file.
+A bug found here gets a named regression test with its minimal input next to the parser's other
+tests (test_archive.py, test_binary.py, ...).
 
 Adding a corpus: append a :class:`Corpus` to ``CORPORA`` (see the hook comment there) with
 ``seeds`` (valid inputs), ``parse`` (bytes -> anything, raising only ``errors``) and, for
