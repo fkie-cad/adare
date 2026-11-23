@@ -184,6 +184,30 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   database's `-wal` (what SQLite would replay: salts and checksum chain intact, up to the
   last commit), `commits` (transactions), `all` or `stale` (left from before a WAL reset).
   A missing `-wal` next to an existing database is 0 frames; a corrupt header is ERROR.
+- **Before/after and cross-file comparisons** (adare, adarelib; additive): `values_compare`
+  of `json`, `yaml`, `toml`, `plist` and `xml` takes `other_dst`, so the second value can come
+  from another file or archive member, e.g. a copy a `command` action made before the action
+  under test. Host mode pulls `other_dst` like `dst` (sidecars, archives, globs); testfunction
+  classes declare such parameters in `host_mode_path_params`.
+- **`value_decode`** (adarelib; additive) on the value testfunctions (not excel, image) and on
+  `values_compare`: a chain of `url`, `base64`, `hex`, `utf16` and `json` (with
+  `decoded_key_path`) applied to the value read from the file before it is compared. A value
+  that does not decode is ERROR.
+- **`sqlite.values_compare`** (adare; additive): compares the first column of two single-row
+  queries, from the same or another database (`other_dst`) and view, e.g. a count in
+  `current` against `main_file` in one check. No row is FAILED, several rows are ERROR.
+- **`sqlite.free_space_pattern_count`** (adare, adarelib; additive): counts a text, bytes, hex
+  or regex pattern in the free space of a database (freelist pages, freeblocks, unallocated
+  space between cell pointers and cell content), where deleted rows remain until overwritten
+  (`secure_delete` off). `view: main_file` or `current` (the `-wal` checkpointed into a copy).
+  A corrupt header or a broken freelist or freeblock chain is ERROR. Parser:
+  `adarelib.testset.sqlite_freespace` (standard library only).
+- **SQLite `view: commit:N`** (adare, adarelib; additive) on `query_result`, `row_count` and
+  `values_compare`: the database as it was after the N-th transaction in the `-wal`
+  (negative N counts from the end, `commit:0` is the main file). N out of range is ERROR.
+- **`text.lines_in_order`** and **`jsonl.lines_in_order`** (adare; additive): patterns (or
+  JSONL condition sets) must match lines in the given order, other lines in between allowed.
+  A pattern that is missing or only occurs earlier is FAILED and named in the details.
 
 ### Changed
 - `adare experiment run` exit codes (adare): `0` only when every run passed, `1` when any
@@ -249,6 +273,11 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   paths (browser profiles, office suites, registry keys); a unit test keeps it that way.
 
 ### Fixed
+- Archive members (adarelib): a zip whose member name is flagged UTF-8 but is not valid UTF-8,
+  or (Python 3.10 guests) an empty member name, crashed the testfunction; both are now an
+  archive ERROR. Found by the new seeded fuzz tests of the guest-side parsers.
+- `binary.struct_value_matches` (adarelib): a NaN or infinite float is a plain ERROR instead of
+  an unexpected-exception ERROR.
 - Host mode no longer probes `<dst>-wal-wal` / `<dst>-wal-journal` (and deletes stale local
   copies of them) when `dst` is itself a sidecar such as `data.db-wal`.
 - Host mode read stale files: one file cache served the whole run, so a test after an
