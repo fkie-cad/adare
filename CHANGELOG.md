@@ -315,6 +315,17 @@ Guests need no re-provisioning: agent wheels are reinstalled when their code cha
   storing it on the variable. A bad zone used to be stored and broke every later variable
   resolution in the run; it now fails at that template, and a literal bad zone
   (`{{ t | timezone('Europe/Berln') }}`) already fails when the playbook loads.
+- A test whose templates cannot be rendered is now ERROR for that test (the run and the other
+  tests go on), never run against the unrendered `{{ ... }}` text. This covers an unknown
+  filter, a syntax error, a filter rejecting its value, a `format(...)` on a variable that is not
+  set and an **undefined variable**: test templates are now strict, so `{{ nope }}` is ERROR
+  naming `nope` instead of rendering as an empty string (`/tmp//x`). Before, these were logged
+  and the test ran on the raw text or the empty value, or was reported as "not found" (FAILED).
+  Variables saved earlier in the run and loop variables still resolve.
+- `format(...)` in templates is Jinja's built-in again for everything but timestamp variables
+  (`"%d items" | format(5)` raised; `"%s" | format("x")` silently rendered `%s`).
+- The time zone of a `format(...)` in a test template is parsed like everywhere else: `+0400`
+  and `+02` offsets now convert (they were silently ignored), and a bad zone is an error.
 - `adare experiment create` wrote a `metadata.yml` whose `environments:` held only comments
   (null), so `experiment run` and `experiment add-env` rejected the new experiment. The
   skeleton now writes `environments: []`, and a null list in an existing `metadata.yml` loads as

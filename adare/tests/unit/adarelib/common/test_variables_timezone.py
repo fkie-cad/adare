@@ -252,3 +252,56 @@ class TestTimestampFilters:
 
         assert variables.ValidationError is timezones.ValidationError
         assert variables._apply_timezone is timezones._apply_timezone
+
+
+class TestFormatFilterIsJinjasFormat:
+    """``format`` is Jinja's built-in unless it is applied to a timestamp variable with one format string."""
+
+    @pytest.fixture
+    def render(self):
+        jinja2 = pytest.importorskip("jinja2")  # jinja2 is host-only; the guest test venv has none
+        ts = _ts("2024-06-01 12:00:00")
+        registry = VariableRegistry()
+        registry.add("ts", ts)
+        env = jinja2.Environment()
+        env.filters.update(TimestampMetadata().get_jinja_filters(registry))
+
+        def _render(template, **context):
+            return env.from_string(template).render(**context)
+
+        _render.ts, _render.registry, _render.jinja2 = ts, registry, jinja2
+        return _render
+
+    def test_printf_with_one_value(self, render):
+        assert render('{{ "%d items" | format(5) }}') == "5 items"
+
+    def test_printf_with_several_values(self, render):
+        assert render('{{ "%s-%s" | format("a", "b") }}') == "a-b"
+
+    def test_printf_with_keywords(self, render):
+        assert render('{{ "%(n)s" | format(n=1) }}') == "1"
+
+    def test_a_plain_string_is_not_returned_unformatted(self, render):
+        assert render('{{ "%s" | format("x") }}') == "x"
+
+    def test_positional_and_keyword_arguments_together_are_jinjas_error(self, render):
+        with pytest.raises(render.jinja2.filters.FilterArgumentError):
+            render('{{ "%s %(n)s" | format("a", n=1) }}')
+
+    def test_timestamp_form_captures_the_format_and_formats_the_value(self, render):
+        value = render.ts.value
+        assert render("{{ v | format('%Y-%m-%d') }}", v=value) == str(value)  # the value is passed on unchanged
+        assert render.ts.metadata["format"] == "%Y-%m-%d"
+        assert render.ts.structured_metadata.format_str == "%Y-%m-%d"
+        assert _resolved(render.ts) == "2024-06-01"
+
+    def test_timestamp_value_with_other_arguments_is_jinjas_format(self, render):
+        value = render.ts.value
+        with pytest.raises(TypeError):  # "<timestamp>" % ("a", "b"): the built-in, no format is captured
+            render("{{ v | format('a', 'b') }}", v=value)
+        assert "format" not in render.ts.metadata
+
+    def test_non_string_format_on_a_timestamp_still_raises(self, render):
+        with pytest.raises(ValidationError, match="format must be a string"):
+            render("{{ v | format(5) }}", v=render.ts.value)
+        assert "format" not in render.ts.metadata
