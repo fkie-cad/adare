@@ -131,3 +131,20 @@ async def test_load_tests_turns_os_error_and_guest_rejection_into_upload_error(r
     client.upload_testfunctions = AsyncMock(return_value={'status': 'error', 'message': 'bad zip'})
     with pytest.raises(TestfunctionUploadError, match='bad zip'):
         await loader.load_tests(client)
+
+
+def test_failed_file_lookup_is_an_error_not_an_empty_upload(tmp_path, monkeypatch):
+    """A database or file error while mapping functions to files must not upload nothing."""
+
+    class _BrokenApi:
+        def __enter__(self):
+            raise OSError('database file is unreadable')
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr('adare.database.api.testfunction.TestfunctionDbApi', _BrokenApi)
+    loader = TestLoader(tmp_path, tmp_path)
+
+    with pytest.raises(TestfunctionUploadError, match='database file is unreadable'):
+        loader._get_testfunction_files_for_functions({'sqlite.row_count'})
