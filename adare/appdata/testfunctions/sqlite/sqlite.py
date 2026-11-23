@@ -9,6 +9,7 @@ from adarelib.constants import StatusEnum
 from adarelib.testset import binary
 from adarelib.testset.api import testfunction, TestContext
 from adarelib.testset.basictest import HostModeCategory
+from adarelib.testset.compare import regex_expected_problem
 from adarelib.event.event import TestResult
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.sqlite_freespace import REGION_KINDS, FreeSpace, SqliteFreeSpaceError, read_free_space
@@ -203,6 +204,11 @@ def query_result(
         problems += count_parameter_errors(expected_count, comparison_type)
     if problems:
         return TestResult.error(problems)
+    if expected_result is not None:
+        # a regex placeholder in expected_result is checked before a count mismatch can hide it
+        regex_problem = regex_expected_problem(ctx, [str(expected_result)], many_placeholders=True)
+        if regex_problem is not None:
+            return regex_problem
 
     result, snapshot_details, error = _run_query(ctx, dst, query, view)
     if error is not None:
