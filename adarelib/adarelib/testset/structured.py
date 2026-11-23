@@ -229,12 +229,13 @@ def value_matches(
     ``ordered_parameters`` (``comparison_type``, ``value_type``, ``tolerance``, time parameters;
     see :mod:`adarelib.testset.valuecompare`) switch to an ordered comparison when one is set.
     ``value_decode`` / ``decoded_key_path`` (:mod:`adarelib.testset.valuedecode`) decode each
-    value before it is compared.
+    value before it is compared; a decode step that fails is an ERROR, a ``decoded_key_path``
+    that selects nothing in a decoded value makes that value a non-match (FAILED).
     """
     if wildcard_mode not in WILDCARD_MODES:
         return TestResult.error([f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'"])
     from adarelib.testset.valuecompare import ordered_setup  # imports this module
-    from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
+    from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, decoder_setup
 
     decoder, problem = decoder_setup(value_decode, decoded_key_path)
     if problem is not None:
@@ -250,13 +251,19 @@ def value_matches(
         return TestResult.failed([f'key path "{key_path}" does not exist'])
     candidates = _candidates(values)
     expected = normalize(expected_value)
+    results = []
     try:
-        if decoder is not None:
-            candidates = [decoder(v) for v in candidates]
-        if ordered is not None:
-            results = [(v, *ordered.compare(v, expected)) for v in candidates]
-        else:
-            results = [(v, *compare_value(ctx, v, expected, regex_match)) for v in candidates]
+        for v in candidates:
+            if decoder is not None:
+                try:
+                    v = decoder(v)
+                except DecodedKeyPathMissing as e:  # decoded fine, the key is not in it: no match
+                    results.append((v, False, str(e)))
+                    continue
+            if ordered is not None:
+                results.append((v, *ordered.compare(v, expected)))
+            else:
+                results.append((v, *compare_value(ctx, v, expected, regex_match)))
     except (re.error, OrderingError, ValueDecodeError) as e:
         return TestResult.error([str(e)])
     if not results:

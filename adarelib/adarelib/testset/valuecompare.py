@@ -17,7 +17,9 @@ tolerance or interval, text around the placeholder or a variable not set yet is 
 decodes the values read from the file before they are compared.
 
 Result rules: bad parameters, a side that selects several values, a value that is no number
-or timestamp -> ERROR; a side that selects nothing, or a comparison that does not hold -> FAILED.
+or timestamp, a ``value_decode`` step that cannot decode -> ERROR; a side that selects nothing
+(also a ``decoded_key_path`` that selects nothing in a decoded side), or a comparison that does
+not hold -> FAILED.
 
 Standard library only (plus adarelib), importable on Python 3.10.
 """
@@ -32,7 +34,7 @@ from adarelib.event.event import TestResult
 from adarelib.testset.compare import resolve_key_path
 from adarelib.testset.ordering import OrderingError, TimeFormat, compare, parameter_errors
 from adarelib.testset.structured import StructuredFormat, load_data, text
-from adarelib.testset.valuedecode import ValueDecodeError, ValueDecoder, build_decoder
+from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, ValueDecoder, build_decoder
 
 ORDERED_PARAMETERS = (
     'comparison_type',
@@ -289,7 +291,8 @@ def compare_pair(
 
     ``label`` / ``other_label`` name each side in messages (``key path "a.b"``). A side that
     selects several values is an ERROR (checked first), one that selects nothing FAILED.
-    ``decoder`` (``value_decode``) decodes both values first; a decode failure is an ERROR.
+    ``decoder`` (``value_decode``) decodes both values first; a decode failure is an ERROR, a
+    ``decoded_key_path`` that selects nothing in a decoded value FAILED (like a side that selects nothing).
     """
     first, first_problem = _single(label, values)
     second, second_problem = _single(other_label, other_values)
@@ -298,10 +301,17 @@ def compare_pair(
         errors = [p for p in problems if p.status == StatusEnum.ERROR]
         return (errors or problems)[0]
     if decoder is not None:
-        try:
-            first, second = decoder(first), decoder(second)
-        except ValueDecodeError as e:
-            return TestResult.error([f'{label} / {other_label}: {e}'])
+        decoded, missing = [], []
+        for side, value in ((label, first), (other_label, second)):
+            try:
+                decoded.append(decoder(value))
+            except DecodedKeyPathMissing as e:  # decoded fine, the key is not in it: like an empty side
+                missing.append(f'{side}: {e}')
+            except ValueDecodeError as e:
+                return TestResult.error([f'{side}: {e}'])
+        if missing:
+            return TestResult.failed(missing)
+        first, second = decoded
     try:
         holds, message = ordered.compare(first, second)
     except OrderingError as e:

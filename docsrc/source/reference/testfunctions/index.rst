@@ -229,8 +229,11 @@ sides of ``values_compare``. It is one step or a list applied in order:
        :doc:`json/value_matches`), which must select exactly one value. ``decoded_key_path`` is required.
 
 Bytes left after the last step are compared as UTF-8 text, or as lowercase hex when they are no UTF-8. A
-value a step cannot decode, an unknown step or ``json`` without ``decoded_key_path`` is an ERROR naming the
-step.
+value a step cannot decode, an unknown step, ``json`` without ``decoded_key_path`` or a ``decoded_key_path``
+that selects several values is an ERROR naming the step. A ``decoded_key_path`` that selects nothing is
+FAILED: the value decoded, the key is simply not in it (as for a ``key_path`` that selects nothing in the
+file). With several values (a wildcard) such a value is a non-match of that value; in ``values_compare`` it
+fails like a side that selects nothing.
 
 .. code-block:: yaml
 

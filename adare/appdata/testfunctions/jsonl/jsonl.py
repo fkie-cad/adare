@@ -14,7 +14,7 @@ from adarelib.testset.content import open_text
 from adarelib.testset.structured import compare_count, compare_value, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.valuecompare import ordered_setup
-from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
+from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, decoder_setup
 
 # configure logging
 import logging
@@ -123,7 +123,10 @@ def _regex_problem(ctx, expected_values, regex_match: bool) -> TestResult | None
 
 
 def _decoded(decoder, value):
-    """``value`` decoded by ``value_decode`` (unchanged without a decoder)."""
+    """``value`` decoded by ``value_decode`` (unchanged without a decoder).
+
+    :raises DecodedKeyPathMissing: ``decoded_key_path`` selects nothing in the decoded value
+    """
     return value if decoder is None else decoder(value)
 
 
@@ -536,7 +539,8 @@ def value_in_any_line(
             left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
             unknown step, is an error.
         decoded_key_path: Key path into the value ``json`` decoded (dot path, numeric indexes allowed);
-            it must select one value. Required with ``json``, an error without it.
+            it must select one value: none fails (the value decoded, the key is not in it), several are an error.
+            Required with ``json``, an error without it.
 
     Example:
         function: jsonl.value_in_any_line
@@ -584,6 +588,7 @@ def value_in_any_line(
         total_lines = 0
         malformed_count = 0
         lines_with_key = 0
+        decoded_missing = 0
 
         with open_text(dst, encoding) as f:
             for line_num, line in enumerate(f, 1):
@@ -614,17 +619,16 @@ def value_in_any_line(
 
                 lines_with_key += 1
 
-                # Handle multiple values from wildcards
-                if isinstance(value, list):
-                    for v in value:
+                # Handle multiple values from wildcards; a value without the decoded key is no match
+                for v in value if isinstance(value, list) else [value]:
+                    try:
                         is_match, msg = _compare_values(ctx, _decoded(decoder, v), expected_value, regex_match, ordered)
-                        if is_match:
-                            matching_lines.append((line_num, v, msg))
-                            break  # Only record once per line
-                else:
-                    is_match, msg = _compare_values(ctx, _decoded(decoder, value), expected_value, regex_match, ordered)
+                    except DecodedKeyPathMissing:
+                        decoded_missing += 1
+                        continue
                     if is_match:
-                        matching_lines.append((line_num, value, msg))
+                        matching_lines.append((line_num, v, msg))
+                        break  # Only record once per line
 
         # Log malformed lines if any
         if malformed_count > 0:
@@ -645,6 +649,8 @@ def value_in_any_line(
         ]
         if lines_with_key > 0:
             messages.append(f'Found {lines_with_key} lines with key "{key_path}" but none matched the expected value')
+            if decoded_missing:
+                messages.append(f'decoded_key_path {decoded_key_path!r} selected nothing in {decoded_missing} value(s)')
         else:
             messages.append(f'Key path "{key_path}" not found in any line')
         return TestResult.failed(messages)

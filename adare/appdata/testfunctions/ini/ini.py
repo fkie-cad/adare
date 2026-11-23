@@ -27,7 +27,7 @@ from adarelib.testset.content import decode_text, read_bytes_capped
 from adarelib.testset.structured import WILDCARD_MODES, compare_count, compare_value, count_parameter_errors
 from adarelib.testset.ordering import OrderingError
 from adarelib.testset.valuecompare import ordered_setup
-from adarelib.testset.valuedecode import ValueDecodeError, decoder_setup
+from adarelib.testset.valuedecode import DecodedKeyPathMissing, ValueDecodeError, decoder_setup
 
 # configure logging
 import logging
@@ -299,7 +299,8 @@ def value_matches(
             left at the end are UTF-8 text, else hex. A value a step cannot decode, or an
             unknown step, is an error.
         decoded_key_path: Key path into the value ``json`` decoded (dot path as in json.value_matches);
-            it must select one value. Required with ``json``, an error without it.
+            it must select one value: none fails (the value decoded, the key is not in it), several are an error.
+            Required with ``json``, an error without it.
 
     Example:
         function: ini.value_matches
@@ -335,12 +336,20 @@ def value_matches(
     if not found:
         return TestResult.failed([f'{_where(section, key)} does not exist'])
     expected = _expected_text(expected_value)
+    results = []
     try:
-        values = [e.value if decoder is None else decoder(e.value, as_text=True) for e in found]
-        if ordered is not None:
-            results = [(e, *ordered.compare(v, expected)) for e, v in zip(found, values, strict=True)]
-        else:
-            results = [(e, *compare_value(ctx, v, expected, regex_match)) for e, v in zip(found, values, strict=True)]
+        for e in found:
+            v = e.value
+            if decoder is not None:
+                try:
+                    v = decoder(v, as_text=True)
+                except DecodedKeyPathMissing as missing:  # decoded fine, the key is not in it: no match
+                    results.append((e, False, str(missing)))
+                    continue
+            if ordered is not None:
+                results.append((e, *ordered.compare(v, expected)))
+            else:
+                results.append((e, *compare_value(ctx, v, expected, regex_match)))
     except (re.error, OrderingError, ValueDecodeError) as e:
         return TestResult.error([str(e)])
     if len(results) == 1:

@@ -63,7 +63,7 @@ Parameters
      - **Optional.** Decode both values before comparing (steps as in :doc:`value_matches`; see "Decoding a stored value" under :ref:`ordered-comparison`).
    * - ``decoded_key_path``
      - string
-     - **Optional.** With ``json`` in ``value_decode``: key path into the decoded value.
+     - **Optional.** With ``json`` in ``value_decode``: key path into the decoded value; it must select one value: none is FAILED, several are an ERROR.
 
 Usage Example
 -------------
