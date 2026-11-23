@@ -221,8 +221,10 @@ _STREAMS: dict[str, Callable[[str, int, int | None], IO[bytes]]] = {
 }
 
 # Errors that mean "this archive cannot be read": truncated or corrupt data, encrypted or
-# unsupported zip entries (RuntimeError / NotImplementedError from zipfile).
+# unsupported zip entries (RuntimeError / NotImplementedError from zipfile), a zip member name
+# flagged as UTF-8 that is not (UnicodeDecodeError from zipfile).
 _READ_ERRORS = (
+    UnicodeDecodeError,
     OSError,
     EOFError,
     tarfile.TarError,
@@ -363,7 +365,7 @@ class _ZipContainer:
         result = []
         for info in self._zip.infolist():
             self._infos[info.filename] = info
-            if info.is_dir():
+            if info.filename.endswith('/'):  # ZipInfo.is_dir() of Python 3.10 fails on an empty name
                 kind = 'dir'
             elif (info.external_attr >> 16) & 0o170000 == 0o120000:  # unix symlink
                 kind = 'link'
